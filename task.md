@@ -1,0 +1,42 @@
+# Task Tracking
+
+- [x] Run basic environment diagnostics to check CUDA and PyTorch versions.
+- [x] Identify and debug packaging metadata lookup failures (`importlib.metadata`).
+- [x] Implement packaging metadata hotfix for PyTorch.
+- [x] Run pytest to verify autoencoders, CLI inputs, and dependencies.
+- [x] Diagnose Gated Repository access blocks for text-to-audio generation.
+- [x] Attempt to start the Gradio UI application (`run_gradio.py`).
+- [x] Document and resolve workspace directory execution path mismatch.
+- [x] Ingest and verify `audio-file-mcp-app`.
+- [x] Design and implement `audio-grid-mcp-app`.
+- [x] Design and implement `generate_variants.py` script.
+- [x] Fix WAV metadata insertion and loud static noise burst at the end of generations.
+- [x] Research and design loudness metering (traKmeter) and brickwall master limiter (ClassicMasterLimiter-RE01).
+- [x] Create a random prompt generator button.
+- [x] Default prompts to solo instrumentation.
+- [x] Provide remote access guidance.
+- [x] Click track variants to disable them:
+  - [x] Check if selected variant clicked in `selectVariant` to toggle off.
+  - [x] Add checks for `-1` deselected state in audio source management functions.
+  - [x] Verify that deselected tracks stop playing and update visual waveforms.
+- [x] Implement Master Limiter & Loudness Metering (Option A):
+  - [x] Add master nodes and audio context initialization in `app.js`
+  - [x] Update track row setup with analyzer nodes and mixer meters
+  - [x] Implement Peak, Peak Hold, and RMS db calculations
+  - [x] Implement canvas level drawing with horizontal tri-color gradients
+  - [x] Verify functionality (clamping, dynamic level changes, decay to silence)
+- [x] Implement LoopmasterSA renaming & Init Audio variation generation:
+  - [x] Rename application to LoopmasterSA in `index.html`
+  - [x] Add Init Audio badge controls in `index.html` and styling in `app.css`
+  - [x] Update card template and state management in `app.js` to support Init Audio selection
+  - [x] Update Flask server endpoints and model execution to process `init_audio_path`
+  - [x] Verify functionality (renaming, selecting, variations with noise level)
+- [x] Solve high-DPI canvas rendering bug (exponential layout growth leading to giant white square)
+  - [x] Set explicit CSS width and height on `#master-meter-canvas`
+  - [x] Set explicit CSS height on `.meter-canvas`
+- [x] Repository Packaging, Documentation, and Git Distribution:
+  - [x] Consolidate git repositories by removing inner `.git` directories (`stable-audio-3/.git` and `audio-file-mcp-app/.git`)
+  - [x] Setup root `.gitignore` excluding all virtualenvs, node_modules, logs, checkpoints, and generated audio files
+  - [x] Write project architecture and DSP pipeline documentation in `wiki/Home.md`
+  - [x] Write root `README.md` explaining LoopMasterSA features, repo layout, launcher, and distribution guidelines
+  - [ ] Stage, commit, and push changes to remote repository `origin/main`

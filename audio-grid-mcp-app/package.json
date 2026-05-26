@@ -1,0 +1,64 @@
+{
+  "name": "@counterpoint-studio/audio-grid-mcp-app",
+  "mcpName": "io.github.counterpoint-studio/audio-grid-mcp-app",
+  "version": "1.0.1",
+  "description": "An MCP app for inspecting audio files in audio workflows. Playback, metadata, statistics",
+  "keywords": [
+    "audio",
+    "mcp",
+    "mcp-app",
+    "mcp-server",
+    "model-context-protocol"
+  ],
+  "license": "ISC",
+  "author": "Tero Parviainen <tero@teropa.info>",
+  "homepage": "https://github.com/counterpoint-studio/audio-file-mcp-app#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/counterpoint-studio/audio-file-mcp-app.git"
+  },
+  "bugs": "https://github.com/counterpoint-studio/audio-file-mcp-app/issues",
+  "type": "module",
+  "bin": {
+    "audio-file-mcp-app": "dist/server/app.js"
+  },
+  "files": [
+    "dist/server",
+    "dist/mcp-app.html",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "INPUT=mcp-app.html vite build",
+    "build:wasm": "scripts/build-wasm.sh",
+    "build:js-dsp": "scripts/build-js-dsp.sh",
+    "build:dsp": "scripts/build-wasm.sh && scripts/build-js-dsp.sh",
+    "build:server": "tsc -p tsconfig.server-build.json && node scripts/add-shebang.mjs",
+    "build:dist": "pnpm run build && pnpm run build:server",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "clean:mcpb": "rm -rf build/mcpb dist/*.mcpb",
+    "prepublishOnly": "pnpm run build:dsp && pnpm run build:dist",
+    "serve": "npx tsx src/server/app.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "audio-type": "^2.4.1",
+    "mediabunny": "^1.45.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
+    "@types/node": "^25.6.2",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.11",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^3"
+  }
+}

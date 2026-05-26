@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoopmasterSA — Grid Generator</title>
+    <meta name="description" content="Multi-track audio variant generator with synchronized grid playback.">
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <div class="app-container">
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="app-logo">
+                <svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6Z"/></svg>
+            </div>
+            <h1 class="app-title">LoopmasterSA <span>Grid Generator</span></h1>
+        </header>
+
+        <!-- Controls -->
+        <section class="controls-panel" id="controls-panel">
+            <div class="controls-row">
+                <div class="control-group prompt-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <label class="control-label" for="prompt-input">Prompt</label>
+                        <button class="btn-random-prompt" id="btn-random-prompt" type="button" title="Generate Random Prompt">🎲 Random</button>
+                    </div>
+                    <input class="control-input" id="prompt-input" type="text"
+                           placeholder="bass synth loop, funky, hyperpop…"
+                           autocomplete="off" spellcheck="false">
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label" for="bpm-input">BPM</label>
+                    <input class="control-input" id="bpm-input" type="number"
+                           min="40" max="300" value="120" step="1">
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label" id="duration-label">4 bars = 8.00s</label>
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label" for="variants-input">Variants</label>
+                    <input class="control-input" id="variants-input" type="number"
+                           min="1" max="32" value="4" step="1">
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label">Loop</label>
+                    <div class="toggle-wrapper is-on" id="loop-toggle" role="switch" aria-checked="true" tabindex="0">
+                        <div class="toggle-track"></div>
+                        <span class="toggle-label">On</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <button class="btn-generate" id="btn-generate" type="button">Generate</button>
+                </div>
+            </div>
+
+            <div class="status-bar" id="status-bar">
+                <div class="status-spinner"></div>
+                <span class="status-text" id="status-text">Generating…</span>
+            </div>
+
+            <!-- Init Audio Badge -->
+            <div class="init-audio-badge" id="init-audio-badge" style="display: none;">
+                <span>✨ Using Init Audio: <strong id="init-audio-name">None</strong></span>
+                <div class="init-noise-control">
+                    <label for="init-noise-slider">Noise:</label>
+                    <input type="range" id="init-noise-slider" min="10" max="90" value="60" step="5">
+                    <span id="init-noise-value">0.60</span>
+                </div>
+                <button class="btn-clear-init" id="btn-clear-init" type="button" title="Clear Init Audio">×</button>
+            </div>
+        </section>
+
+        <!-- Transport -->
+        <div class="transport-bar" id="transport-bar">
+            <button class="btn-transport" id="btn-play-pause" type="button" disabled aria-label="Play">
+                <svg class="ic ic-play" viewBox="0 0 16 16"><path d="M4 2.5l9 5.5-9 5.5z"/></svg>
+                <svg class="ic ic-pause" viewBox="0 0 16 16"><rect x="3.5" y="2" width="3" height="12" rx="0.5"/><rect x="9.5" y="2" width="3" height="12" rx="0.5"/></svg>
+            </button>
+            <span class="transport-time">
+                <span id="t-position">0:00.0</span> / <span id="t-duration">0:00.0</span>
+            </span>
+            
+            <!-- Master Meter & Limiter Section -->
+            <div class="master-meter-section" id="master-meter-section" style="display: none;">
+                <span class="master-meter-label">MASTER</span>
+                <div class="master-meter-container">
+                    <canvas id="master-meter-canvas" width="140" height="8"></canvas>
+                </div>
+                <span class="limiter-label">LIMITER -11dB</span>
+            </div>
+
+            <div class="transport-spacer"></div>
+            <button class="btn-stop-all" id="btn-stop-all" type="button">Stop All</button>
+        </div>
+
+        <!-- Track Rows -->
+        <div class="tracks-container empty" id="tracks-container">
+            <div class="grid-empty-state">
+                <svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6Z"/></svg>
+                <div>Enter a prompt and hit <strong>Generate</strong> to add a track</div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

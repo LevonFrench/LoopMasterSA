@@ -1,0 +1,49 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# Caches
+.pytest_cache/
+.mypy_cache/
+
+# IDE files
+.idea/
+.vscode/
+
+# Local logs and tunnels
+*.log
+localtunnel.log
+
+# Stable Audio model checkpoints and caches
+*.ckpt
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+.gradio
+.DS_Store
+
+# AI generated output files
+outputs/
+optimized/
+*.wav
+*.mp3
+*.flac
+
+# Local AI workspace metadata
+.claude
+.gemini/
+.gstack/

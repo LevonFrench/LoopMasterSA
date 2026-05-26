@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Audio File</title>
+  </head>
+  <body>
+    <div id="error-banner" hidden>
+      <div class="error-title">This file can't be played</div>
+      <div class="error-detail"></div>
+    </div>
+    <header id="top">
+      <button id="play-pause" type="button" disabled aria-label="Play">
+        <svg class="ic ic-play" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true">
+          <path d="M3 2 L10 6 L3 10 Z" fill="currentColor"/>
+        </svg>
+        <svg class="ic ic-pause" viewBox="0 0 12 12" width="14" height="14" aria-hidden="true">
+          <rect x="3" y="2" width="2.5" height="8" fill="currentColor"/>
+          <rect x="6.5" y="2" width="2.5" height="8" fill="currentColor"/>
+        </svg>
+      </button>
+      <div id="time-display">
+        <span id="position">00:00.000</span> / <span id="duration">00:00.000</span>
+      </div>
+    </header>
+    <div id="grid-container" class="grid-container"></div>
+    <script type="module" src="/src/client/app.ts"></script>
+  </body>
+</html>
