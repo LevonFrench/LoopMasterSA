@@ -32,6 +32,11 @@ STATIC_DIR = os.path.join(SCRIPT_DIR, "static")
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, "outputs")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+SESSION_TIMESTAMP = time.strftime("%Y%m%d_%H%M%S")
+SESSION_DIR_NAME = f"session_{SESSION_TIMESTAMP}"
+SESSION_DIR = os.path.join(OUTPUT_DIR, SESSION_DIR_NAME)
+os.makedirs(SESSION_DIR, exist_ok=True)
+
 # ---------------------------------------------------------------------------
 # Global state
 # ---------------------------------------------------------------------------
@@ -46,13 +51,19 @@ jobs_lock = threading.Lock()
 # Helpers
 # ---------------------------------------------------------------------------
 
+def slugify_prompt(prompt, limit=16):
+    """Sanitizes prompt and truncates it to limit characters for safe filenames."""
+    cleaned = re.sub(r'[^a-zA-Z0-9\s_-]', '', prompt)
+    cleaned = re.sub(r'[\s_-]+', '_', cleaned).strip('_')
+    return cleaned[:limit]
+
 def get_next_track_index():
-    """Scans the outputs directory and returns the next sequential track index."""
-    if not os.path.exists(OUTPUT_DIR):
+    """Scans the current session outputs directory and returns the next sequential track index."""
+    if not os.path.exists(SESSION_DIR):
         return 1
     max_idx = 0
-    for name in os.listdir(OUTPUT_DIR):
-        if name.startswith("track_") and os.path.isdir(os.path.join(OUTPUT_DIR, name)):
+    for name in os.listdir(SESSION_DIR):
+        if name.startswith("track_") and os.path.isdir(os.path.join(SESSION_DIR, name)):
             try:
                 idx = int(name.split("_")[1])
                 if idx > max_idx:
@@ -381,23 +392,28 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
 
         elapsed = time.time() - start_gen
 
-        # Save to track_X folder
+        # Save to track_X folder inside the session directory
         track_dir_name = f"track_{track_num}"
-        out_dir = os.path.join(OUTPUT_DIR, track_dir_name)
+        out_dir = os.path.join(SESSION_DIR, track_dir_name)
         os.makedirs(out_dir, exist_ok=True)
 
+        prompt_slug = slugify_prompt(prompt, 16)
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
         sample_rate = model.model.sample_rate
         files = []
         for i in range(num_variants):
-            filename = f"track_{track_num}_var_{i + 1}.wav"
+            if prompt_slug:
+                filename = f"track_{track_num}_{prompt_slug}_var_{i + 1}_{timestamp}.wav"
+            else:
+                filename = f"track_{track_num}_var_{i + 1}_{timestamp}.wav"
             file_path = os.path.join(out_dir, filename)
             torchaudio.save(file_path, audio[i].cpu(), sample_rate)
             
             # Embed ACIDized loop and beat grid metadata
             acidize_wav_file(file_path, bpm, duration, loop, prompt)
             
-            # Retain relative path format for API response: track_X/track_X_var_Y.wav
-            files.append(f"{track_dir_name}/{filename}")
+            # Retain relative path format for API response: session_YYYYMMDD_HHMMSS/track_X/filename.wav
+            files.append(f"{SESSION_DIR_NAME}/{track_dir_name}/{filename}")
 
         with jobs_lock:
             jobs[job_id].update({
@@ -505,7 +521,7 @@ def api_status(job_id):
 
 @app.route("/api/delete_track/<int:track_num>", methods=["POST"])
 def api_delete_track(track_num):
-    track_dir = os.path.join(OUTPUT_DIR, f"track_{track_num}")
+    track_dir = os.path.join(SESSION_DIR, f"track_{track_num}")
     if os.path.exists(track_dir) and os.path.isdir(track_dir):
         try:
             import shutil

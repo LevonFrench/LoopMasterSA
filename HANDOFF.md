@@ -36,6 +36,12 @@ We have finalized the repository packaging, consolidated the git structure, fixe
     - Deleted `taste-skill/` directory (temporary style-guide clone).
     - Deleted `.gradio/` cache directories.
     - Cleaned out all stray generated `.wav` files from the project root and subdirectories to ensure repository hygiene.
+10. **Session Directory Routing & Slug Naming**:
+    - Generates unique session-based timestamp subfolders under `outputs/`.
+    - Sanitizes prompts and restricts prompt slug lengths in filenames to 16 characters.
+    - Appends generation timestamps to all output WAV files.
+    - Integrates track tracking and clean-up functions inside the active session context.
+
 
 
 ## Launcher & Server Info

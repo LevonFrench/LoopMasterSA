@@ -69,6 +69,12 @@
   - [x] Delete `taste-skill/` directory (temporary style-guide clone)
   - [x] Delete `.gradio` cache folder
   - [x] Delete stray generated `.wav` files from the project root and subfolders
+- [x] Configure app_server.py to use session-based directories, prompt character limits (16), and timestamped filenames:
+  - [x] Create unique session directories (session_YYYYMMDD_HHMMSS) under outputs/
+  - [x] Implement prompt slugification and 16-character truncation helper
+  - [x] Format variant filenames as track_X_slug_var_Y_timestamp.wav
+  - [x] Update sequential track numbering and delete route paths to scope inside current session directory
+
 
 
 

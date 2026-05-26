@@ -92,6 +92,14 @@ To preserve structural hygiene:
 - **Cache Clean-up**: Purged the temporary `.gradio/` cache directories.
 - **Stray Media Clearance**: Removed stray generated `.wav` files from the project root and subdirectories to ensure version control index clarity.
 
+## Completed Backend Tweak: Session Directories and Timestamped Prompt-Slugged Filenames
+We modified `app_server.py` to organize outputs and format filenames:
+- **Session Directories**: Each server start creates a unique `outputs/session_YYYYMMDD_HHMMSS/` directory. All generations and track operations for the active session are housed inside this folder.
+- **WAV Filename Formatting**: Filenames are structured as `track_X_<prompt_slug>_var_Y_<timestamp>.wav`.
+- **Prompt Slug Limiting**: Prompt slugs are cleaned (keeping only alphanumeric/hyphen characters and spaces, converting spaces to underscores) and truncated to exactly 16 characters max to keep filenames concise.
+- **Scoping Operations**: Scoped track sequential numbering and deletion endpoints to operate exclusively inside the active session directory.
+
+
 
 
 

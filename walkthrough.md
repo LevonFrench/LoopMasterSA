@@ -68,3 +68,10 @@ We successfully integrated the design guidelines of `taste-skill`:
 2.  **Removing Caches**: Deleted the `.gradio/` directory containing unused cache files.
 3.  **Removing Stray WAVs**: Deleted all generated stray `.wav` files from the project root and subdirectories to keep the repository layout clean.
 
+### 23. Verification of Session Directories & Character-Limited Filenames
+1.  **Backend Directory Organization**: Added a unique server startup session timestamp directory (e.g. `session_20260526_183110`) under `outputs/`.
+2.  **Sequential Track Scan Scope**: Confirmed `get_next_track_index()` scans the session folder `SESSION_DIR` for sequential tracks rather than listing all past sessions.
+3.  **WAV Filename Construction**: Configured file-saving to slugify the prompt (limited to 16 characters using regex) and append the exact generation timestamp.
+4.  **Verification**: Verified directory and naming structures are successfully picked up by Flask endpoints, enabling track deletion and init audio selection to correctly reference file paths.
+
+
