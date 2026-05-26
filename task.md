@@ -45,4 +45,9 @@
   - [x] Store last generated key/chord in `currentKeyOrChord` state variable in `app.js`
   - [x] Implement `generateRandomPrompt(keepKey)` supporting re-using the active key/chord
   - [x] Dynamically update the button label text to display the currently locked key/chord (e.g. "🔑 C major")
+- [x] Add client-side mixdown rendering to WAV:
+  - [x] Add "⬇ Render Mix" button in `index.html`
+  - [x] Add `.btn-render-mix` styling in `app.css`
+  - [x] Add `bufferToWav` WAV encoder in `app.js` to compile PCM sample blocks to 16-bit PCM WAV
+  - [x] Implement click event in `app.js` generating an `OfflineAudioContext` simulating all track volumes, pans, solos, mutes, loops, and the master limiter + makeup gain, then download the resulting WAV file
 

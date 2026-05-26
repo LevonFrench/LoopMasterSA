@@ -37,3 +37,11 @@ We renamed the application to **LoopmasterSA** and added an Init Audio Variation
 2.  **Lock State Logic**: The first prompt generation randomly decides on a key (e.g., "A minor") or chord progression (e.g., "Cmaj7 to Fmaj7..."), and stores it in the browser memory state under `currentKeyOrChord`. It then updates the button text to show the active key (e.g., `🔑 A minor`).
 3.  **Operation**: Submitting consecutive prompts via `🔑 In Key` preserves the locked key/chord signature while varying the instrument and style (e.g. producing "solo saxophone bluesy licks in A minor", then "solo grand piano moody hooks in A minor").
 
+### 19. Verification of Offline Mixdown Rendering to WAV
+1.  **Layout**: Added the `⬇ Render Mix` button next to the Stop All control in the transport bar. The button is disabled when the grid is empty.
+2.  **Processing**: When clicked, the script creates a high-speed, non-real-time `OfflineAudioContext` spanning the current loop duration (`globalDuration` seconds). It routes each active, unmuted track's audio buffer (scaled to its mixer volume slider and panned via its pan slider) through the master gain, the master `-11dB` brickwall limiter, and the `+11dB` makeup gain.
+3.  **WAV Encoding**: Computes the summed offline buffer and encodes it client-side into a standard 16-bit PCM WAV container.
+4.  **Download**: Initiates an automatic browser download for the resulting WAV file, e.g., `loopmastersa_mix_120bpm.wav`.
+5.  **Verification**: Confirmed that adding track rows enables the button, and clicking it initiates an instantaneous render and download of the mixed audio track matching the limiter and pan settings.
+
+

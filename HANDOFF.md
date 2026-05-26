@@ -17,6 +17,8 @@ We have finalized the repository packaging, consolidated the git structure, fixe
 5.  **Documentation & Wiki**:
     - Created `wiki/Home.md` detailing the signal processing chain, the master limiter parameters, real-time peak/RMS equations, and init audio flows.
     - Updated root `README.md` to outline features, directory structure, launch instructions, and git guidelines.
+6.  **Offline WAV Mixdown Rendering**:
+    - Added a `⬇ Render Mix` button that bounces down the current grid arrangement to a 16-bit PCM stereo WAV. It accurately reflects individual track gains, pan values, mute/solo flags, and the brickwall master limiter with makeup gain, rendering instantly via `OfflineAudioContext`.
 
 ## Launcher & Server Info
 *   **Launcher**: [run_server.bat](file:///j:/projects/sa3/run_server.bat) in the project root folder.

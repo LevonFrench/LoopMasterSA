@@ -22,6 +22,7 @@
     const tracksContainer = document.getElementById('tracks-container');
     const btnRandomPrompt = document.getElementById('btn-random-prompt');
     const btnRandomInKey = document.getElementById('btn-random-in-key');
+    const btnRenderMix = document.getElementById('btn-render-mix');
 
     // --- State ---
     let audioCtx = null;
@@ -243,6 +244,7 @@
                 </div>
             `;
             btnPlayPause.disabled = true;
+            if (btnRenderMix) btnRenderMix.disabled = true;
             stopAll();
         }
     }
@@ -782,6 +784,7 @@
         tracksContainer.appendChild(track.el);
 
         btnPlayPause.disabled = false;
+        if (btnRenderMix) btnRenderMix.disabled = false;
         updateDurationLabel();
     }
 
@@ -1040,4 +1043,159 @@
         });
     }
 
+    // --- Render Mix to WAV ---
+    function bufferToWav(buffer) {
+        const numOfChan = buffer.numberOfChannels;
+        const length = buffer.length * numOfChan * 2 + 44;
+        const bufferArr = new ArrayBuffer(length);
+        const view = new DataView(bufferArr);
+        const channels = [];
+        let i;
+        let sample;
+        let offset = 0;
+        let pos = 0;
+
+        function setUint16(data) {
+            view.setUint16(pos, data, true);
+            pos += 2;
+        }
+
+        function setUint32(data) {
+            view.setUint32(pos, data, true);
+            pos += 4;
+        }
+
+        // Write WAV header
+        // "RIFF"
+        setUint32(0x46464952);
+        // file length - 8
+        setUint32(length - 8);
+        // "WAVE"
+        setUint32(0x45564157);
+        // "fmt " chunk
+        setUint32(0x20746d66);
+        // chunk length
+        setUint32(16);
+        // sample format (raw PCM = 1)
+        setUint16(1);
+        // channel count
+        setUint16(numOfChan);
+        // sample rate
+        setUint32(buffer.sampleRate);
+        // byte rate (sample rate * block align)
+        setUint32(buffer.sampleRate * numOfChan * 2);
+        // block align (channel count * bytes per sample)
+        setUint16(numOfChan * 2);
+        // bits per sample
+        setUint16(16);
+        // "data" chunk identifier
+        setUint32(0x61746164);
+        // chunk length
+        setUint32(buffer.length * numOfChan * 2);
+
+        // Fetch channel data
+        for (i = 0; i < numOfChan; i++) {
+            channels.push(buffer.getChannelData(i));
+        }
+
+        // Write PCM audio samples
+        while (pos < buffer.length) {
+            for (i = 0; i < numOfChan; i++) {
+                sample = Math.max(-1, Math.min(1, channels[i][pos]));
+                sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+                view.setInt16(44 + offset, sample, true);
+                offset += 2;
+            }
+            pos++;
+        }
+
+        return new Blob([bufferArr], { type: 'audio/wav' });
+    }
+
+    if (btnRenderMix) {
+        btnRenderMix.addEventListener('click', async () => {
+            if (tracks.length === 0) return;
+            const originalText = btnRenderMix.textContent;
+            btnRenderMix.textContent = 'Rendering...';
+            btnRenderMix.disabled = true;
+
+            try {
+                const currentCtx = ensureAudioCtx();
+                const sampleRate = currentCtx.sampleRate;
+                const duration = globalDuration;
+                const offlineCtx = new OfflineAudioContext(2, sampleRate * duration, sampleRate);
+
+                // Create master chain on offline context
+                const offlineMasterGain = offlineCtx.createGain();
+                offlineMasterGain.gain.value = 1.0;
+
+                const offlineLimiter = offlineCtx.createDynamicsCompressor();
+                offlineLimiter.threshold.setValueAtTime(-11.0, 0);
+                offlineLimiter.knee.setValueAtTime(0.0, 0);
+                offlineLimiter.ratio.setValueAtTime(20.0, 0);
+                offlineLimiter.attack.setValueAtTime(0.003, 0);
+                offlineLimiter.release.setValueAtTime(0.1, 0);
+
+                const offlineMakeup = offlineCtx.createGain();
+                offlineMakeup.gain.setValueAtTime(Math.pow(10, 11 / 20), 0);
+
+                // Connect offline master chain
+                offlineMasterGain.connect(offlineLimiter);
+                offlineLimiter.connect(offlineMakeup);
+                offlineMakeup.connect(offlineCtx.destination);
+
+                // Connect all active tracks
+                const anySoloed = tracks.some(t => t.soloed);
+
+                tracks.forEach(t => {
+                    const effectivelyMuted = t.muted || (anySoloed && !t.soloed);
+                    if (effectivelyMuted) return;
+
+                    if (t.selectedVariant === -1) return;
+                    const v = t.variants[t.selectedVariant];
+                    if (!v || !v.buffer) return;
+
+                    const source = offlineCtx.createBufferSource();
+                    source.buffer = v.buffer;
+                    source.loop = t.looping;
+                    if (t.looping) {
+                        source.loopStart = 0;
+                        source.loopEnd = duration;
+                    }
+
+                    const panner = offlineCtx.createStereoPanner();
+                    panner.pan.value = t.pan;
+
+                    const gain = offlineCtx.createGain();
+                    gain.gain.value = t.level;
+
+                    source.connect(panner);
+                    panner.connect(gain);
+                    gain.connect(offlineMasterGain);
+
+                    source.start(0);
+                });
+
+                const renderedBuffer = await offlineCtx.startRendering();
+                const wavBlob = bufferToWav(renderedBuffer);
+
+                const bpm = parseInt(bpmInput.value) || 120;
+                const blobUrl = URL.createObjectURL(wavBlob);
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = `loopmastersa_mix_${bpm}bpm.wav`;
+                link.click();
+                URL.revokeObjectURL(blobUrl);
+
+            } catch (err) {
+                console.error('Failed to render mix:', err);
+                alert('Failed to render mix: ' + err.message);
+            } finally {
+                btnRenderMix.textContent = originalText;
+                btnRenderMix.disabled = false;
+            }
+        });
+    }
+
 })();
+

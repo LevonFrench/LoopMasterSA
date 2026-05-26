@@ -61,3 +61,10 @@ We renamed the application to **LoopmasterSA** and implemented an "Init Audio" v
 - **State Lock**: Introduced a global `currentKeyOrChord` variable in [app.js](file:///j:/projects/sa3/stable-audio-3/static/app.js) to store the active key/chord signature.
 - **Button Feedback**: Wired `generateRandomPrompt(keepKey)` to fetch/generate the signature. The button text dynamically changes to display the locked key or chord (e.g. `🔑 A minor` or `🔑 Cmaj7 to Fma...`) to provide clear visual feedback to the user.
 
+## Completed Tweak: Offline WAV Mixdown Rendering
+- **WAV Exporter**: Developed a client-side 16-bit PCM WAV exporter function (`bufferToWav`) in [app.js](file:///j:/projects/sa3/stable-audio-3/static/app.js) that formats raw floating-point samples into a valid WAVE/RIFF file blob.
+- **Offline Context**: Structured the click event on the `⬇ Render Mix` button to instantiate an `OfflineAudioContext` with the active sample rate and duration.
+- **DSP Graph Replication**: Recreated the track volume/pan nodes and the master limiter + makeup gain nodes inside the offline context, connecting and playing only active, unmuted track buffers.
+- **Automatic Export**: Fetches the rendered audio buffer, runs WAV compilation, and triggers a browser file download of the high-fidelity mixdown immediately.
+
+
