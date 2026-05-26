@@ -995,3 +995,128 @@ body::before {
     border-color: var(--border-card);
 }
 
+/* --- Effects Drawer --- */
+.track-wrapper {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.track-wrapper .track-row {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+}
+
+.fx-drawer {
+    display: flex;
+    gap: 16px;
+    background: rgba(10, 10, 16, 0.95);
+    border-top: 1px solid var(--border-subtle);
+    padding: 14px 20px;
+    flex-wrap: wrap;
+}
+
+.fx-section {
+    flex: 1;
+    min-width: 250px;
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.fx-section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 4px;
+}
+
+/* EQ Sliders styling */
+.eq-sliders-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+}
+
+@media (max-width: 800px) {
+    .eq-sliders-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* FX Controls Grid */
+.fx-controls-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fx-control-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fx-control-row label {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    width: 60px;
+    text-align: right;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.fx-control-row input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-input);
+    outline: none;
+    cursor: pointer;
+}
+
+.fx-control-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    border: 2px solid rgba(0,0,0,0.5);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.fx-control-row input[type="range"]::-webkit-slider-thumb:hover {
+    background: var(--accent);
+}
+
+.fx-control-row span {
+    font-size: 0.65rem;
+    font-family: var(--font-mono);
+    color: var(--text-tertiary);
+    width: 55px;
+    text-align: right;
+}
+
+/* FX button states */
+.mixer-btn.fx-btn.is-on {
+    background: var(--accent-soft);
+    color: var(--text-accent);
+    border-color: var(--border-selected);
+}
+
+

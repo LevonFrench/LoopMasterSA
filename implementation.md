@@ -67,4 +67,15 @@ We renamed the application to **LoopmasterSA** and implemented an "Init Audio" v
 - **DSP Graph Replication**: Recreated the track volume/pan nodes and the master limiter + makeup gain nodes inside the offline context, connecting and playing only active, unmuted track buffers.
 - **Automatic Export**: Fetches the rendered audio buffer, runs WAV compilation, and triggers a browser file download of the high-fidelity mixdown immediately.
 
+## Completed Tweak: Track-Level Effects Drawer (Luftikus, Valentine, Ælapse)
+- **UI Container wrapper**: Wrapped each track row and its sliding effects panel inside a `.track-wrapper` element in [app.js](file:///j:/projects/sa3/stable-audio-3/static/app.js) to isolate grids and avoid layout displacement.
+- **FX Button Toggle**: Added an `FX` button to the track row mixer strip to toggle drawer visibility (`style.display`).
+- **Luftikus EQ (6 bands)**: Constructed a chain of 6 `BiquadFilterNode`s per track (10Hz, 40Hz, 160Hz, 640Hz, 2.5kHz, Air/12kHz shelf) with real-time gain sliders in the drawer.
+- **Valentine saturator/compressor**: Implemented input gain routing to a sigmoid `WaveShaperNode` soft-clipper, passing to a `DynamicsCompressorNode` for Justice-inspired dynamic pumping. Managed dry/wet gain nodes for parallel compression mix.
+- **Ælapse wow/flutter delay & spring reverb**:
+  - Tape wow delay: Combined a `DelayNode` with a `2Hz` low-frequency oscillator (`OscillatorNode` LFO) modulating delay times by `2ms` for analog pitch drift.
+  - Spring Reverb: Fed stereo programmatically-generated chirped spring impulse responses to a `ConvolverNode`.
+- **Offline Replay**: Programmed the `OfflineAudioContext` mixdown builder to dynamically parse track EQ gains, saturator gain parameters, wow delay times, and spring convolution gains, matching the browser mix exactly.
+
+
 

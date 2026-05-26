@@ -19,6 +19,12 @@ We have finalized the repository packaging, consolidated the git structure, fixe
     - Updated root `README.md` to outline features, directory structure, launch instructions, and git guidelines.
 6.  **Offline WAV Mixdown Rendering**:
     - Added a `⬇ Render Mix` button that bounces down the current grid arrangement to a 16-bit PCM stereo WAV. It accurately reflects individual track gains, pan values, mute/solo flags, and the brickwall master limiter with makeup gain, rendering instantly via `OfflineAudioContext`.
+7.  **Track-Level Effects Drawer**:
+    - Integrated an expandable effects drawer on each track containing custom DSP implementations of:
+      *   **Luftikus Analog EQ**: A 6-band peaking/high-shelf EQ cascade (10Hz to 12kHz shelf).
+      *   **Valentine Compressor/Saturator**: Soft-clipping WaveShaper distortion with input gain and DynamicsCompressorNode mix for heavy dynamic pumping.
+      *   **Ælapse Tape Delay & Spring Reverb**: A tape wow/flutter delay modulated by a 2Hz LFO, alongside metallic programmatically convolved spring reverb.
+      *   All effects are fully supported during offline mixdown rendering.
 
 ## Launcher & Server Info
 *   **Launcher**: [run_server.bat](file:///j:/projects/sa3/run_server.bat) in the project root folder.

@@ -21,9 +21,10 @@ graph TD
 ```
 
 ### Signal Processing Chain (Web Audio API)
-To achieve clean, loud, and balanced multi-track playback, each track has its own independent channel strip, which sums into a master limiter and makeup gain chain:
+To achieve clean, loud, and balanced multi-track playback, each track has its own independent channel strip with dedicated analog EQ and creative processors, which sums into a master limiter and makeup gain chain:
 
-$$\text{Track Source} \rightarrow \text{Track Panner} \rightarrow \text{Track Gain} \rightarrow \text{Track Analyser} \rightarrow \text{Master Gain} \rightarrow \text{DynamicsCompressorNode (Limiter)} \rightarrow \text{GainNode (Makeup)} \rightarrow \text{Master Analyser} \rightarrow \text{Destination}$$
+$$\text{Track Source} \rightarrow \text{Luftikus EQ} \rightarrow \text{Valentine} \rightarrow \text{Ælapse} \rightarrow \text{Track Panner} \rightarrow \text{Track Gain} \rightarrow \text{Track Analyser} \rightarrow \text{Master Gain} \rightarrow \text{DynamicsCompressorNode (Limiter)} \rightarrow \text{GainNode (Makeup)} \rightarrow \text{Master Analyser} \rightarrow \text{Destination}$$
+
 
 ---
 
@@ -58,3 +59,27 @@ LoopMasterSA allows taking any generated loop variant and using it as the seed (
     *   The backend loads the seed WAV file using `torchaudio.load()`.
     *   Waveform tensors are moved to the active model device.
     *   Tensors are fed to `model.generate` via the `init_audio` parameter alongside the specified `init_noise_level`.
+
+---
+
+## 4. Channel Strip DSP Effects
+
+Each track row features an expandable effects drawer containing three hardware-modeled creative processors:
+
+### 1. Luftikus Analog EQ
+A 6-band analog-modeled equalizer featuring standard fixed-frequency bands for musical tone shaping:
+*   **Bands**: Peaking filters at `10Hz`, `40Hz`, `160Hz`, `640Hz`, and `2.5kHz`, plus a high-shelf boost (`Air Band`) at `12kHz`.
+*   **Range**: Each band can be boosted or attenuated by up to `12.0 dB` (adjustable in `0.5 dB` steps).
+
+### 2. Valentine Compressor & Saturator
+Inspired by Justice-style hyper-compressed pumping textures, this dual-stage processor provides parallel saturation and dynamic compression:
+*   **Saturator (Drive)**: A `WaveShaperNode` loaded with a sigmoid mathematical distortion curve. The input gain drives the saturator to add rich odd-order harmonics and soft-clipping warmth.
+*   **Compressor**: A `DynamicsCompressorNode` (variable threshold from `-40dB` to `0dB`, and ratio up to `20:1`) to squeeze transients and introduce heavy pumping breath.
+*   **Mix**: Controls the wet/dry gain blend for parallel compression and grit scaling (from `0%` to `100%`).
+
+### 3. Ælapse Tape Delay & Spring Reverb
+A time and space processor combining delay time modulation and programmatic convolution:
+*   **Tape Delay**: A `DelayNode` (up to `2.0s` delay time) with a feedback loop (`GainNode` up to `95%` feedback). To simulate tape wobble instability, a `2Hz` low-frequency oscillator (LFO) modulates the delay line by `2ms` to create dynamic chorus/flange wow and flutter.
+*   **Spring Reverb**: A `ConvolverNode` loaded with a programmatically generated stereo impulse response. The impulse simulates spring dispersion and metallic reflections using decayed white noise combined with chirp waveforms.
+*   **Mix Nodes**: Independent dry/wet gain controls for the delay and reverb paths.
+

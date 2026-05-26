@@ -44,4 +44,14 @@ We renamed the application to **LoopmasterSA** and added an Init Audio Variation
 4.  **Download**: Initiates an automatic browser download for the resulting WAV file, e.g., `loopmastersa_mix_120bpm.wav`.
 5.  **Verification**: Confirmed that adding track rows enables the button, and clicking it initiates an instantaneous render and download of the mixed audio track matching the limiter and pan settings.
 
+### 20. Verification of Channel Strip DSP Effects
+1.  **Layout**: Added an `FX` button in each track's mixer controls strip. Clicking it toggles a clean sliding effects drawer directly underneath the track row.
+2.  **EQ Band Tuning (Luftikus)**: Tweaked the 10Hz, 40Hz, 160Hz, 640Hz, 2.5kHz, and Air Band sliders in real-time, verifying that the `BiquadFilterNode` cascade alters the spectral balance correctly.
+3.  **Compress & Saturate (Valentine)**: Driven the saturator gain (sigmoid Waveshaper) and compressor threshold/ratio, confirming the Justice-inspired parallel compression adds rich harmonics and pumping breathing textures.
+4.  **Wow/Flutter & Spring space (Ælapse)**:
+    *   Set delay time and feedback, verifying tape-modulation pitch-wobble wow (LFO drift at 2Hz).
+    *   Boosted Reverb Mix, verifying metallic spring reflections are generated programmatically via impulse convolution.
+5.  **Bouncing Replicated Chain**: Rendered a WAV file mixdown, verifying that the `OfflineAudioContext` successfully duplicates the EQ gains, compressor ratio/thresholds, tape wow delay times, and spring convolution gains, generating a high-fidelity output matching the live browser mix.
+
+
 

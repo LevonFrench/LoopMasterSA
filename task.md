@@ -50,4 +50,12 @@
   - [x] Add `.btn-render-mix` styling in `app.css`
   - [x] Add `bufferToWav` WAV encoder in `app.js` to compile PCM sample blocks to 16-bit PCM WAV
   - [x] Implement click event in `app.js` generating an `OfflineAudioContext` simulating all track volumes, pans, solos, mutes, loops, and the master limiter + makeup gain, then download the resulting WAV file
+- [x] Add analog EQ and creative FX chain (Luftikus, Valentine, Ælapse) to each track row:
+  - [x] Add "FX" drawer toggle button in `createTrackRow` mixer strip
+  - [x] Build expandable `.fx-drawer` template containing EQ, Saturator/Comp, and Delay/Reverb sliders
+  - [x] Implement 6-band Luftikus EQ (`BiquadFilterNode` chain: 10Hz to 12kHz shelf)
+  - [x] Implement Valentine parallel saturation (`WaveShaperNode` sigmoid curve) and dynamics compression (`DynamicsCompressorNode`)
+  - [x] Implement Ælapse tape-modulated wow/flutter delay (`DelayNode` + `OscillatorNode` LFO) and synthetic spring reverb convolution (`ConvolverNode` + generated stereo impulse response)
+  - [x] Wire all real-time slider controls and update state parameters
+  - [x] Replicate entire DSP FX chain inside the offline rendering context (`OfflineAudioContext`) for mixdown WAV bouncing
 
