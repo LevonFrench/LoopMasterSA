@@ -39,4 +39,4 @@
   - [x] Setup root `.gitignore` excluding all virtualenvs, node_modules, logs, checkpoints, and generated audio files
   - [x] Write project architecture and DSP pipeline documentation in `wiki/Home.md`
   - [x] Write root `README.md` explaining LoopMasterSA features, repo layout, launcher, and distribution guidelines
-  - [ ] Stage, commit, and push changes to remote repository `origin/main`
+  - [x] Stage, commit, and push changes to remote repository `origin/main`
