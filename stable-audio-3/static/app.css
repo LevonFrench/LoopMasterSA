@@ -3,7 +3,7 @@
    Multi-track mixer with row-based layout
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* --- Design Tokens --- */
 :root {
@@ -45,13 +45,13 @@
     --radius-lg: 14px;
 
     --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3);
-    --shadow-glow: 0 0 20px var(--accent-glow);
+    --shadow-glow: 0 4px 14px rgba(59, 130, 246, 0.2);
     --shadow-btn: 0 2px 8px rgba(0, 0, 0, 0.4);
 
     --transition-fast: 150ms ease;
     --transition-med: 250ms ease;
 
-    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
 }
 
@@ -68,7 +68,7 @@ body {
     font-family: var(--font-sans);
     background: var(--bg-base);
     color: var(--text-primary);
-    min-height: 100vh;
+    min-height: 100dvh;
     overflow-x: hidden;
 }
 
@@ -639,19 +639,26 @@ body::before {
     flex-direction: column;
     gap: 4px;
     cursor: pointer;
-    transition: background var(--transition-fast), border-color var(--transition-fast);
+    transition: transform var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
     min-height: 70px;
 }
 
 .audio-card:hover {
     background: rgba(255, 255, 255, 0.04);
     border-color: rgba(255, 255, 255, 0.08);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .audio-card.is-selected {
     background: var(--bg-card-selected);
     border-color: var(--border-selected);
     box-shadow: inset 0 0 12px var(--accent-soft);
+}
+
+.audio-card.is-selected:hover {
+    transform: translateY(-2px);
+    box-shadow: inset 0 0 12px var(--accent-soft), 0 4px 16px rgba(59, 130, 246, 0.15);
 }
 
 .audio-card.is-loading::before {
@@ -786,7 +793,7 @@ body::before {
 }
 
 .master-meter-container {
-    background: #000;
+    background: #0e0e14;
     border-radius: 2px;
     padding: 2px;
     display: flex;
@@ -814,7 +821,7 @@ body::before {
 }
 
 .mixer-meter {
-    background: #000;
+    background: #0e0e14;
     border-radius: 2px;
     padding: 2px;
     width: 100%;
@@ -863,7 +870,7 @@ body::before {
     color: #fff;
     background: var(--accent);
     border-color: var(--accent);
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
 }
 
 .init-audio-badge {
@@ -984,7 +991,7 @@ body::before {
     color: #fff;
     background: var(--accent);
     border-color: var(--accent);
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25);
 }
 
 .btn-render-mix:disabled {
@@ -1117,6 +1124,18 @@ body::before {
     background: var(--accent-soft);
     color: var(--text-accent);
     border-color: var(--border-selected);
+}
+
+/* --- Tactile Active Press Feedback --- */
+.btn-generate:active,
+.btn-random-prompt:active,
+.btn-transport:active,
+.mixer-btn:active,
+.btn-stop-all:active,
+.btn-render-mix:active,
+.btn-use-init:active,
+.btn-clear-init:active {
+    transform: scale(0.96) !important;
 }
 
 

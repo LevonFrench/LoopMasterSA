@@ -835,7 +835,7 @@
                 <div class="card-header">
                     <span class="card-title" title="${name}">${name}</span>
                     <div style="display: flex; align-items: center;">
-                        <button class="btn-use-init" title="Use as Init Audio" type="button">✨ Init</button>
+                        <button class="btn-use-init" title="Use as Init Audio" type="button"><svg class="btn-icon" viewBox="0 0 24 24" width="10" height="10" fill="currentColor" style="margin-right: 3px; display: inline-block; vertical-align: middle;"><path d="M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>Init</button>
                         <span class="card-variant-num">#${i + 1}</span>
                     </div>
                 </div>
@@ -958,7 +958,7 @@
             const displayVal = currentKeyOrChord.value.length > 15 
                 ? currentKeyOrChord.value.substring(0, 12) + '...'
                 : currentKeyOrChord.value;
-            btnRandomInKey.textContent = `🔑 ${displayVal}`;
+            btnRandomInKey.innerHTML = `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg> ${displayVal}`;
             btnRandomInKey.title = `Generate Random Prompt in ${currentKeyOrChord.value}`;
         }
         
@@ -1397,8 +1397,8 @@
     if (btnRenderMix) {
         btnRenderMix.addEventListener('click', async () => {
             if (tracks.length === 0) return;
-            const originalText = btnRenderMix.textContent;
-            btnRenderMix.textContent = 'Rendering...';
+            const originalHTML = btnRenderMix.innerHTML;
+            btnRenderMix.innerHTML = 'Rendering...';
             btnRenderMix.disabled = true;
 
             try {
@@ -1561,7 +1561,7 @@
                 console.error('Failed to render mix:', err);
                 alert('Failed to render mix: ' + err.message);
             } finally {
-                btnRenderMix.textContent = originalText;
+                btnRenderMix.innerHTML = originalHTML;
                 btnRenderMix.disabled = false;
             }
         });
