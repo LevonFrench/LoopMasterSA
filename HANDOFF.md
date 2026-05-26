@@ -25,6 +25,18 @@ We have finalized the repository packaging, consolidated the git structure, fixe
       *   **Valentine Compressor/Saturator**: Soft-clipping WaveShaper distortion with input gain and DynamicsCompressorNode mix for heavy dynamic pumping.
       *   **Ælapse Tape Delay & Spring Reverb**: A tape wow/flutter delay modulated by a 2Hz LFO, alongside metallic programmatically convolved spring reverb.
       *   All effects are fully supported during offline mixdown rendering.
+8.  **Taste-Skill Visual Refinement**:
+    - **Typography**: Swapped standard `Inter` font for the premium geometric `Geist` font family.
+    - **Anti-Emoji**: Replaced all emojis (`✨` and `🔑`) with clean inline SVGs.
+    - **Tactile Transitions**: Added scale transitions (`scale(0.96)`) on `:active` for all button actions.
+    - **Card Elevation**: Configured cards to lift up (`translateY(-2px)`) and cast wider diffused desaturated shadows on hover.
+    - **Color & Glows**: Replaced neon outer glows with desaturated shadows, and updated VU meter backgrounds to charcoal `#0e0e14`.
+    - **Viewport Stability**: Changed body min-height to `100dvh` to prevent layout jumps on mobile.
+9.  **Workspace Housekeeping**:
+    - Deleted `taste-skill/` directory (temporary style-guide clone).
+    - Deleted `.gradio/` cache directories.
+    - Cleaned out all stray generated `.wav` files from the project root and subdirectories to ensure repository hygiene.
+
 
 ## Launcher & Server Info
 *   **Launcher**: [run_server.bat](file:///j:/projects/sa3/run_server.bat) in the project root folder.

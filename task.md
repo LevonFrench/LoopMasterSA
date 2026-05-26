@@ -58,4 +58,17 @@
   - [x] Implement Ælapse tape-modulated wow/flutter delay (`DelayNode` + `OscillatorNode` LFO) and synthetic spring reverb convolution (`ConvolverNode` + generated stereo impulse response)
   - [x] Wire all real-time slider controls and update state parameters
   - [x] Replicate entire DSP FX chain inside the offline rendering context (`OfflineAudioContext`) for mixdown WAV bouncing
+- [x] Apply taste-skill visual styling, typography, active click states, card hover lifts, and anti-emoji guidelines:
+  - [x] Replace all emojis (✨ and 🔑) with clean inline SVGs
+  - [x] Change font import and --font-sans from Inter to Geist
+  - [x] Swap 100vh body height with 100dvh for viewport stability
+  - [x] Add scale active click states to all transport, generation, mixer, and clear buttons
+  - [x] Implement transform hover lift and desaturated shadows on audio variant cards
+  - [x] Replace pure black meter backgrounds with dark charcoal #0e0e14
+- [x] Clean up repository folders and remove non-project files:
+  - [x] Delete `taste-skill/` directory (temporary style-guide clone)
+  - [x] Delete `.gradio` cache folder
+  - [x] Delete stray generated `.wav` files from the project root and subfolders
+
+
 

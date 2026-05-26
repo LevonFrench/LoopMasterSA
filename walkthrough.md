@@ -52,6 +52,19 @@ We renamed the application to **LoopmasterSA** and added an Init Audio Variation
     *   Set delay time and feedback, verifying tape-modulation pitch-wobble wow (LFO drift at 2Hz).
     *   Boosted Reverb Mix, verifying metallic spring reflections are generated programmatically via impulse convolution.
 5.  **Bouncing Replicated Chain**: Rendered a WAV file mixdown, verifying that the `OfflineAudioContext` successfully duplicates the EQ gains, compressor ratio/thresholds, tape wow delay times, and spring convolution gains, generating a high-fidelity output matching the live browser mix.
+    *   Rebuilt Offline Context bounce logic to accurately duplicate all parameter settings matching the browser grid.
 
+### 21. Verification of Taste-Skill Guidelines
+We successfully integrated the design guidelines of `taste-skill`:
+1.  **Typography Replacement**: Changed the font stack from the banned `Inter` font to `Geist` to provide a premium, modern geometric sans-serif aesthetic.
+2.  **Anti-Emoji Compliance**: Removed all remaining emojis from the interface, replacing `✨` in the variant cards and the init audio badge, and `🔑` in the dynamic key/chord indicator with clean vector inline SVGs.
+3.  **Active Button States**: Integrated a tactile scale-down transform (`scale(0.96)`) on `:active` for all CTA, control, transport, mixer, and clear buttons.
+4.  **Card Hover Dynamics**: Updated audio card items to lift up (`translateY(-2px)`) and receive wide, desaturated shadows on hover, enhancing usability and visual polish.
+5.  **Glow and Color Tuning**: Replaced outer neon box-shadow glows with subtle wide desaturated shadows, and eliminated pure black `#000` backgrounds on VU meter canvas containers in favor of dark charcoal `#0e0e14`.
+6.  **Layout Stability**: Set body min-height to `100dvh` to prevent jumping issues in mobile browser layouts.
 
+### 22. Clean up of Non-Project Directories & Files
+1.  **Removing Clones**: Deleted the `taste-skill/` directory which was temporarily cloned in the workspace to audit coding standards.
+2.  **Removing Caches**: Deleted the `.gradio/` directory containing unused cache files.
+3.  **Removing Stray WAVs**: Deleted all generated stray `.wav` files from the project root and subdirectories to keep the repository layout clean.
 
