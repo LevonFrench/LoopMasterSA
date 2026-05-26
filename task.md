@@ -74,6 +74,14 @@
   - [x] Implement prompt slugification and 16-character truncation helper
   - [x] Format variant filenames as track_X_slug_var_Y_timestamp.wav
   - [x] Update sequential track numbering and delete route paths to scope inside current session directory
+- [x] Implement tempo-synced delays, reverb size slider, and macro control knobs in FX drawer:
+  - [x] Sync tape delay to global BPM using dotted-eighth note equation
+  - [x] Replace manual delay time slider with Reverb Size slider
+  - [x] Rebuild convolver impulse response buffer on reverb size changes
+  - [x] Implement Space, Drive, and Tone macro sliders that morph multiple FX parameters
+  - [x] Apply highlight visual styles to macro panel in app.css
+  - [x] Replicate reverb size parameters in OfflineAudioContext WAV mixdown
+
 
 
 

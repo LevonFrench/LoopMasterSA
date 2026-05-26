@@ -99,6 +99,19 @@ We modified `app_server.py` to organize outputs and format filenames:
 - **Prompt Slug Limiting**: Prompt slugs are cleaned (keeping only alphanumeric/hyphen characters and spaces, converting spaces to underscores) and truncated to exactly 16 characters max to keep filenames concise.
 - **Scoping Operations**: Scoped track sequential numbering and deletion endpoints to operate exclusively inside the active session directory.
 
+## Completed FX Upgrade: Synced Delay, Reverb Size, and Macro Control Knobs
+We updated the FX drawer and Web Audio DSP connections:
+- **Tempo-Synced Delay**: Linked delay time value directly to the global BPM using a dotted-eighth note equation (`45.0 / bpm`). The manual delay time slider was replaced with a read-only time value display.
+- **Reverb Size Control**: Repurposed the delay time slider to control "Reverb Size" (mapping 5 to 50 as `0.5s` to `5.0s`). Dragging it dynamically regenerates the `ConvolverNode` buffer.
+- **Macro Control Sliders**: Implemented three macro controls:
+  *   **Space**: Coordinates Reverb Mix, Delay Mix, and Reverb Size.
+  *   **Drive**: Coordinates Valentine Drive, Valentine Compressor threshold, and Dry/Wet Mix.
+  *   **Tone**: Coordinates Luftikus EQ sliders to shape dark-bass or bright-airy response curves.
+  *   These controls work by programmatically updating individual parameters and triggering `'input'` events.
+- **Macro Highlight Styling**: Styled `.fx-section.macros-section` in `app.css` with a highlighted background and border to draw focus in the UI.
+- **Offline Bounce Replication**: Replicated Reverb Size configuration in `OfflineAudioContext` for exact WAV bouncing.
+
+
 
 
 

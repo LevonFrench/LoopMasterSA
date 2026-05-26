@@ -41,6 +41,12 @@ We have finalized the repository packaging, consolidated the git structure, fixe
     - Sanitizes prompts and restricts prompt slug lengths in filenames to 16 characters.
     - Appends generation timestamps to all output WAV files.
     - Integrates track tracking and clean-up functions inside the active session context.
+11. **Tempo-Synced Delays, Reverb Size, and Macro Sliders**:
+    - Delay times are locked to global BPM (dotted-eighth sync: `45.0 / bpm` seconds).
+    - Repurposed delay time slider into a Reverb Size control that regenerates spring convolver buffers dynamically (`0.5s` to `5.0s`).
+    - Added Space, Drive, and Tone macro sliders in the FX drawer, morphing multiple parameters at once in the client and in the offline WAV mixdown.
+    - Highlighted the Macro Control panel in the UI with custom CSS.
+
 
 
 

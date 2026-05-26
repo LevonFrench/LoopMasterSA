@@ -113,6 +113,21 @@
         globalDuration = calcDuration(bpm);
         durationLabel.textContent = `4 bars = ${globalDuration.toFixed(2)}s`;
         tDuration.textContent = formatTime(globalDuration);
+        
+        // Update delay times for all tracks to keep them tempo-synced!
+        const delayTimeSec = 45.0 / bpm; // Dotted eighth note
+        tracks.forEach(t => {
+            t.aelapseDelayTime = delayTimeSec;
+            if (t.aelapseDelayNode) {
+                t.aelapseDelayNode.delayTime.setValueAtTime(delayTimeSec, audioCtx.currentTime);
+            }
+            if (t.wrapper) {
+                const syncDisplay = t.wrapper.querySelector('.aelapse-sync-time');
+                if (syncDisplay) {
+                    syncDisplay.textContent = `${delayTimeSec.toFixed(2)}s (Dotted 8th)`;
+                }
+            }
+        });
     }
 
     function ensureAudioCtx() {
@@ -569,6 +584,10 @@
         // Connect final DSP output to pan node
         fxOutputNode.connect(panNode);
 
+        const currentBpm = parseInt(bpmInput.value) || 120;
+        const initialDelayTime = 45.0 / currentBpm;
+        aelapseDelay.delayTime.value = initialDelayTime;
+
         // 5. Track State
         const track = {
             id,
@@ -580,6 +599,8 @@
             analyserNode,
             fxInputNode,
             fxOutputNode,
+            aelapseDelayNode: aelapseDelay,
+            aelapseReverbNode: aelapseReverb,
             meterCanvas: null,
             meterState: { rms: -60, peak: -60, peakHold: -60, peakHoldTime: 0 },
             muted: false,
@@ -596,10 +617,11 @@
             valentineThresh: 0,
             valentineRatio: 4,
             valentineMix: 0.0,
-            aelapseDelayTime: 0.3,
+            aelapseDelayTime: initialDelayTime,
             aelapseFeedback: 0.3,
             aelapseDelayMix: 0.0,
-            aelapseReverbMix: 0.0
+            aelapseReverbMix: 0.0,
+            aelapseReverbSize: 2.0
         };
 
         // 6. Build wrapper container
@@ -643,6 +665,14 @@
         fxDrawerEl.className = 'fx-drawer';
         fxDrawerEl.style.display = 'none';
         fxDrawerEl.innerHTML = `
+            <div class="fx-section macros-section">
+                <div class="fx-section-title">Macro Controls</div>
+                <div class="fx-controls-grid">
+                    <div class="fx-control-row"><label>Space</label><input type="range" class="macro-space-slider" min="0" max="100" value="0" step="1"><span class="macro-space-val">0%</span></div>
+                    <div class="fx-control-row"><label>Drive</label><input type="range" class="macro-drive-slider" min="0" max="100" value="0" step="1"><span class="macro-drive-val">0%</span></div>
+                    <div class="fx-control-row"><label>Tone</label><input type="range" class="macro-tone-slider" min="0" max="100" value="50" step="1"><span class="macro-tone-val">Flat</span></div>
+                </div>
+            </div>
             <div class="fx-section eq-section">
                 <div class="fx-section-title">Luftikus Analog EQ</div>
                 <div class="fx-controls-grid eq-sliders-grid">
@@ -666,9 +696,10 @@
             <div class="fx-section aelapse-section">
                 <div class="fx-section-title">Ælapse Tape Delay & Spring Reverb</div>
                 <div class="fx-controls-grid">
-                    <div class="fx-control-row"><label>Delay</label><input type="range" class="aelapse-time" min="0" max="2" value="0.3" step="0.05"><span class="aelapse-time-val">0.30s</span></div>
+                    <div class="fx-control-row"><label>Sync Delay</label><span class="aelapse-sync-time" style="width: auto; flex: 1; text-align: left; padding-left: 6px;">${initialDelayTime.toFixed(2)}s (Dotted 8th)</span></div>
                     <div class="fx-control-row"><label>Feedback</label><input type="range" class="aelapse-feedback" min="0" max="95" value="30" step="5"><span class="aelapse-fb-val">30%</span></div>
                     <div class="fx-control-row"><label>Delay Mix</label><input type="range" class="aelapse-mix" min="0" max="100" value="0" step="5"><span class="aelapse-mix-val">0%</span></div>
+                    <div class="fx-control-row"><label>Reverb Size</label><input type="range" class="aelapse-size" min="5" max="50" value="20" step="1"><span class="aelapse-size-val">2.0s</span></div>
                     <div class="fx-control-row"><label>Reverb Mix</label><input type="range" class="aelapse-reverb-mix" min="0" max="100" value="0" step="5"><span class="aelapse-reverb-val">0%</span></div>
                 </div>
             </div>
@@ -783,15 +814,6 @@
             valentineWetGain.gain.value = pct;
         });
 
-        const aeTime = fxDrawerEl.querySelector('.aelapse-time');
-        const aeTimeVal = fxDrawerEl.querySelector('.aelapse-time-val');
-        aeTime.addEventListener('input', () => {
-            const val = parseFloat(aeTime.value);
-            aeTimeVal.textContent = val.toFixed(2) + 's';
-            track.aelapseDelayTime = val;
-            aelapseDelay.delayTime.setValueAtTime(val, ctx.currentTime);
-        });
-
         const aeFeedback = fxDrawerEl.querySelector('.aelapse-feedback');
         const aeFbVal = fxDrawerEl.querySelector('.aelapse-fb-val');
         aeFeedback.addEventListener('input', () => {
@@ -811,6 +833,19 @@
             aelapseDryGain.gain.value = 1 - Math.max(track.aelapseDelayMix, track.aelapseReverbMix);
         });
 
+        const aeSize = fxDrawerEl.querySelector('.aelapse-size');
+        const aeSizeVal = fxDrawerEl.querySelector('.aelapse-size-val');
+        aeSize.addEventListener('input', () => {
+            const val = parseFloat(aeSize.value) / 10;
+            aeSizeVal.textContent = val.toFixed(1) + 's';
+            track.aelapseReverbSize = val;
+            try {
+                track.aelapseReverbNode.buffer = createSpringImpulseResponse(ctx, val, 2.5);
+            } catch (err) {
+                console.error('Failed to update convolver buffer:', err);
+            }
+        });
+
         const aeReverbMix = fxDrawerEl.querySelector('.aelapse-reverb-mix');
         const aeReverbVal = fxDrawerEl.querySelector('.aelapse-reverb-val');
         aeReverbMix.addEventListener('input', () => {
@@ -819,6 +854,94 @@
             track.aelapseReverbMix = pct;
             aelapseReverbGain.gain.value = pct;
             aelapseDryGain.gain.value = 1 - Math.max(track.aelapseDelayMix, track.aelapseReverbMix);
+        });
+
+        // 12. Wire Macro Controls
+        const macroSpace = fxDrawerEl.querySelector('.macro-space-slider');
+        const macroSpaceVal = fxDrawerEl.querySelector('.macro-space-val');
+        const macroDrive = fxDrawerEl.querySelector('.macro-drive-slider');
+        const macroDriveVal = fxDrawerEl.querySelector('.macro-drive-val');
+        const macroTone = fxDrawerEl.querySelector('.macro-tone-slider');
+        const macroToneVal = fxDrawerEl.querySelector('.macro-tone-val');
+
+        macroSpace.addEventListener('input', () => {
+            const val = parseInt(macroSpace.value);
+            macroSpaceVal.textContent = val + '%';
+            
+            const delayMixVal = val;
+            const reverbMixVal = val;
+            const reverbSizeVal = Math.round(5 + (45 * val / 100)); // 0.5s to 5.0s -> 5 to 50
+            
+            const delayMixSlider = fxDrawerEl.querySelector('.aelapse-mix');
+            const reverbMixSlider = fxDrawerEl.querySelector('.aelapse-reverb-mix');
+            const reverbSizeSlider = fxDrawerEl.querySelector('.aelapse-size');
+            
+            if (delayMixSlider) {
+                delayMixSlider.value = delayMixVal;
+                delayMixSlider.dispatchEvent(new Event('input'));
+            }
+            if (reverbMixSlider) {
+                reverbMixSlider.value = reverbMixVal;
+                reverbMixSlider.dispatchEvent(new Event('input'));
+            }
+            if (reverbSizeSlider) {
+                reverbSizeSlider.value = reverbSizeVal;
+                reverbSizeSlider.dispatchEvent(new Event('input'));
+            }
+        });
+
+        macroDrive.addEventListener('input', () => {
+            const val = parseInt(macroDrive.value);
+            macroDriveVal.textContent = val + '%';
+            
+            const driveMultiplier = 1.0 + (9.0 * val / 100); // 1.0x to 10.0x
+            const thresholdVal = Math.round(-40 * val / 100); // 0dB to -40dB
+            const compressorMixVal = val; // 0% to 100%
+            
+            const driveSlider = fxDrawerEl.querySelector('.valentine-drive');
+            const threshSlider = fxDrawerEl.querySelector('.valentine-thresh');
+            const mixSlider = fxDrawerEl.querySelector('.valentine-mix');
+            
+            if (driveSlider) {
+                driveSlider.value = driveMultiplier;
+                driveSlider.dispatchEvent(new Event('input'));
+            }
+            if (threshSlider) {
+                threshSlider.value = thresholdVal;
+                threshSlider.dispatchEvent(new Event('input'));
+            }
+            if (mixSlider) {
+                mixSlider.value = compressorMixVal;
+                mixSlider.dispatchEvent(new Event('input'));
+            }
+        });
+
+        macroTone.addEventListener('input', () => {
+            const val = parseInt(macroTone.value);
+            if (val === 50) {
+                macroToneVal.textContent = 'Flat';
+            } else if (val < 50) {
+                macroToneVal.textContent = 'Dark';
+            } else {
+                macroToneVal.textContent = 'Bright';
+            }
+            
+            const eqSlidersList = fxDrawerEl.querySelectorAll('.eq-slider');
+            if (eqSlidersList.length === 6) {
+                let bandGains = [0, 0, 0, 0, 0, 0];
+                if (val < 50) {
+                    const factor = (50 - val) / 50;
+                    bandGains = [6.0 * factor, 6.0 * factor, 4.0 * factor, 0, -6.0 * factor, -6.0 * factor];
+                } else if (val > 50) {
+                    const factor = (val - 50) / 50;
+                    bandGains = [-6.0 * factor, -6.0 * factor, -3.0 * factor, 0, 6.0 * factor, 8.0 * factor];
+                }
+                
+                eqSlidersList.forEach((slider, b) => {
+                    slider.value = bandGains[b];
+                    slider.dispatchEvent(new Event('input'));
+                });
+            }
         });
 
         // 11. Build variants card selection UI
@@ -1521,7 +1644,7 @@
                     
                     // Reverb path
                     const aelapseReverb = offlineCtx.createConvolver();
-                    aelapseReverb.buffer = createSpringImpulseResponse(offlineCtx, 2.0, 2.5);
+                    aelapseReverb.buffer = createSpringImpulseResponse(offlineCtx, t.aelapseReverbSize || 2.0, 2.5);
                     
                     const aelapseReverbGain = offlineCtx.createGain();
                     aelapseReverbGain.gain.value = t.aelapseReverbMix;

@@ -1126,6 +1126,12 @@ body::before {
     border-color: var(--border-selected);
 }
 
+.fx-section.macros-section {
+    background: rgba(59, 130, 246, 0.04);
+    border-color: rgba(59, 130, 246, 0.15);
+}
+
+
 /* --- Tactile Active Press Feedback --- */
 .btn-generate:active,
 .btn-random-prompt:active,

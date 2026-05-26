@@ -74,4 +74,11 @@ We successfully integrated the design guidelines of `taste-skill`:
 3.  **WAV Filename Construction**: Configured file-saving to slugify the prompt (limited to 16 characters using regex) and append the exact generation timestamp.
 4.  **Verification**: Verified directory and naming structures are successfully picked up by Flask endpoints, enabling track deletion and init audio selection to correctly reference file paths.
 
-
+### 24. Verification of Synced Delay, Reverb Size, and Macro Sliders
+1.  **Tempo-Synced Delay Verification**: Confirmed that modifying the global BPM updates the read-only `Sync Delay` readout in the drawer and updates Web Audio delay nodes dynamically (e.g. `0.38s` at 120 BPM).
+2.  **Reverb Size Modification**: Verified that the new Reverb Size slider updates `track.aelapseReverbSize` and successfully triggers dynamic generation of the convolver buffer via `createSpringImpulseResponse()`.
+3.  **Macro Sliders Verification**:
+    - **Space**: Verified dragging it programmatically updates Reverb Mix, Delay Mix, and Reverb Size, and fires event triggers to update the nodes.
+    - **Drive**: Verified it drives Valentine saturator input gain, Valentine compressor threshold, and compressor Dry/Wet mix slider values.
+    - **Tone**: Verified it shifts the 6 Luftikus EQ band gains to construct a dark-boost or bright-airy response curve.
+4.  **Offline Mixdown Verification**: Bounced a WAV file and verified that the offline rendering accurately incorporates the track's configured reverb size.
