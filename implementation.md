@@ -55,3 +55,9 @@ We renamed the application to **LoopmasterSA** and implemented an "Init Audio" v
 - **Gitignore Rules**: Created a root-level `.gitignore` that ignores all local virtual environments (`.venv`), temporary caches (`.gradio/`), model checkpoints (`*.safetensors`, `*.ckpt`, `*.pt`, `*.bin`), and generated output directories (`outputs/`, `optimized/`, `*.wav`).
 - **Wiki Knowledge Base**: Created `wiki/Home.md` explaining the system architecture, the master compressor/limiter settings, loudness metering math, and initial audio generation flow.
 - **Repository README**: Wrote a root `README.md` containing features list, repository structure map, launcher instructions, and git distribution guidelines.
+
+## Completed Tweak: In Key Prompt Locking Button
+- **HTML Layout**: Added the `btn-random-in-key` button in [index.html](file:///j:/projects/sa3/stable-audio-3/static/index.html) positioned alongside the existing randomizer button.
+- **State Lock**: Introduced a global `currentKeyOrChord` variable in [app.js](file:///j:/projects/sa3/stable-audio-3/static/app.js) to store the active key/chord signature.
+- **Button Feedback**: Wired `generateRandomPrompt(keepKey)` to fetch/generate the signature. The button text dynamically changes to display the locked key or chord (e.g. `🔑 A minor` or `🔑 Cmaj7 to Fma...`) to provide clear visual feedback to the user.
+

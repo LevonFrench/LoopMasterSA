@@ -24,7 +24,10 @@
                 <div class="control-group prompt-group">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <label class="control-label" for="prompt-input">Prompt</label>
-                        <button class="btn-random-prompt" id="btn-random-prompt" type="button" title="Generate Random Prompt">🎲 Random</button>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <button class="btn-random-prompt" id="btn-random-prompt" type="button" title="Generate Random Prompt">🎲 Random</button>
+                            <button class="btn-random-prompt" id="btn-random-in-key" type="button" title="Generate Random Prompt in Current Key/Chord">🔑 In Key</button>
+                        </div>
                     </div>
                     <input class="control-input" id="prompt-input" type="text"
                            placeholder="bass synth loop, funky, hyperpop…"

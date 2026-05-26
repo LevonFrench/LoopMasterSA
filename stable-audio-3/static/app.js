@@ -21,6 +21,7 @@
     const btnStopAll    = document.getElementById('btn-stop-all');
     const tracksContainer = document.getElementById('tracks-container');
     const btnRandomPrompt = document.getElementById('btn-random-prompt');
+    const btnRandomInKey = document.getElementById('btn-random-in-key');
 
     // --- State ---
     let audioCtx = null;
@@ -41,8 +42,9 @@
     let meterLoopRunning = false;
     let meterRafId = null;
 
-    // --- Init Audio State ---
+    // --- Init Audio & Prompt State ---
     let selectedInitAudio = null; // { trackId, variantIndex, filePath, name }
+    let currentKeyOrChord = null; // { type: 'key' | 'chord', value: string }
 
     /*
      * TrackRow = {
@@ -647,20 +649,48 @@
         'Bbmaj7 to Ebmaj7 progression', 'minor 7th arpeggios', 'major 7th voicings'
     ];
 
-    if (btnRandomPrompt) {
-        btnRandomPrompt.addEventListener('click', () => {
-            const inst = instruments[Math.floor(Math.random() * instruments.length)];
-            const style = styles[Math.floor(Math.random() * styles.length)];
-            let generated = "";
+    function generateRandomPrompt(keepKey = false) {
+        const inst = instruments[Math.floor(Math.random() * instruments.length)];
+        const style = styles[Math.floor(Math.random() * styles.length)];
+        
+        if (!keepKey || !currentKeyOrChord) {
             if (Math.random() < 0.5) {
                 const key = keys[Math.floor(Math.random() * keys.length)];
-                generated = `solo ${inst} ${style} in ${key}`;
+                currentKeyOrChord = { type: 'key', value: key };
             } else {
                 const chord = chords[Math.floor(Math.random() * chords.length)];
-                generated = `solo ${inst} ${style} playing ${chord}`;
+                currentKeyOrChord = { type: 'chord', value: chord };
             }
-            promptInput.value = generated;
-            promptInput.focus();
+        }
+        
+        let generated = "";
+        if (currentKeyOrChord.type === 'key') {
+            generated = `solo ${inst} ${style} in ${currentKeyOrChord.value}`;
+        } else {
+            generated = `solo ${inst} ${style} playing ${currentKeyOrChord.value}`;
+        }
+        
+        if (btnRandomInKey) {
+            const displayVal = currentKeyOrChord.value.length > 15 
+                ? currentKeyOrChord.value.substring(0, 12) + '...'
+                : currentKeyOrChord.value;
+            btnRandomInKey.textContent = `🔑 ${displayVal}`;
+            btnRandomInKey.title = `Generate Random Prompt in ${currentKeyOrChord.value}`;
+        }
+        
+        promptInput.value = generated;
+        promptInput.focus();
+    }
+
+    if (btnRandomPrompt) {
+        btnRandomPrompt.addEventListener('click', () => {
+            generateRandomPrompt(false);
+        });
+    }
+
+    if (btnRandomInKey) {
+        btnRandomInKey.addEventListener('click', () => {
+            generateRandomPrompt(true);
         });
     }
 

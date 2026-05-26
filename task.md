@@ -40,3 +40,9 @@
   - [x] Write project architecture and DSP pipeline documentation in `wiki/Home.md`
   - [x] Write root `README.md` explaining LoopMasterSA features, repo layout, launcher, and distribution guidelines
   - [x] Stage, commit, and push changes to remote repository `origin/main`
+- [x] Add "In Key" random prompt button next to the existing Random button:
+  - [x] Insert "🔑 In Key" button in `index.html` styled with `btn-random-prompt`
+  - [x] Store last generated key/chord in `currentKeyOrChord` state variable in `app.js`
+  - [x] Implement `generateRandomPrompt(keepKey)` supporting re-using the active key/chord
+  - [x] Dynamically update the button label text to display the currently locked key/chord (e.g. "🔑 C major")
+

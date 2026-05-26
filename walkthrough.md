@@ -31,3 +31,9 @@ We renamed the application to **LoopmasterSA** and added an Init Audio Variation
 1.  **Repo Consolidation**: Removed the nested `.git` folders in `stable-audio-3` and `audio-file-mcp-app` so that the entire project structure is clean and tracked in the parent repository pointing to `LevonFrench/LoopMasterSA.git`.
 2.  **Ignore rules**: Created a root-level `.gitignore` that recursively ignores virtual environments (`.venv`), temporary caches (`.gradio/`), outputs/checkpoints (`*.safetensors`, `*.ckpt`, `outputs/`), and generated `.wav` files.
 3.  **Documentation**: Wrote a detailed system wiki at `wiki/Home.md` and updated the root `README.md` to provide architecture details, launcher instructions, and git distribution guidelines.
+
+### 18. Verification of "In Key" Prompt Lock Button
+1.  **Layout**: Added the `🔑 In Key` button beside the random prompt generator in the dashboard.
+2.  **Lock State Logic**: The first prompt generation randomly decides on a key (e.g., "A minor") or chord progression (e.g., "Cmaj7 to Fmaj7..."), and stores it in the browser memory state under `currentKeyOrChord`. It then updates the button text to show the active key (e.g., `🔑 A minor`).
+3.  **Operation**: Submitting consecutive prompts via `🔑 In Key` preserves the locked key/chord signature while varying the instrument and style (e.g. producing "solo saxophone bluesy licks in A minor", then "solo grand piano moody hooks in A minor").
+
