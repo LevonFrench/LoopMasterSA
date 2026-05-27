@@ -4,56 +4,61 @@
 
 ### What Was Done
 
-**Visualizer Tray** — Added a pulse-visualizer-inspired real-time audio visualizer between the transport bar and tracks. Three canvases: spectrum analyzer (log FFT bars), oscilloscope (waveform trace), peak meters (L/R bars). All driven by a dedicated `AnalyserNode` tapped off `masterGain`.
+**App Rename** → LoopMaster SA3
 
-**Transport Panel** — Wrapped transport bar + visualizer in a styled panel matching the prompt box and track row styling (bg-card, border, blur). Removed the Stop All button (play/pause handles this).
+**SA3 Generation Controls** — Seed (-1=random, 0-999999), CFG (0.5-15), Steps (1-100). All draggable like BPM (drag ↕, double-click to type). Wired through API to `model.generate()`.
 
-**SA3 Generation Controls** — Exposed Seed (-1 = random), CFG (classifier-free guidance scale, 0.5–15), and Steps (diffusion steps, 1–100) as inputs next to BPM. All three are wired through the API to `model.generate()`.
+**FX Text Overflow Fix** — Label width 36→48px, font 0.55→0.5rem, value span 40→36px. FX sections 220→200px min. All text truncates cleanly.
 
-**Seek Toggle** — Clicking on a waveform card jumps the playhead only when Seek toggle is ON (default ON). Prevents accidental seeks.
+**8 FX Macro Knobs** — Space, Drive, Tone (original) + Filter (bipolar LP/HP), Reso, Delay, Feedback, Crush. Each dispatches to the relevant FX sliders.
 
-**Queue Toggle** — When ON, clicking a different variant queues it (pulsing amber dashed border). The switch happens at the next loop boundary via `updatePlayheads()` detecting pct wrap-around.
+**Card Click Zones** — Left half of card = queue variant switch for next loop boundary (pulsing amber dashed border). Right half = instant switch. Subtle vertical center divider line. Removed Queue toggle from transport bar.
 
-**Reverse Fix** — Reversing a clip no longer calls `stopAll()/playAll()`. It only restarts the specific track's source node in sync.
+**Volume Slider** — Track height 4→6px, thumb 12→14px.
 
-**Export Loops** — Button next to Render Mix that zips all currently selected (non-muted) variant WAVs using JSZip (CDN-loaded) and downloads as a zip file.
+**Tooltips** — All generation controls have detailed mouseover info explaining what each parameter does and how to interact.
 
-**Lead Random Button** — 🎹 Lead button with 32 lead styles × 22 descriptors, key/bpm aware (same pattern as Bass).
+**Seek Toggle** — ON by default. Click waveform to seek playhead. Turn OFF to disable.
 
-**Waveform Scaling** — Two-pass drawing: first pass finds global peak, second pass normalizes bars so tallest fills 90% of height.
+**Reverse Fix** — Only restarts the specific track source, not all playback.
 
-**Tighter Cards** — Removed fixed 90px height, reduced padding/gap, increased waveform min-height to 48px. Cards auto-size to content.
+**Export Loops** — Zips all selected variant WAVs via JSZip.
 
-**"Loops to Render"** — Renamed from "Loops".
+**Lead/Bass Buttons** — Key/BPM aware prompt generators.
 
-**App Name** — Changed from "LoopmasterSA" to "LoopMaster SA3".
+**Visualizer Tray** — Spectrum analyzer, oscilloscope, peak meters.
 
----
-
-### Outstanding / Not Started
-
-- **LFO/Peak Control**: "I want to add tempo synced lfo and volume peak control of all the fx mix and feedback elements controlled with knobs next to the sliders." — NOT STARTED.
+**Transport Panel** — Wrapped in styled box matching other panels.
 
 ---
 
-### Key Technical Details
+### Outstanding
 
-| File | What Changed |
-|------|-------------|
-| `stable-audio-3/static/index.html` | Seed/CFG/Steps inputs, Lead button, Export Loops button, Seek/Queue toggles, transport panel wrapper, app name |
-| `stable-audio-3/static/app.js` | Visualizer tray rendering (renderVizSpectrum/Osc/Meters), initVizAnalyser, queue processing in updatePlayheads, seek/queue toggle logic in card click, waveform two-pass scaling, reverse fix, export loops handler, lead prompt generator, SA3 params in runGeneration |
-| `stable-audio-3/static/app.css` | Transport-panel wrapper, visualizer tray, toggle switch, control-input-sm, is-queued animation, export button, tighter card sizing |
-| `stable-audio-3/app_server.py` | `seed` parameter plumbed through API → `_run_generation` → `model.generate()` |
-| `wiki/Home.md` | Full rewrite with new features documented |
+- **Tempo-synced LFO + volume peak control** of FX/mix/feedback with knobs next to sliders — NOT STARTED.
+
+---
+
+### Key Files
+
+| File | Changes |
+|------|---------|
+| `static/index.html` | SA3 inputs with tooltips, seek toggle, card zones, 8 macros |
+| `static/app.js` | Draggable inputs, card left/right zones, 8 macro handlers, reverse fix, queue at loop boundary |
+| `static/app.css` | Thicker slider, card zone divider, FX text overflow fix, macro layout for 8 knobs |
+| `app_server.py` | Seed param plumbed through API |
 
 ### Audio Signal Chain
 ```
-TrackSource → Luftikus EQ → Valentine → Ælapse → TrackCompressor(-6dB,5:1,10ms) → Panner → Gain → Analyser → MasterGain → Limiter(-11dB) → Makeup(+11dB) → MasterAnalyser → Destination
+TrackSource → Luftikus EQ → Valentine → Ælapse → Compressor(-6dB,5:1) → Panner → Gain → Analyser → MasterGain → Limiter(-11dB) → Makeup(+11dB) → Analyser → Dest
                                                                                                           ↘ VizAnalyser (FFT 2048)
 ```
 
-### State Variables
-- `vizAnalyser` — Separate AnalyserNode (fftSize=2048) for visualizer, tapped off masterGain
-- `prevPlayPct` — Tracks previous playhead pct to detect loop boundary for queue processing
-- `track._pendingVariant` — Queued variant index (set when Queue toggle is ON)
-- `track._autoPlay` — Flag set by addTrackRow for deferred auto-play after buffer decodes
+### Card Click Behavior
+```
+┌─────────────────┬─────────────────┐
+│   LEFT HALF     │   RIGHT HALF    │
+│   Queue at      │   Instant       │
+│   loop start    │   switch        │
+│   (amber dash)  │                 │
+└─────────────────┴─────────────────┘
+```
