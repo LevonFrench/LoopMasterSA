@@ -62,8 +62,12 @@ Exposed through the UI alongside BPM:
 | Parameter | Default | Range | Description |
 |-----------|---------|-------|-------------|
 | **Seed** | -1 | -1 to 999999 | Random seed for deterministic generation (-1 = random) |
-| **CFG** | 1.0 | 0.5 to 15 | Classifier-Free Guidance scale. Higher = stricter prompt adherence, lower = more creative/varied |
 | **Steps** | 8 | 1 to 100 | Diffusion denoising steps. More = higher quality but slower generation |
+
+> **Note**: CFG (Classifier-Free Guidance) defaults to `1.0` and is not exposed in the UI. It is sent to the backend automatically.
+
+### Generation Headroom
+To prevent audio content from dying off before the loop boundary, the server generates `duration + 2.0s` of audio and hard-trims to the exact loop length before saving. This ensures waveforms fill the entire loop.
 
 ---
 
@@ -71,7 +75,7 @@ Exposed through the UI alongside BPM:
 
 LoopMaster SA3 allows taking any generated loop variant and using it as the seed (initial audio) to create cohesive variations:
 
-1.  **Selection**: Click the `Remake` button on any variant card to set it as the seed audio.
+1.  **Selection**: Click the `Remix` button on any variant card to set it as the seed audio.
 2.  **Noise Level Control**: Adjust the noise slider (`0.10` to `0.90`). A lower noise level (e.g. `0.20`) stays very close to the original, while a higher noise level (e.g. `0.80`) introduces creative deviations.
 3.  **Backend Loading**:
     *   The backend loads the seed WAV file using `torchaudio.load()`.
@@ -103,7 +107,7 @@ Each variant card has two click zones:
 *   **Right half** — Instantly switches to the variant. On hover, shows `instant ▶`.
 
 ### Number Input Interaction
-All number inputs (BPM, Seed, CFG, Steps) support two interaction modes:
+All number inputs (BPM, Seed, Steps) support two interaction modes:
 *   **Click** — Focuses the input for keyboard typing.
 *   **Drag ↕** — After 3px of vertical mouse movement, enters drag mode for rapid value adjustment.
 
@@ -135,8 +139,7 @@ SA3 responds best to structured natural language prompts:
 *   **Production**: lo-fi, vintage analog, studio quality, tape saturated
 *   **Key**: Include key/scale for harmonic coherence across layers
 
-### In-App Documentation Module
-A collapsible "📖 How to Use LoopMaster SA3" panel at the bottom of the app provides step-by-step instructions covering prompt writing, parameter settings, layering, clip switching, mixing/FX, and export.
+
 
 ---
 
@@ -152,7 +155,7 @@ A collapsible "📖 How to Use LoopMaster SA3" panel at the bottom of the app pr
 
 ## 9. Channel Strip DSP Effects
 
-Each track row features an expandable effects drawer containing three hardware-modeled creative processors:
+Each track row features an expandable effects drawer containing three hardware-modeled creative processors. FX parameter labels and value readouts are center-aligned for visual consistency.
 
 ### 1. Luftikus Analog EQ
 A 6-band analog-modeled equalizer featuring standard fixed-frequency bands for musical tone shaping:

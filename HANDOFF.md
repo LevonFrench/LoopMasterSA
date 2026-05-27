@@ -1,34 +1,32 @@
 # HANDOFF — LoopMaster SA3
 
-## Session Summary (2026-05-26 evening)
+## Session Summary (2026-05-26 late evening)
 
-### What Was Done
+### What Was Done This Session
 
-**Number Input Interaction** — All number inputs (BPM, Seed, CFG, Steps) use unified deadzone logic: single click = focus for typing, drag ↕ 3px+ = drag mode. Cursor shows `ns-resize`. No double-click required.
+**Remake → Remix** — Renamed the "Remake" button to "Remix" across JS and HTML.
 
-**8 FX Macro Knobs** — Space, Drive, Tone + Filter (bipolar LP/HP), Reso, Delay, Feedback, Crush. Each dispatches to its FX sliders.
+**Removed Empty State Guide** — Stripped the card zone diagram, split mode demo, and drag tips from the empty state. Now just shows music icon + "Enter a prompt and hit Generate".
 
-**Card Click Zones** — Left half = queue at loop boundary (pulsing amber). Right half = instant switch. Hover shows `◀ queue` / `instant ▶` labels. Queue toggle removed from transport.
+**Removed Docs Module** — Deleted the collapsible "How to Use LoopMaster SA3" step-by-step documentation panel and all associated CSS/JS.
 
-**Controls Guide** — Empty state shows visual diagram: card zones, seek toggle, input interaction tips.
+**CFG Removed from UI** — Removed the CFG input from the controls panel. Backend still defaults to 1.0 automatically.
 
-**Delay Default** → 1/8th note (was dotted 8th).
+**Pan Knob Repositioned** — Moved pan knob to column layout (knob above label) in mixer-vol-pan row, sized 18×18 to match macro knobs. Sits directly above the last macro knob (S/C).
 
-**FX Text Overflow** — Labels 48px wide, font 0.5rem, values 36px. All text truncates.
+**Audio Cutoff Fix** — Server now generates `duration + 2.0s` of audio and hard-trims to exact loop length before saving. Prevents waveforms from dying off in the last 1-2 seconds.
 
-**Volume Slider** — 6px track, 14px thumb.
+**FX Labels Centered** — Changed FX control row labels and value readouts from `text-align: right` to `text-align: center`.
 
-**SA3 Params** — Seed (-1=random), CFG (0.5–15), Steps (1–100). Tooltips on all labels and inputs.
+**Prompt Panel Tightened** — Reduced controls-panel padding from 18px to 12px vertical.
 
-**Seek Toggle** — Click waveform to jump playhead (on) or just select (off).
-
-**Reverse Fix** — Only restarts specific track source, not all playback.
-
-**Export Loops** — Zips selected variant WAVs via JSZip.
-
-**Lead/Bass/Drums/In-Key Buttons** — Key/BPM aware prompt generators.
-
-**Visualizer Tray** — Spectrum, oscilloscope, peak meters.
+**Random Generators Expanded** — Massively expanded all prompt arrays:
+- Instruments: 17 → 53
+- Styles: 14 → 35, plus 24 moods + 12 production style tags
+- Keys: 12 → 24 (with modes), Chords: 8 → 16
+- Drums: 20 → 32 genres, 16 → 24 descriptors, + 10 drum elements
+- Bass: 32 → 48 styles, 18 → 28 descriptors
+- Lead: 32 → 48 styles, 22 → 32 descriptors
 
 ---
 
@@ -40,6 +38,14 @@
 
 ### Key Implementation Details
 
+**Generation Headroom** (`app_server.py`):
+```python
+gen_duration = duration + 2.0  # Generate longer
+audio = model.generate(duration=gen_duration, ...)
+exact_samples = int(duration * sample_rate)
+audio = audio[:, :, :exact_samples]  # Trim to exact loop
+```
+
 **Deadzone Drag Pattern** (`makeDraggableInput`):
 ```
 mousedown → pending=true, activated=false
@@ -47,10 +53,11 @@ mousemove → if |dy| >= 3px: activated=true, blur, start drag
 mouseup → if !activated: focus+select (click). Reset.
 ```
 
-**Card Click Zone Logic**:
+**Card Click Zone Logic** (gated by Split toggle):
 ```
-clickX < cardWidth/2 → queue (left half)
-else → selectVariant (right half, instant)
+Split OFF → all clicks are instant switch
+Split ON  → clickX < cardWidth/2 → queue (left half)
+            else → selectVariant (right half, instant)
 ```
 
 **Audio Signal Chain**:
@@ -62,7 +69,8 @@ Source → EQ → Valentine → Ælapse → Compressor → Panner → Gain → A
 
 | File | Role |
 |------|------|
-| `static/app.js` | All frontend logic, audio routing, drag handlers, macros |
-| `static/app.css` | Styling, card zones, guides, FX layout |
-| `static/index.html` | Layout, controls, tooltips, empty state guide |
-| `app_server.py` | Flask API, seed/cfg/steps plumbing |
+| `static/app.js` | All frontend logic, audio routing, drag handlers, macros, prompt generators |
+| `static/app.css` | Styling, card zones, FX layout, pan/macro knob sizing |
+| `static/index.html` | Layout, controls, tooltips |
+| `app_server.py` | Flask API, generation headroom + trim logic |
+| `wiki/Home.md` | Knowledge base with architecture, controls, FX docs |
