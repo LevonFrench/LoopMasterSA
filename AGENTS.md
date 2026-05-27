@@ -85,7 +85,7 @@ You are not a monolithic assistant; you are the Reasoning Core of a Mixture of M
 
 To effectively assist with tasks in this repository, you must consult our knowledge base.
 
-Please refer to the **[Knowledge Wiki](./wiki/Home.md)** for:
+Please refer to the **[Knowledge Wiki](./loopmaster/wiki/Home.md)** for:
 - Established patterns and architecture decisions
 - Existing guides, tools, and best practices.
 

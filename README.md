@@ -2,6 +2,9 @@
 
 **LoopMasterSA** is a premium, real-time synchronized multi-track loop generator and mixing dashboard built on top of the Stable Audio 3 generative music model. It provides a cohesive, browser-based studio environment to generate musical loops from text prompts, arrange them in a synchronized grid, and mix them using professional-grade channel strips and master processor nodes.
 
+> [!TIP]
+> For step-by-step instructions, prompting guidelines, workflow walk-throughs, and detailed DSP configuration details, see the comprehensive [User Guide](file:///j:/projects/sa3/loopmaster/wiki/User-Guide.md) and the technical [Wiki Home Page](file:///j:/projects/sa3/loopmaster/wiki/Home.md).
+
 ---
 
 ## Key Features
@@ -21,20 +24,22 @@
 ## Repository Structure
 
 ```
-├── stable-audio-3/          # Stable Audio 3 generator and web app code
-│   ├── app_server.py        # Flask backend server & generation API
-│   ├── static/              # Web application assets
-│   │   ├── index.html       # Dashboard layout
-│   │   ├── app.js           # Audio graph, metering, and state synchronization
-│   │   └── app.css          # Premium theme styling and CSS layouts
+├── stable-audio-3/          # Stable Audio 3 core generator library
 │   ├── pyproject.toml       # Backend dependencies
 │   └── stable_audio_3/      # Core Stable Audio 3 model package
-├── audio-file-mcp-app/      # MCP server for audio file actions
-├── audio-grid-mcp-app/      # MCP server for grid layout management
+├── loopmaster/              # Dedicated LoopMaster subfolder
+│   ├── loopmaster-app/      # Custom Web App (Flask backend + JS frontend)
+│   │   ├── app_server.py    # Flask API server & generation worker
+│   │   ├── generate_variants.py # CLI prompt generator helper
+│   │   └── static/          # Web dashboard assets
+│   │       ├── index.html   # Main dashboard layout
+│   │       ├── app.js       # Real-time audio routing & state sync
+│   │       └── app.css      # Premium dark theme stylesheet
+│   └── wiki/                # LoopMaster project documentation
+│       ├── Home.md          # Technical architecture details
+│       └── User-Guide.md    # Step-by-step user walkthrough
 ├── run_server.bat           # Launcher script for Windows
 ├── .gitignore               # Strict gitignore keeping AI assets/models off git
-└── wiki/                    # Project wiki documentation
-    └── Home.md              # Detailed architecture and DSP pipeline info
 ```
 
 ---
@@ -80,6 +85,7 @@ To keep the repository lightweight and clean for distribution:
     *   **Ælapse Delay & Reverb**: Modeled after the smiarx [Ælapse](https://github.com/smiarx/aelapse) wow delay and spring convolver.
     *   **Scream Distortion Filter**: Inspired by the Cure-Audio [Scream](https://github.com/Cure-Audio/Scream) resonant distortion effect.
     *   **Filtr Filter Modulator**: Based on the tiagolr [Filtr](https://github.com/tiagolr/filtr) multi-type filter plugin.
-*   **MCP Applications**:
-    *   **audio-file-mcp-app**: Model-compatible microservice for parsing audio metadata and track directories.
-    *   **audio-grid-mcp-app**: Helper server coordinating sequence loops and multi-track session assets.
+*   **Development Reference & Scaffolding**:
+    *   **pulse-visualizer**: Acted as the visual UI reference for building our browser-based FFT spectrum analyzer and oscilloscope canvases.
+    *   **audio-file-mcp-app**: Used as development scaffolding for media metadata parsing tools during initial coding phases.
+    *   **audio-grid-mcp-app**: Used as development scaffolding to analyze multi-track session matrix and loop synchronization options.

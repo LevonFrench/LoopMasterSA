@@ -91,3 +91,32 @@ We implemented and verified the FX bypass buttons, send effect routing for delay
 4.  **Track Lock Toggle**: Added a Lock button next to the Delete button. When active, it disables volume and pan sliders, disables all FX sliders, disables bypass toggles, prevents variant card selection, and blocks track deletion. The locked track row is visually dimmed and styled with an amber border.
 5.  **Offline Render Sync**: Updated the `OfflineAudioContext` WAV mixdown bounce to match this compressor-last send routing, bypass state mapping, and default looping behaviors.
 6.  **Package Credits**: Added clear attribution for Stability AI's Stable Audio 3, lkjbdsp's Luftikus EQ, tote-bag-labs' Valentine saturator, smiarx's Ælapse delay/reverb, and custom MCP applications in the README and project wiki.
+
+### 26. Verification of Comprehensive User Guide & Technical Documentation
+We created and linked the comprehensive user guide:
+1.  **User Guide Creation**: Created `wiki/User-Guide.md` containing exhaustive instructions on setup/launch, AI prompt enhancement, draggable inputs, transport, mixing, DSP effects, macro controls, offline rendering, and file exporting.
+2.  **Documentation Linking**: Added tip banners at the top of the technical wiki (`wiki/Home.md`) and the repository entry point (`README.md`) linking directly to the new user guide with clickable markdown links.
+3.  **Link Integrity Check**: Checked that all references and paths are valid and clickable.
+
+### 27. Verification of MCP App Metadata Debugging
+We corrected copy-pasted configuration files under `audio-grid-mcp-app`:
+1.  **Manifest verification**: Updated `audio-grid-mcp-app/mcpb/manifest.json` to declare the correct app name `audio-grid-mcp-app`, the correct display name `Audio Grid MCP App`, and corrected the tools section to publish the actual tool `display_audio_grid` with its proper description.
+2.  **Build script correction**: Modified `audio-grid-mcp-app/scripts/build-mcpb.mjs` to target `audio-grid-mcp-app-${version}.mcpb` as output bundle file.
+3.  **Package structure and entrypoint**: Corrected `package.json` to assign the binary command to `"audio-grid-mcp-app"`.
+4.  **Documentation correction**: Rewrote `audio-grid-mcp-app/README.md` to accurately document the grid comparison app instead of the single audio file app.
+5.  **Verification**: Executed `npm test` inside `audio-grid-mcp-app` to verify all 454 unit tests compile and pass.
+
+### 28. Reorganize Workspace and Cleanup Unused Repositories
+We consolidated the workspace and removed all unused helper repositories to keep the project clean and minimalist:
+1.  **Directory Reorganization**: Moved `loopmaster-app/` and the system documentation `wiki/` into a new `loopmaster/` subfolder.
+2.  **Unused Repo Deletion**: Completely deleted the C++ visualizer code (`pulse-visualizer/`) and the two MCP helper applications (`audio-file-mcp-app/` and `audio-grid-mcp-app/`) from disk and git tracking, as they are not needed to run or maintain the LoopMaster application.
+3.  **Import Path Resolution**: Configured `loopmaster/loopmaster-app/app_server.py` and `loopmaster/loopmaster-app/generate_variants.py` to recursively locate the peer `stable-audio-3` folder upwards from their directory.
+4.  **Launcher Sync**: Updated the Windows batch script `run_server.bat` at the workspace root to target `loopmaster/loopmaster-app/app_server.py`.
+5.  **Reference and Doc Updates**: Updated all path mappings in `README.md`, `AGENTS.md`, and `Home.md`, and added explicit credits documenting the role of `pulse-visualizer` (as UI visual reference) and `audio-file-mcp-app`/`audio-grid-mcp-app` (as scaffolding tools).
+6.  **Verification**: Verified that both python scripts compiled cleanly, and launched the Flask backend server locally to confirm it successfully initializes and listens on port 7861.
+
+### 29. Model Localization & Launcher Enhancements
+We added support to run either the high-fidelity `medium` model or standard `small-music` model offline:
+1.  **Checking and Localizing Weights**: Created `stable-audio-3/scripts/localize_models.py` which resolved both `stabilityai/stable-audio-3-medium` and `stabilityai/stable-audio-3-small-music` checkpoints and stored them inside `stable-audio-3/models/` for tokenless offline execution.
+2.  **Batch Launcher Menu**: Re-wrote `run_server.bat` to present a menu selector prompt on startup, allowing the user to select `medium` (default, choice 1), `small-music` (choice 2), or `small-sfx` (choice 3).
+3.  **Verification**: Checked script execution, verified that local checkpoint copies completed successfully on disk, and confirmed that launching with `medium` loads the local model files correctly.

@@ -122,6 +122,39 @@ We implemented independent bypass, parallel send routing for delay/reverb, track
 - **Offline Rendering Sync**: Replicated the new compressor-last send routing, bypass states, and looping defaults in the `OfflineAudioContext` WAV mixdown bounce.
 - **Tech Credits**: Credited Stability AI's Stable Audio 3, lkjbdsp's Luftikus EQ, tote-bag-labs' Valentine saturator, smiarx's Ælapse delay/reverb, and custom MCP applications in the README and project wiki.
 
+## Completed Work: Comprehensive User Guide & Technical Documentation Integration
+We authored and integrated a comprehensive user guide and technical documentation to cover the entire feature set and architecture of LoopMaster SA3:
+1. **User Guide creation**: Wrote [User-Guide.md](file:///j:/projects/sa3/wiki/User-Guide.md) covering local setup and startup, model parameters, user interface dynamics, the master limiter dynamic configuration, dual-zone variant cards, 5-button preset prompt generators, creative DSP FX blocks (Filtr, Scream, Luftikus EQ, Valentine Saturator, Ælapse wow delay/convolver), offline rendering logic, client-side ZIP exporting, and undo system.
+2. **Technical wiki routing**: Updated [Home.md](file:///j:/projects/sa3/wiki/Home.md) to add a TIP block linking directly to the new User Guide.
+3. **Repository Landing integration**: Updated [README.md](file:///j:/projects/sa3/README.md) to link to both the User Guide and Technical Wiki Home Page to maximize discoverability.
+
+## Completed Tweak: Local Model & Autoencoder Loading Support
+We added support to resolve Stable Audio 3 models and SAME Autoencoders from a local directory before contacting Hugging Face Hub:
+- **Local Resolution**: Modified `ModelConfig.resolve()` and `AutoencoderModelConfig.resolve()` in [model_configs.py](file:///j:/projects/sa3/stable-audio-3/stable_audio_3/model_configs.py) to check for matching folders under the project's local directory (`stable-audio-3/models/`).
+- **Offline / Tokenless Mode**: By placing manually downloaded model weights (e.g., `model.safetensors` and `model_config.json` inside `stable-audio-3/models/stable-audio-3-small-music/`), the application runs entirely locally and offline, bypassing Hugging Face API checks, download attempts, and authentication tokens.
+
+## Completed Integration: Inpainting and Continuation Remix Modes
+We successfully added native inpainting and continuation capabilities directly in the LoopMaster SA3 multi-track generator:
+- **Backend Setup**: Updated the POST `/api/generate` route in `app_server.py` to extract `remix_mode`, `inpaint_start`, `inpaint_end`, and `continue_start`. In `_run_generation()`, if a seed path is provided, we load the WAV into a tensor. If `remix_mode` is `"inpaint"`, we pass it as `inpaint_audio` along with `inpaint_mask_start_seconds` and `inpaint_mask_end_seconds` to the generator. If `remix_mode` is `"continuation"`, we pass it as `inpaint_audio` and mask everything after the user-specified split point to extend the sequence.
+- **Frontend Controls**: Tied state in `app.js` and wired click events on the mode tabs to display the appropriate parameters subpanels. Programmed `updateRemixSlidersRange(duration)` to dynamically bound range sliders based on the selected variant buffer duration, and clamped the sliders so start never exceeds end.
+- **Documentation**: Updated `User-Guide.md` with guidelines on how Variation, Inpaint, and Continuation remixing operates.
+
+## Completed Work: Workspace Reorganization and Unused Repo Cleanup
+To establish a clear structural boundary, separate the custom LoopMaster system from the core `stable-audio-3` framework, and keep the repository clean and minimalist:
+- **Directory Reorganization & Deletion**: Created a dedicated `loopmaster/` directory in the workspace root and moved the custom frontend/backend application code (`loopmaster-app/`) and system wiki documentation (`wiki/`) into it. Completely deleted the C++ visualizer engine (`pulse-visualizer/`) and both MCP helper apps (`audio-file-mcp-app/`, `audio-grid-mcp-app/`) from the workspace and git tracking.
+- **Robust Path Finding**: Updated `app_server.py` and `generate_variants.py` to search upward from their execute paths for the `stable-audio-3` parent folder, rendering scripts immune to relocation changes.
+- **Launcher Synchronization**: Re-targeted the Windows launcher script (`run_server.bat`) in the workspace root to boot the server script from `loopmaster/loopmaster-app/app_server.py`.
+- **Reference updates**: Updated repository structure diagrams and markdown paths inside `README.md`, `AGENTS.md`, and `Home.md` to target the newly relocated folders and documented reference and scaffolding credits for the deleted tools.
+- **Cleanup**: Deleted the empty root `outputs/` folder.
+- **Compilation Check**: Verified the dynamic module imports compile correctly, and checked server instantiation via background task tracking.
+
+## Completed Work: Model Localization & Launcher Enhancements
+To allow tokenless offline model executions and offer user choice on startup:
+- **Model Checkpoint Localization**: Created `localize_models.py` inside `stable-audio-3/scripts/` to download and copy model configs and safe-tensor weights from the Hugging Face Hub (or local cache) directly to `stable-audio-3/models/stable-audio-3-medium/` and `stable-audio-3/models/stable-audio-3-small-music/`. Running this successfully localized both checkpoints for offline bypass.
+- **Interactive Batch Menu**: Re-wrote `run_server.bat` in the workspace root to display a CLI menu prompt. The launcher defaults to the high-fidelity `medium` model (Option 1) on Enter, but allows launching `small-music` (Option 2) or `small-sfx` (Option 3) seamlessly.
+
+
+
 
 
 

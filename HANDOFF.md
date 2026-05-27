@@ -1,76 +1,49 @@
 # HANDOFF — LoopMaster SA3
 
-## Session Summary (2026-05-26 late evening)
+## Session Summary (2026-05-27 morning)
 
 ### What Was Done This Session
 
-**Remake → Remix** — Renamed the "Remake" button to "Remix" across JS and HTML.
+**Workspace Reorganization & Cleanup**:
+- Moved all custom LoopMaster code and documentation into a dedicated `loopmaster/` directory to separate it from the core `stable-audio-3` generator library.
+- Completely removed unused reference and helper repositories (`pulse-visualizer`, `audio-file-mcp-app`, and `audio-grid-mcp-app`) to keep the project clean and minimalist.
+- Deleted the empty root `outputs/` folder.
 
-**Removed Empty State Guide** — Stripped the card zone diagram, split mode demo, and drag tips from the empty state. Now just shows music icon + "Enter a prompt and hit Generate".
+**Model Localization for Offline Use**:
+- Created `stable-audio-3/scripts/localize_models.py` which pulls model configurations and safetensors from the Hugging Face Hub (or local cache) and copies them into local directories under `stable-audio-3/models/`.
+- Localized checkpoints for both:
+  - `stable-audio-3-medium` (1.4B parameters, high quality, GPU)
+  - `stable-audio-3-small-music` (433M parameters, lightweight, CPU/GPU)
+- The application automatically bypasses Hugging Face API token requests and online verification checks when running locally if these files are present.
 
-**Removed Docs Module** — Deleted the collapsible "How to Use LoopMaster SA3" step-by-step documentation panel and all associated CSS/JS.
+**Interactive Batch Launcher Menu**:
+- Re-wrote `run_server.bat` in the workspace root to prompt the user with an interactive model selection menu.
+- Defaults to option `[1] Medium Model` on pressing Enter, but allows selection of `[2] Small Music Model` or `[3] Small SFX Model` to customize hardware load.
 
-**CFG Removed from UI** — Removed the CFG input from the controls panel. Backend still defaults to 1.0 automatically.
-
-**Pan Knob Repositioned** — Moved pan knob to column layout (knob above label) in mixer-vol-pan row, sized 18×18 to match macro knobs. Sits directly above the last macro knob (S/C).
-
-**Audio Cutoff Fix** — Server now generates `duration + 2.0s` of audio and hard-trims to exact loop length before saving. Prevents waveforms from dying off in the last 1-2 seconds.
-
-**FX Labels Centered** — Changed FX control row labels and value readouts from `text-align: right` to `text-align: center`.
-
-**Prompt Panel Tightened** — Reduced controls-panel padding from 18px to 12px vertical.
-
-**Random Generators Expanded** — Massively expanded all prompt arrays:
-- Instruments: 17 → 53
-- Styles: 14 → 35, plus 24 moods + 12 production style tags
-- Keys: 12 → 24 (with modes), Chords: 8 → 16
-- Drums: 20 → 32 genres, 16 → 24 descriptors, + 10 drum elements
-- Bass: 32 → 48 styles, 18 → 28 descriptors
-- Lead: 32 → 48 styles, 22 → 32 descriptors
+**Scaffolding & Reference Credits**:
+- Added dedicated credits to `README.md` and `Home.md` acknowledging the role of the deleted projects (`pulse-visualizer` for UI visual design reference, `audio-file-mcp-app`/`audio-grid-mcp-app` for initial coding scaffolding).
 
 ---
 
-### Outstanding
+### Key Reorganized Repository Layout
 
-- **Tempo-synced LFO + volume peak control** of FX/mix/feedback with knobs next to sliders — NOT STARTED.
+```
+j:\projects\sa3
+├── stable-audio-3/          # Stable Audio 3 core generator library & virtualenv
+│   ├── models/              # Localized checkpoints for offline bypass
+│   │   ├── stable-audio-3-medium/
+│   │   └── stable-audio-3-small-music/
+│   ├── pyproject.toml       # Backend dependencies
+│   └── stable_audio_3/      # Core Stable Audio 3 model package
+├── loopmaster/              # Dedicated LoopMaster subfolder
+│   ├── loopmaster-app/      # Custom Web App (Flask backend + JS frontend)
+│   └── wiki/                # LoopMaster project documentation
+├── run_server.bat           # Launcher script (interactive model selector menu)
+└── HANDOFF.md, task.md, walkthrough.md, implementation.md, AGENTS.md # Workspace tracking
+```
 
 ---
 
-### Key Implementation Details
+### Next Steps
 
-**Generation Headroom** (`app_server.py`):
-```python
-gen_duration = duration + 2.0  # Generate longer
-audio = model.generate(duration=gen_duration, ...)
-exact_samples = int(duration * sample_rate)
-audio = audio[:, :, :exact_samples]  # Trim to exact loop
-```
-
-**Deadzone Drag Pattern** (`makeDraggableInput`):
-```
-mousedown → pending=true, activated=false
-mousemove → if |dy| >= 3px: activated=true, blur, start drag
-mouseup → if !activated: focus+select (click). Reset.
-```
-
-**Card Click Zone Logic** (gated by Split toggle):
-```
-Split OFF → all clicks are instant switch
-Split ON  → clickX < cardWidth/2 → queue (left half)
-            else → selectVariant (right half, instant)
-```
-
-**Audio Signal Chain**:
-```
-Source → EQ → Valentine → Ælapse → Compressor → Panner → Gain → Analyser → Master → Limiter(-11dB) → Makeup(+11dB) → Dest
-```
-
-### Key Files
-
-| File | Role |
-|------|------|
-| `static/app.js` | All frontend logic, audio routing, drag handlers, macros, prompt generators |
-| `static/app.css` | Styling, card zones, FX layout, pan/macro knob sizing |
-| `static/index.html` | Layout, controls, tooltips |
-| `app_server.py` | Flask API, generation headroom + trim logic |
-| `wiki/Home.md` | Knowledge base with architecture, controls, FX docs |
+- **Run the launcher**: Double-click `run_server.bat` at the root, press Enter to default to the `medium` model (or enter `2` for `small-music`), and load the dashboard in your browser!

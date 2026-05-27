@@ -69,6 +69,7 @@
   - [x] Delete `taste-skill/` directory (temporary style-guide clone)
   - [x] Delete `.gradio` cache folder
   - [x] Delete stray generated `.wav` files from the project root and subfolders
+  - [x] Relocate LoopMasterSA app (Flask backend, static resources, and variants script) out of stable-audio-3 and into loopmaster-app directory
 - [x] Configure app_server.py to use session-based directories, prompt character limits (16), and timestamped filenames:
   - [x] Create unique session directories (session_YYYYMMDD_HHMMSS) under outputs/
   - [x] Implement prompt slugification and 16-character truncation helper
@@ -89,3 +90,43 @@
   - [x] Add CSS styling in app.css for the bypass buttons, section titles, and visual dimming (.is-bypassed)
   - [x] Update OfflineAudioContext WAV renderer to respect and replicate active bypass states
   - [x] Verify audio rendering and UI states
+- [x] Write comprehensive user guide and update technical documentation links:
+  - [x] Write comprehensive user guide (User-Guide.md)
+  - [x] Link user guide from wiki (Home.md) and README.md
+- [x] Add local model and autoencoder resolution support:
+  - [x] Add checks for local config and checkpoint files under `stable-audio-3/models/` in `model_configs.py`
+  - [x] Verify offline, tokenless bypass when local files are present
+- [x] Integrate Inpainting and Continuation modes:
+  - [x] Update index.html to redesign init-audio-badge with mode tabs and sliders
+  - [x] Add app.css styles for remix tab buttons and parameters subpanels
+  - [x] Implement slider state, event handling, and input packaging in app.js
+  - [x] Update app_server.py generate API to handle remix modes and pass inpaint/continuation ranges to model
+  - [x] Verify functionality and check console outputs
+- [x] Debug codebase and correct copy-pasted metadata for audio-grid-mcp-app:
+  - [x] Fix app name, display name, description, and tool definitions in `audio-grid-mcp-app/mcpb/manifest.json`
+  - [x] Correct bin command in `audio-grid-mcp-app/package.json`
+  - [x] Correct output bundle filename in `audio-grid-mcp-app/scripts/build-mcpb.mjs`
+  - [x] Rewrite `audio-grid-mcp-app/README.md` to accurately document the grid comparison app features and usage
+- [x] Reorganize workspace into dedicated loopmaster subfolder:
+  - [x] Move loopmaster-app to loopmaster/loopmaster-app
+  - [x] Move audio-file-mcp-app to loopmaster/audio-file-mcp-app
+  - [x] Move audio-grid-mcp-app to loopmaster/audio-grid-mcp-app
+  - [x] Move pulse-visualizer to loopmaster/pulse-visualizer
+  - [x] Move wiki to loopmaster/wiki
+  - [x] Delete empty root outputs/ directory
+  - [x] Update sys.path resolution in app_server.py and generate_variants.py
+  - [x] Update run_server.bat to reference loopmaster/loopmaster-app/app_server.py
+  - [x] Update README.md repo structure and path references
+  - [x] Verify python code compilation and server startup
+- [x] Remove unused helper and reference repositories (pulse-visualizer, audio-file-mcp-app, audio-grid-mcp-app):
+  - [x] Delete loopmaster/pulse-visualizer directory
+  - [x] Delete loopmaster/audio-file-mcp-app directory
+  - [x] Delete loopmaster/audio-grid-mcp-app directory
+  - [x] Update README.md repository structure map and credits
+  - [x] Update Home.md documentation references
+  - [x] Document scaffolding and reference credits for visualizer and MCP apps in README.md and Home.md
+  - [x] Verify web server runs and visualizer is fully functional
+- [x] Model Localization & Launcher Enhancements:
+  - [x] Create script scripts/localize_models.py to pull HF weights locally
+  - [x] Execute localization script to copy medium and small-music checkpoints to stable-audio-3/models/
+  - [x] Rebuild run_server.bat launcher with choice menu defaulting to medium

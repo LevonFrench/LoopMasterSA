@@ -10,7 +10,18 @@ class ModelConfig:
     ckpt_path: str
 
     def resolve(self):
-        """Download files from HuggingFace Hub and return local cached paths."""
+        """Download files from HuggingFace Hub or load from local models/ directory if present."""
+        import os
+        repo_name = self.repo_id.split("/")[-1]
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        local_dir = os.path.join(project_dir, "models", repo_name)
+        local_config = os.path.join(local_dir, self.config_path)
+        local_ckpt = os.path.join(local_dir, self.ckpt_path)
+
+        if os.path.exists(local_config) and os.path.exists(local_ckpt):
+            print(f"[Local Model] Found local files in {local_dir}. Using them directly.")
+            return local_config, local_ckpt
+
         local_config = hf_hub_download(repo_id=self.repo_id, filename=self.config_path)
         local_ckpt = hf_hub_download(repo_id=self.repo_id, filename=self.ckpt_path)
         return local_config, local_ckpt
@@ -32,8 +43,27 @@ class AutoencoderModelConfig:
     stable_audio_3: tuple[ModelConfig, ...]
 
     def resolve(self):
-        """Return (config_path, ckpt_path), preferring an already-cached Stable Audio 3 checkpoint."""
+        """Return (config_path, ckpt_path), preferring a local/cached Stable Audio 3 checkpoint or local autoencoder."""
+        import os
+        ae_repo_name = self.ae_repo_id.split("/")[-1]
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        local_dir = os.path.join(project_dir, "models", ae_repo_name)
+        local_config = os.path.join(local_dir, self.ae_config_path)
+        local_ckpt = os.path.join(local_dir, self.ae_ckpt_path)
+
+        if os.path.exists(local_config) and os.path.exists(local_ckpt):
+            print(f"[Local Model] Found local autoencoder files in {local_dir}. Using them directly.")
+            return local_config, local_ckpt
+
         for fallback in self.stable_audio_3:
+            fb_repo_name = fallback.repo_id.split("/")[-1]
+            fb_local_dir = os.path.join(project_dir, "models", fb_repo_name)
+            fb_config = os.path.join(fb_local_dir, fallback.config_path)
+            fb_ckpt = os.path.join(fb_local_dir, fallback.ckpt_path)
+            if os.path.exists(fb_config) and os.path.exists(fb_ckpt):
+                print(f"[Local Model] Found fallback local files in {fb_local_dir} for Autoencoder. Using them directly.")
+                return fb_config, fb_ckpt
+
             cached_config = try_to_load_from_cache(
                 fallback.repo_id, fallback.config_path
             )
