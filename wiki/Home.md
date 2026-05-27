@@ -1,12 +1,12 @@
-# LoopMasterSA Knowledge Wiki
+# LoopMaster SA3 Knowledge Wiki
 
-Welcome to the official technical wiki for **LoopMasterSA**, a high-performance, real-time synchronized multi-track grid generator and mixer built on top of the Stable Audio 3 generative music foundation model.
+Welcome to the official technical wiki for **LoopMaster SA3**, a high-performance, real-time synchronized multi-track grid generator and mixer built on top of the Stable Audio 3 generative music foundation model.
 
 ---
 
 ## 1. System Architecture
 
-LoopMasterSA consists of a Python-based PyTorch inference server (Flask) and a highly responsive, premium Web Audio API-driven frontend.
+LoopMaster SA3 consists of a Python-based PyTorch inference server (Flask) and a highly responsive, premium Web Audio API-driven frontend.
 
 ```mermaid
 graph TD
@@ -23,7 +23,7 @@ graph TD
 ### Signal Processing Chain (Web Audio API)
 To achieve clean, loud, and balanced multi-track playback, each track has its own independent channel strip with dedicated analog EQ and creative processors, which sums into a master limiter and makeup gain chain:
 
-$$\text{Track Source} \rightarrow \text{Luftikus EQ} \rightarrow \text{Valentine} \rightarrow \text{Ælapse} \rightarrow \text{Track Panner} \rightarrow \text{Track Gain} \rightarrow \text{Track Analyser} \rightarrow \text{Master Gain} \rightarrow \text{DynamicsCompressorNode (Limiter)} \rightarrow \text{GainNode (Makeup)} \rightarrow \text{Master Analyser} \rightarrow \text{Destination}$$
+$$\text{Track Source} \rightarrow \text{Luftikus EQ} \rightarrow \text{Valentine} \rightarrow \text{Ælapse} \rightarrow \text{Track Compressor} \rightarrow \text{Track Panner} \rightarrow \text{Track Gain} \rightarrow \text{Track Analyser} \rightarrow \text{Master Gain} \rightarrow \text{DynamicsCompressorNode (Limiter)} \rightarrow \text{GainNode (Makeup)} \rightarrow \text{Master Analyser} \rightarrow \text{Destination}$$
 
 
 ---
@@ -39,6 +39,12 @@ To prevent digital clipping while maximizing loudness, a brickwall limiter is pl
 *   **Release**: `0.1s` (100ms release)
 *   **Makeup Gain**: `+11.0 dB` (calculated as $10^{11/20} \approx 3.548$ linear gain multiplier) to restore headroom and boost overall loudness.
 
+### Per-Track Compressor
+Each mixer track has an inline `DynamicsCompressorNode` at the end of the signal chain (before panner/gain):
+*   **Threshold**: `-6 dB`
+*   **Ratio**: `5:1`
+*   **Attack**: `10ms`
+
 ### Real-Time Loudness Metering
 Each track row and the master channel strip feature real-time horizontal canvas-based level meters showing three components:
 1.  **RMS (Root Mean Square)**: Represents perceived loudness, calculated over time window blocks with leaky integration smoothing ($\alpha = 0.85$):
@@ -49,11 +55,23 @@ Each track row and the master channel strip feature real-time horizontal canvas-
 
 ---
 
-## 3. Init Audio Variation Flow
+## 3. SA3 Generation Controls
 
-LoopMasterSA allows taking any generated loop variant and using it as the seed (initial audio) to create cohesive variations:
+Exposed through the UI alongside BPM:
 
-1.  **Selection**: Click the `✨ Init` button on any variant card to set it as the seed audio.
+| Parameter | Default | Range | Description |
+|-----------|---------|-------|-------------|
+| **Seed** | -1 | -1 to 999999 | Random seed for deterministic generation (-1 = random) |
+| **CFG** | 1.0 | 0.5 to 15 | Classifier-Free Guidance scale. Higher = stricter prompt adherence, lower = more creative/varied |
+| **Steps** | 8 | 1 to 100 | Diffusion denoising steps. More = higher quality but slower generation |
+
+---
+
+## 4. Init Audio Variation Flow
+
+LoopMaster SA3 allows taking any generated loop variant and using it as the seed (initial audio) to create cohesive variations:
+
+1.  **Selection**: Click the `Remake` button on any variant card to set it as the seed audio.
 2.  **Noise Level Control**: Adjust the noise slider (`0.10` to `0.90`). A lower noise level (e.g. `0.20`) stays very close to the original, while a higher noise level (e.g. `0.80`) introduces creative deviations.
 3.  **Backend Loading**:
     *   The backend loads the seed WAV file using `torchaudio.load()`.
@@ -62,7 +80,59 @@ LoopMasterSA allows taking any generated loop variant and using it as the seed (
 
 ---
 
-## 4. Channel Strip DSP Effects
+## 5. Visualizer Tray
+
+A real-time audio visualizer panel sits between the transport bar and the track rows, inspired by [pulse-visualizer](https://github.com/Beacroxx/pulse-visualizer). Three canvases driven by the master output via Web Audio `AnalyserNode`:
+
+| Panel | Description |
+|-------|-------------|
+| **Spectrum Analyzer** | Log-frequency FFT bars (128 bands, 20Hz–20kHz) with blue→purple→pink→red gradient |
+| **Oscilloscope** | Real-time waveform trace with blue glow effect |
+| **Peak Meters** | L/R bar meters with green→yellow→red gradient |
+
+---
+
+## 6. Playback Controls
+
+### Seek Toggle
+When **Seek** is ON (default), clicking on a waveform card jumps the playhead to that position. When OFF, clicks only select the variant without seeking.
+
+### Queue Toggle
+When **Queue** is ON, clicking a different variant in a track row queues it with a pulsing amber dashed border. The switch happens automatically at the next loop boundary. When OFF (default), variant switches are immediate.
+
+### BPM Drag
+Click-and-drag on the BPM input for rapid adjustment. Double-click for type-in mode.
+
+### Reverse
+Reverses a clip's audio data in-place. Only restarts the specific track source — does not interrupt other tracks.
+
+---
+
+## 7. Random Prompt Generators
+
+Five preset prompt buttons for rapid creation:
+
+| Button | Styles | Key-aware |
+|--------|--------|-----------|
+| 🎲 Random | 17 instruments × 14 styles × 14 descriptors | Sets new key |
+| 🔑 In Key | Chord progressions in current key | Uses current key |
+| 🥁 Drums | Drum loop styles | BPM only |
+| 🎸 Bass | 32 bass styles × 18 descriptors | Uses current key |
+| 🎹 Lead | 32 lead styles × 22 descriptors | Uses current key |
+
+---
+
+## 8. Export & Render
+
+| Action | Description |
+|--------|-------------|
+| **Render Mix** | Offline renders all tracks through their full FX chains into a single WAV file. Configurable loop count via "Loops to Render" input. |
+| **Export Loops** | Collects all currently selected (non-muted) variant WAVs, zips them client-side with JSZip, and downloads as `loopmastersa_loops_XXXbpm.zip`. |
+| **Undo** | Restores the last deleted track (DOM + audio state). Uses a stack-based system. |
+
+---
+
+## 9. Channel Strip DSP Effects
 
 Each track row features an expandable effects drawer containing three hardware-modeled creative processors:
 
@@ -85,14 +155,13 @@ A time and space processor combining delay time modulation and programmatic conv
 
 ---
 
-## 5. Technology & Model Credits
+## 10. Technology & Model Credits
 
-LoopMasterSA relies on a combination of generative AI, customized Web Audio DSP modeling, and model-context infrastructure:
+LoopMaster SA3 relies on a combination of generative AI, customized Web Audio DSP modeling, and model-context infrastructure:
 
 *   **Stable Audio 3 (SA3)**: Stability AI's generative stereo music foundation model, which outputs 44.1kHz loopable variations.
 *   **smiarx/aelapse (Ælapse)**: The tape delay (wow/flutter modulation) and synthetic convolution model is adapted from the [Ælapse](https://github.com/smiarx/aelapse) processor.
 *   **tote-bag-labs/valentine (Valentine)**: The parallel saturation and justice-style pumping compressor is modeled after the [Valentine](https://github.com/tote-bag-labs/valentine) design.
 *   **lkjbdsp/Luftikus (Luftikus)**: The 6-band analog-modeled hardware equalization curves are built on top of the [Luftikus EQ](https://github.com/lkjbdsp/lkjb-plugins/tree/master/Luftikus) layout.
-*   **audio-file-mcp-app**: Custom Model Context Protocol server that handles filesystem operations, session structures, and WAV metadata tagging.
-*   **audio-grid-mcp-app**: Custom Model Context Protocol server that handles arrange grids, tempo BPM synchronization calculations, and sequence exports.
-
+*   **AnClark/Comprez**: Per-track compressor design inspired by the [Comprez](https://github.com/AnClark/Comprez) plugin.
+*   **pulse-visualizer**: Visualizer tray design inspired by [pulse-visualizer](https://github.com/Audio-Solutions/pulse-visualizer) (spectrum analyzer, oscilloscope, peak meters).

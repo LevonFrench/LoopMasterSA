@@ -1,80 +1,59 @@
-# Session Handoff — LoopMasterSA Finalized Project
+# HANDOFF — LoopMaster SA3
 
-## Current Status
-We have finalized the repository packaging, consolidated the git structure, fixed a critical high-DPI canvas layout bug, and prepared the project for version control distribution.
+## Session Summary (2026-05-26 evening)
 
-1.  **High-DPI Canvas Layout Fix**:
-    - **Problem**: Users on high-DPI/Retina screens or specific browser zoom levels observed track rows failing to render and being replaced by a giant white blank square. This was caused by an infinite layout resizing loop: `drawMeter()` computed `rect.height * dpr` and set it to the `canvas.height` attribute. Lacking a CSS constraint, the DOM height expanded, which was then measured as larger in the next frame, causing exponential canvas growth until browser/GPU limits were exceeded.
-    - **Fix**: Added explicit CSS dimensions (`width: 140px; height: 8px;` for `#master-meter-canvas` and `height: 6px;` for `.meter-canvas`) in `app.css`. This anchors the layout dimensions while permitting the drawing buffer to scale for high-DPI displays.
-2.  **LoopmasterSA Renaming**:
-    - Updated index page title, logo headers, and layout branding to **LoopmasterSA**.
-3.  **Init Audio Seed Variations**:
-    - Added `✨ Init` buttons to cards and a top controls panel badge with a noise slider (0.10 to 0.90, default 0.60) to generate variations.
-    - Python backend (`app_server.py`) parses `init_audio_path` and `init_noise_level`, loading the file into PyTorch via `torchaudio.load()` and feeding it to `model.generate()`.
-4.  **Git Consolidation & Packaging**:
-    - Removed nested `.git` folders in `stable-audio-3/` and `audio-file-mcp-app/` so they are tracked as standard subdirectories in the parent `LevonFrench/LoopMasterSA.git` repository.
-    - Created a comprehensive root-level `.gitignore` that ignores all model weights (`*.ckpt`, `*.safetensors`, `*.bin`, `*.pt`, `*.pth`), temporary directory caches (`.gradio/`), Python virtual environments (`.venv/`), node modules (`node_modules/`), local log files, and generated WAV assets.
-5.  **Documentation & Wiki**:
-    - Created `wiki/Home.md` detailing the signal processing chain, the master limiter parameters, real-time peak/RMS equations, and init audio flows.
-    - Updated root `README.md` to outline features, directory structure, launch instructions, and git guidelines.
-6.  **Offline WAV Mixdown Rendering**:
-    - Added a `⬇ Render Mix` button that bounces down the current grid arrangement to a 16-bit PCM stereo WAV. It accurately reflects individual track gains, pan values, mute/solo flags, and the brickwall master limiter with makeup gain, rendering instantly via `OfflineAudioContext`.
-7.  **Track-Level Effects Drawer**:
-    - Integrated an expandable effects drawer on each track containing custom DSP implementations of:
-      *   **Luftikus Analog EQ**: A 6-band peaking/high-shelf EQ cascade (10Hz to 12kHz shelf).
-      *   **Valentine Compressor/Saturator**: Soft-clipping WaveShaper distortion with input gain and DynamicsCompressorNode mix for heavy dynamic pumping.
-      *   **Ælapse Tape Delay & Spring Reverb**: A tape wow/flutter delay modulated by a 2Hz LFO, alongside metallic programmatically convolved spring reverb.
-      *   All effects are fully supported during offline mixdown rendering.
-8.  **Taste-Skill Visual Refinement**:
-    - **Typography**: Swapped standard `Inter` font for the premium geometric `Geist` font family.
-    - **Anti-Emoji**: Replaced all emojis (`✨` and `🔑`) with clean inline SVGs.
-    - **Tactile Transitions**: Added scale transitions (`scale(0.96)`) on `:active` for all button actions.
-    - **Card Elevation**: Configured cards to lift up (`translateY(-2px)`) and cast wider diffused desaturated shadows on hover.
-    - **Color & Glows**: Replaced neon outer glows with desaturated shadows, and updated VU meter backgrounds to charcoal `#0e0e14`.
-    - **Viewport Stability**: Changed body min-height to `100dvh` to prevent layout jumps on mobile.
-9.  **Workspace Housekeeping**:
-    - Deleted `taste-skill/` directory (temporary style-guide clone).
-    - Deleted `.gradio/` cache directories.
-    - Cleaned out all stray generated `.wav` files from the project root and subdirectories to ensure repository hygiene.
-10. **Session Directory Routing & Slug Naming**:
-    - Generates unique session-based timestamp subfolders under `outputs/`.
-    - Sanitizes prompts and restricts prompt slug lengths in filenames to 16 characters.
-    - Appends generation timestamps to all output WAV files.
-    - Integrates track tracking and clean-up functions inside the active session context.
-11. **Tempo-Synced Delays, Reverb Size, and Macro Sliders**:
-    - Delay times are locked to global BPM (dotted-eighth sync: `45.0 / bpm` seconds).
-    - Repurposed delay time slider into a Reverb Size control that regenerates spring convolver buffers dynamically (`0.5s` to `5.0s`).
-    - Added Space, Drive, and Tone macro sliders in the FX drawer, morphing multiple parameters at once in the client and in the offline WAV mixdown.
-    - Highlighted the Macro Control panel in the UI with custom CSS.
-12. **FX Bypass, Send Routing, and Track Lock**:
-    - Added independent "On/Bypass" toggle switches inside EQ, Valentine, and Ælapse titles. Bypass dims controls (opacity 0.4, pointer-events: none) and routes audio click-free via dry/wet gain fades.
-    - Re-wired Delay/Reverb as parallel Aux Send effects (dry path gain remains fixed at 1.0).
-    - Placed Valentine compressor at the end of the channel DSP chain, compressing the combined dry + saturated + send outputs return sum.
-    - Removed redundant Loop (`L`) toggle button. All tracks loop natively by default.
-    - Added Lock button next to Delete. Locking disables level/pan sliders, FX drawer sliders, bypass switches, variant selection, and track deletion. Locked tracks are styled with amber borders and a subtle visual fade.
-    - Replicated send routing, bypass checks, and default looping in the `OfflineAudioContext` WAV exporter.
-    - Credited Stability AI's Stable Audio 3, lkjbdsp's Luftikus EQ, tote-bag-labs' Valentine saturator, smiarx's Ælapse delay/reverb, and custom MCP applications in the README and project wiki.
-13. **Critical Bug Fixes (Debug Pass)**:
-    - **`bufferToWav` sample skip**: The WAV encoder reused `pos` for both the header byte offset and the PCM sample loop counter. After writing the 44-byte header, `pos` was 44, so the sample loop started at index 44 — skipping the first 44 samples and truncating the last 44. Fixed with a separate `sampleIdx` counter.
-    - **Offline Aelapse dry gain mismatch**: Live chain keeps dry gain fixed at `1.0` (send effect architecture), but the offline renderer used `1 - Math.max(delayMix, reverbMix)`, attenuating dry signal. Fixed to `1.0`.
-    - **Offline compressor placement**: Live chain routes `EQ → Saturator → Sends → Compressor`. Offline had compressor inside the Valentine stage before sends. Fixed to match live routing order.
-14. **Inline Prompt Buttons & Drum Loop Generator**:
-    - Moved Random, In Key, and new Drums buttons inside the text input as compact pill buttons with emoji labels (🎲 🔑 🥁).
-    - Added genre-aware drum loop random generator (20 genres × 16 descriptors) that auto-fills BPM from the current BPM input.
-    - Styled as glassmorphic pills with hover glow and press-scale micro-animations.
-15. **Render Loops & Fade-Out Tail**:
-    - Added a `Loops` number input in the transport bar next to Render Mix. Offline render creates a buffer of `singleLoopDuration × loopCount` plus a 5-second tail.
-    - Sources stop at the content boundary; delay/reverb tails ring out naturally through the FX chain.
-    - Master gain fades linearly to 0 over the 5-second tail for smooth endings.
-16. **Waveform Card Alignment**:
-    - Fixed grid alignment with `align-items: stretch` and fixed header height so waveform seek bars line up across all variant cards.
-17. **Scream & Filtr FX Modules**:
-    - Added **Filtr Filter** (Cure-Audio/Scream-style pre-EQ filter): LP/BP/HP/Notch with cutoff, resonance, and mix controls. Placed first in the DSP chain.
-    - Added **Scream Distortion Filter** (resonant LP + waveshaper): Cutoff, Scream (maps 0-100% to Q 0.707-25 and drive 5-80), and mix controls. Placed after EQ.
-    - Both modules have independent On/Off bypass toggles and are fully replicated in the offline WAV renderer.
-    - Drive macro auto-enables Scream at 60% of macro value when pushed.
-    - Credits added to README for [Cure-Audio/Scream](https://github.com/Cure-Audio/Scream) and [tiagolr/Filtr](https://github.com/tiagolr/filtr).
+### What Was Done
 
-## Launcher & Server Info
-*   **Launcher**: [run_server.bat](file:///j:/projects/sa3/run_server.bat) in the project root folder.
-*   **Server Task**: The Flask server is running in the background as task `task-2235` on `http://127.0.0.1:7861` serving the UI.
+**Visualizer Tray** — Added a pulse-visualizer-inspired real-time audio visualizer between the transport bar and tracks. Three canvases: spectrum analyzer (log FFT bars), oscilloscope (waveform trace), peak meters (L/R bars). All driven by a dedicated `AnalyserNode` tapped off `masterGain`.
+
+**Transport Panel** — Wrapped transport bar + visualizer in a styled panel matching the prompt box and track row styling (bg-card, border, blur). Removed the Stop All button (play/pause handles this).
+
+**SA3 Generation Controls** — Exposed Seed (-1 = random), CFG (classifier-free guidance scale, 0.5–15), and Steps (diffusion steps, 1–100) as inputs next to BPM. All three are wired through the API to `model.generate()`.
+
+**Seek Toggle** — Clicking on a waveform card jumps the playhead only when Seek toggle is ON (default ON). Prevents accidental seeks.
+
+**Queue Toggle** — When ON, clicking a different variant queues it (pulsing amber dashed border). The switch happens at the next loop boundary via `updatePlayheads()` detecting pct wrap-around.
+
+**Reverse Fix** — Reversing a clip no longer calls `stopAll()/playAll()`. It only restarts the specific track's source node in sync.
+
+**Export Loops** — Button next to Render Mix that zips all currently selected (non-muted) variant WAVs using JSZip (CDN-loaded) and downloads as a zip file.
+
+**Lead Random Button** — 🎹 Lead button with 32 lead styles × 22 descriptors, key/bpm aware (same pattern as Bass).
+
+**Waveform Scaling** — Two-pass drawing: first pass finds global peak, second pass normalizes bars so tallest fills 90% of height.
+
+**Tighter Cards** — Removed fixed 90px height, reduced padding/gap, increased waveform min-height to 48px. Cards auto-size to content.
+
+**"Loops to Render"** — Renamed from "Loops".
+
+**App Name** — Changed from "LoopmasterSA" to "LoopMaster SA3".
+
+---
+
+### Outstanding / Not Started
+
+- **LFO/Peak Control**: "I want to add tempo synced lfo and volume peak control of all the fx mix and feedback elements controlled with knobs next to the sliders." — NOT STARTED.
+
+---
+
+### Key Technical Details
+
+| File | What Changed |
+|------|-------------|
+| `stable-audio-3/static/index.html` | Seed/CFG/Steps inputs, Lead button, Export Loops button, Seek/Queue toggles, transport panel wrapper, app name |
+| `stable-audio-3/static/app.js` | Visualizer tray rendering (renderVizSpectrum/Osc/Meters), initVizAnalyser, queue processing in updatePlayheads, seek/queue toggle logic in card click, waveform two-pass scaling, reverse fix, export loops handler, lead prompt generator, SA3 params in runGeneration |
+| `stable-audio-3/static/app.css` | Transport-panel wrapper, visualizer tray, toggle switch, control-input-sm, is-queued animation, export button, tighter card sizing |
+| `stable-audio-3/app_server.py` | `seed` parameter plumbed through API → `_run_generation` → `model.generate()` |
+| `wiki/Home.md` | Full rewrite with new features documented |
+
+### Audio Signal Chain
+```
+TrackSource → Luftikus EQ → Valentine → Ælapse → TrackCompressor(-6dB,5:1,10ms) → Panner → Gain → Analyser → MasterGain → Limiter(-11dB) → Makeup(+11dB) → MasterAnalyser → Destination
+                                                                                                          ↘ VizAnalyser (FFT 2048)
+```
+
+### State Variables
+- `vizAnalyser` — Separate AnalyserNode (fftSize=2048) for visualizer, tapped off masterGain
+- `prevPlayPct` — Tracks previous playhead pct to detect loop boundary for queue processing
+- `track._pendingVariant` — Queued variant index (set when Queue toggle is ON)
+- `track._autoPlay` — Flag set by addTrackRow for deferred auto-play after buffer decodes
