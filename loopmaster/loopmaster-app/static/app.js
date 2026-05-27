@@ -47,6 +47,7 @@
     let masterMeterState = { rms: -60, peak: -60, peakHold: -60, peakHoldTime: 0 };
     let meterLoopRunning = false;
     let meterRafId = null;
+    let copiedFxSettings = null;
 
     // --- Init Audio & Prompt State ---
     let selectedInitAudio = null; // { trackId, variantIndex, filePath, name }
@@ -132,6 +133,27 @@
         });
     }
 
+    function getMasterFaderParams(sliderVal) {
+        const val = sliderVal / 100;
+        if (val <= 0.001) {
+            return {
+                volumeGain: 0.0,
+                threshold: -30.0,
+                displayDb: -Infinity
+            };
+        }
+        const threshold = (val - 1.0) * 28.889;
+        const targetDb = (val - 1.0) * 40.0;
+        const autoMakeup = -threshold * 0.95;
+        const faderVolumeDb = targetDb - autoMakeup;
+        const volumeGain = Math.pow(10, faderVolumeDb / 20);
+        return {
+            volumeGain: volumeGain,
+            threshold: threshold,
+            displayDb: targetDb
+        };
+    }
+
     function ensureAudioCtx() {
         if (!audioCtx) {
             audioCtx = new AudioContext();
@@ -141,17 +163,22 @@
             masterGain.gain.value = 1.0;
 
             masterLimiter = audioCtx.createDynamicsCompressor();
-            masterLimiter.threshold.setValueAtTime(-11.0, audioCtx.currentTime);
+            const masterVolSlider = document.getElementById('master-volume-slider');
+            const sliderVal = masterVolSlider ? parseInt(masterVolSlider.value) : 100;
+            const params = getMasterFaderParams(sliderVal);
+
+            masterLimiter.threshold.setValueAtTime(params.threshold, audioCtx.currentTime);
             masterLimiter.knee.setValueAtTime(0.0, audioCtx.currentTime);
             masterLimiter.ratio.setValueAtTime(20.0, audioCtx.currentTime);
             masterLimiter.attack.setValueAtTime(0.003, audioCtx.currentTime);
-            masterLimiter.release.setValueAtTime(0.1, audioCtx.currentTime);             masterMakeup = audioCtx.createGain();
-            masterMakeup.gain.setValueAtTime(Math.pow(10, 11 / 20), audioCtx.currentTime);
+            masterLimiter.release.setValueAtTime(0.1, audioCtx.currentTime);
+
+            // Makeup gain set to 1.0 (0 dB) so we don't apply static gain
+            masterMakeup = audioCtx.createGain();
+            masterMakeup.gain.setValueAtTime(1.0, audioCtx.currentTime);
 
             masterVolumeNode = audioCtx.createGain();
-            const masterVolSlider = document.getElementById('master-volume-slider');
-            const initMasterVolVal = masterVolSlider ? (parseInt(masterVolSlider.value) / 100) : 1.0;
-            masterVolumeNode.gain.setValueAtTime(initMasterVolVal, audioCtx.currentTime);
+            masterVolumeNode.gain.setValueAtTime(params.volumeGain, audioCtx.currentTime);
 
             masterAnalyser = audioCtx.createAnalyser();
             masterAnalyser.fftSize = 1024;
@@ -171,11 +198,32 @@
 
             // Wire master volume slider
             const masterVolReadout = document.getElementById('master-volume-readout');
+            const limiterLabel = document.querySelector('.limiter-label');
+
+            function updateMasterSliderUI(sliderValue) {
+                const p = getMasterFaderParams(sliderValue);
+                if (masterVolReadout) {
+                    if (p.displayDb === -Infinity) {
+                        masterVolReadout.textContent = '-inf dB';
+                    } else if (p.displayDb === 0) {
+                        masterVolReadout.textContent = '0.0 dB';
+                    } else {
+                        masterVolReadout.textContent = p.displayDb.toFixed(1) + ' dB';
+                    }
+                }
+                if (limiterLabel) {
+                    limiterLabel.textContent = 'LIMITER ' + (p.threshold === 0 ? '0.0dB' : p.threshold.toFixed(1) + 'dB');
+                }
+            }
+
             if (masterVolSlider) {
+                updateMasterSliderUI(sliderVal);
                 masterVolSlider.addEventListener('input', () => {
-                    const val = parseInt(masterVolSlider.value) / 100;
-                    masterVolumeNode.gain.setTargetAtTime(val, audioCtx.currentTime, 0.01);
-                    if (masterVolReadout) masterVolReadout.textContent = masterVolSlider.value + '%';
+                    const sVal = parseInt(masterVolSlider.value);
+                    const p = getMasterFaderParams(sVal);
+                    masterVolumeNode.gain.setTargetAtTime(p.volumeGain, audioCtx.currentTime, 0.01);
+                    masterLimiter.threshold.setTargetAtTime(p.threshold, audioCtx.currentTime, 0.01);
+                    updateMasterSliderUI(sVal);
                 });
             }
 
@@ -255,10 +303,10 @@
         inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') inputEl.blur(); });
     }
 
-    makeDraggableInput(bpmInput, { min: 40, max: 300, step: 1, sensitivity: 1 });
-    makeDraggableInput(document.getElementById('seed-input'), { min: -1, max: 999999, step: 1, sensitivity: 1 });
+    makeDraggableInput(bpmInput, { min: 40, max: 300, step: 1, sensitivity: 0.08 });
+    makeDraggableInput(document.getElementById('seed-input'), { min: -1, max: 999999, step: 1, sensitivity: 0.1 });
     makeDraggableInput(document.getElementById('cfg-input'), { min: 0.5, max: 15, step: 0.5, sensitivity: 0.1 });
-    makeDraggableInput(document.getElementById('steps-input'), { min: 1, max: 100, step: 1, sensitivity: 1 });
+    makeDraggableInput(document.getElementById('steps-input'), { min: 1, max: 100, step: 1, sensitivity: 0.08 });
 
     // --- Split toggle: show/hide card center lines ---
     const splitToggle = document.getElementById('toggle-split');
@@ -1195,7 +1243,13 @@
         fxDrawerEl.style.display = 'none';
         fxDrawerEl.innerHTML = `
             <div class="fx-section macros-section">
-                <div class="fx-section-title">Macro Controls</div>
+                <div class="fx-section-title" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span>Macro Controls</span>
+                    <div class="fx-clipboard-btns" style="display: flex; gap: 6px;">
+                        <button class="fx-copy-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Copy FX Settings">Copy FX</button>
+                        <button class="fx-paste-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Paste FX Settings">Paste FX</button>
+                    </div>
+                </div>
                 <div class="fx-macro-knobs-row">
                     <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="space" title="Space: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Space</span></div>
                     <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="drive" title="Drive: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Drive</span></div>
@@ -2049,6 +2103,154 @@
             aeSection.classList.toggle('is-bypassed', !track.aelapseEnabled);
             updateAelapseBypass(track);
         });
+
+        // Copy and Paste FX Event Listeners
+        const copyBtn = fxDrawerEl.querySelector('.fx-copy-btn');
+        const pasteBtn = fxDrawerEl.querySelector('.fx-paste-btn');
+
+        if (copyBtn) {
+            copyBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                copiedFxSettings = {
+                    filtrEnabled: track.filtrEnabled,
+                    screamEnabled: track.screamEnabled,
+                    eqEnabled: track.eqEnabled,
+                    valentineEnabled: track.valentineEnabled,
+                    aelapseEnabled: track.aelapseEnabled,
+                    
+                    filtrType: fxDrawerEl.querySelector('.filtr-type').value,
+                    filtrCutoff: fxDrawerEl.querySelector('.filtr-cutoff').value,
+                    filtrReso: fxDrawerEl.querySelector('.filtr-reso').value,
+                    filtrMix: fxDrawerEl.querySelector('.filtr-mix').value,
+                    
+                    screamCutoff: fxDrawerEl.querySelector('.scream-cutoff').value,
+                    screamAmount: fxDrawerEl.querySelector('.scream-amount').value,
+                    screamMix: fxDrawerEl.querySelector('.scream-mix').value,
+                    
+                    eqGains: Array.from(fxDrawerEl.querySelectorAll('.eq-slider')).map(s => s.value),
+                    
+                    valentineDrive: fxDrawerEl.querySelector('.valentine-drive').value,
+                    valentineThresh: fxDrawerEl.querySelector('.valentine-thresh').value,
+                    valentineRatio: fxDrawerEl.querySelector('.valentine-ratio').value,
+                    valentineMix: fxDrawerEl.querySelector('.valentine-mix').value,
+                    
+                    aelapseSync: fxDrawerEl.querySelector('.aelapse-sync').value,
+                    aelapseFeedback: fxDrawerEl.querySelector('.aelapse-feedback').value,
+                    aelapseMix: fxDrawerEl.querySelector('.aelapse-mix').value,
+                    aelapseSize: fxDrawerEl.querySelector('.aelapse-size').value,
+                    aelapseReverbMix: fxDrawerEl.querySelector('.aelapse-reverb-mix').value,
+
+                    macros: {
+                        space: fxMacroState.space ? fxMacroState.space.value : 0,
+                        drive: fxMacroState.drive ? fxMacroState.drive.value : 0,
+                        tone: fxMacroState.tone ? fxMacroState.tone.value : 50,
+                        filter: fxMacroState.filter ? fxMacroState.filter.value : 50,
+                        reso: fxMacroState.reso ? fxMacroState.reso.value : 0,
+                        delay: fxMacroState.delay ? fxMacroState.delay.value : 0,
+                        feedback: fxMacroState.feedback ? fxMacroState.feedback.value : 0,
+                        crush: fxMacroState.crush ? fxMacroState.crush.value : 0,
+                    }
+                };
+                
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => { copyBtn.textContent = originalText; }, 1000);
+            });
+        }
+
+        if (pasteBtn) {
+            pasteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!copiedFxSettings) {
+                    alert('No FX settings copied yet!');
+                    return;
+                }
+                const settings = copiedFxSettings;
+
+                track.filtrEnabled = settings.filtrEnabled;
+                filtrToggleBtn.textContent = track.filtrEnabled ? 'On' : 'Off';
+                filtrToggleBtn.classList.toggle('is-off', !track.filtrEnabled);
+                filtrSection.classList.toggle('is-bypassed', !track.filtrEnabled);
+                updateFiltrBypass(track);
+
+                track.eqEnabled = settings.eqEnabled;
+                eqToggleBtn.textContent = track.eqEnabled ? 'On' : 'Bypass';
+                eqToggleBtn.classList.toggle('is-off', !track.eqEnabled);
+                eqSection.classList.toggle('is-bypassed', !track.eqEnabled);
+                updateEqBypass(track);
+
+                track.screamEnabled = settings.screamEnabled;
+                screamToggleBtn.textContent = track.screamEnabled ? 'On' : 'Off';
+                screamToggleBtn.classList.toggle('is-off', !track.screamEnabled);
+                screamSection.classList.toggle('is-bypassed', !track.screamEnabled);
+                updateScreamBypass(track);
+
+                track.valentineEnabled = settings.valentineEnabled;
+                valToggleBtn.textContent = track.valentineEnabled ? 'On' : 'Bypass';
+                valToggleBtn.classList.toggle('is-off', !track.valentineEnabled);
+                valSection.classList.toggle('is-bypassed', !track.valentineEnabled);
+                updateValentineBypass(track);
+
+                track.aelapseEnabled = settings.aelapseEnabled;
+                aeToggleBtn.textContent = track.aelapseEnabled ? 'On' : 'Bypass';
+                aeToggleBtn.classList.toggle('is-off', !track.aelapseEnabled);
+                aeSection.classList.toggle('is-bypassed', !track.aelapseEnabled);
+                updateAelapseBypass(track);
+
+                const typeSelect = fxDrawerEl.querySelector('.filtr-type');
+                if (typeSelect) {
+                    typeSelect.value = settings.filtrType;
+                    typeSelect.dispatchEvent(new Event('change'));
+                }
+
+                const sliders = {
+                    '.filtr-cutoff': settings.filtrCutoff,
+                    '.filtr-reso': settings.filtrReso,
+                    '.filtr-mix': settings.filtrMix,
+                    '.scream-cutoff': settings.screamCutoff,
+                    '.scream-amount': settings.screamAmount,
+                    '.scream-mix': settings.screamMix,
+                    '.valentine-drive': settings.valentineDrive,
+                    '.valentine-thresh': settings.valentineThresh,
+                    '.valentine-ratio': settings.valentineRatio,
+                    '.valentine-mix': settings.valentineMix,
+                    '.aelapse-sync': settings.aelapseSync,
+                    '.aelapse-feedback': settings.aelapseFeedback,
+                    '.aelapse-mix': settings.aelapseMix,
+                    '.aelapse-size': settings.aelapseSize,
+                    '.aelapse-reverb-mix': settings.aelapseReverbMix,
+                };
+
+                for (const selector in sliders) {
+                    const el = fxDrawerEl.querySelector(selector);
+                    if (el) {
+                        el.value = sliders[selector];
+                        el.dispatchEvent(new Event('input'));
+                    }
+                }
+
+                const eqSliders = fxDrawerEl.querySelectorAll('.eq-slider');
+                eqSliders.forEach((slider, b) => {
+                    if (settings.eqGains[b] !== undefined) {
+                        slider.value = settings.eqGains[b];
+                        slider.dispatchEvent(new Event('input'));
+                    }
+                });
+
+                if (settings.macros) {
+                    for (const key in settings.macros) {
+                        if (fxMacroState[key]) {
+                            fxMacroState[key].value = settings.macros[key];
+                            applyFxMacro(key, settings.macros[key]);
+                        }
+                    }
+                }
+
+                const originalText = pasteBtn.textContent;
+                pasteBtn.textContent = 'Pasted!';
+                setTimeout(() => { pasteBtn.textContent = originalText; }, 1000);
+            });
+        }
 
         // 11. Build variants card selection UI
         const variantsEl = document.createElement('div');
@@ -3232,21 +3434,22 @@
                 // Create master chain on offline context
                 const offlineMasterGain = offlineCtx.createGain();
                 const masterVolSlider = document.getElementById('master-volume-slider');
-                const masterVolVal = masterVolSlider ? (parseInt(masterVolSlider.value) / 100) : 1.0;
+                const sliderVal = masterVolSlider ? parseInt(masterVolSlider.value) : 100;
+                const params = getMasterFaderParams(sliderVal);
                 offlineMasterGain.gain.value = 1.0;
 
                 const offlineLimiter = offlineCtx.createDynamicsCompressor();
-                offlineLimiter.threshold.setValueAtTime(-11.0, 0);
+                offlineLimiter.threshold.setValueAtTime(params.threshold, 0);
                 offlineLimiter.knee.setValueAtTime(0.0, 0);
                 offlineLimiter.ratio.setValueAtTime(20.0, 0);
                 offlineLimiter.attack.setValueAtTime(0.003, 0);
                 offlineLimiter.release.setValueAtTime(0.1, 0);
 
                 const offlineMakeup = offlineCtx.createGain();
-                offlineMakeup.gain.setValueAtTime(Math.pow(10, 11 / 20), 0);
+                offlineMakeup.gain.setValueAtTime(1.0, 0);
 
                 const offlineVolumeNode = offlineCtx.createGain();
-                offlineVolumeNode.gain.value = masterVolVal;
+                offlineVolumeNode.gain.value = params.volumeGain;
 
                 // Connect offline master chain
                 offlineMasterGain.connect(offlineLimiter);
@@ -3255,7 +3458,7 @@
                 offlineVolumeNode.connect(offlineCtx.destination);
 
                 // Schedule fade-out over the tail section on the master volume stage
-                offlineVolumeNode.gain.setValueAtTime(masterVolVal, contentDuration);
+                offlineVolumeNode.gain.setValueAtTime(params.volumeGain, contentDuration);
                 offlineVolumeNode.gain.linearRampToValueAtTime(0.0, totalDuration);
 
                 // Connect all active tracks

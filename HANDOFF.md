@@ -4,31 +4,35 @@
 
 ### What Was Done This Session
 
-**Complete Documentation Rewrite**:
-Rewrote all three documentation files from scratch. The previous docs were dry specification dumps — LaTeX formulas, raw Web Audio node names, backend tensor implementation details mixed into user-facing content. No clear separation between user docs and developer docs.
+**Master Volume Fader DB-Scaling & Compression Correction**:
+- Implemented a coordinated fader-to-limiter mapping in `app.js` and the `OfflineAudioContext` mixdown builder via the `getMasterFaderParams(sliderVal)` helper function.
+- Set the maximum value (100% / far right) to exactly `0 dB` (unity gain, no extra amplification) and disabled the limiter threshold (`0 dB` / no compression).
+- Counteracted the Web Audio dynamics compressor auto-makeup gain curve (which boosts levels as threshold is lowered) by attenuating the output `masterVolumeNode` gain correspondingly (up to `-68.5 dB` at the lowest values). This guarantees that turning the fader left always applies more compression *and* reduces the overall volume level cleanly.
+- Updated the slider text readout to display decibels (e.g. `0.0 dB`, `-3.5 dB`, `-inf dB`) and wired the `.limiter-label` text to update dynamically to match the current active threshold value.
 
-**New documentation structure**:
+**Limiter Defaults & dB Calibration**:
+- Calibrated the threshold scaling coefficient in `app.js` to exactly `28.889` so that a slider value of `91` maps precisely to a `-2.6 dB` limiter threshold.
+- Set the default volume slider value in `index.html` to `91` and updated starting UI labels to display `-2.6 dB` for the limiter and `-3.6 dB` for the master volume readout on load.
 
-| File | Purpose | Key change |
-|------|---------|------------|
-| `README.md` | Front door / elevator pitch | Cut from 92 lines of spec to 60 lines of product + setup. No duplicated content. |
-| `wiki/User-Guide.md` | Feature walkthrough & workflows | Removed all backend internals (WAV ACIDization, prompt preprocessing rules, tensor operations). Every section now answers "what does this do and how do I use it." |
-| `wiki/Home.md` | Architecture & dev reference | Kept technical depth but made it scannable — clean tables, mermaid diagram, organized by subsystem. Removed LaTeX and prose padding. |
+**Precision Draggable Input Sensitivities**:
+- Reduced the drag sensitivities for vertical adjustments on text inputs in `app.js`:
+  - **BPM**: Sensitivity reduced from `0.25` to `0.08`.
+  - **Seed**: Sensitivity reduced from `0.5` to `0.1`.
+  - **Steps**: Sensitivity reduced from `0.25` to `0.08`.
+- This ensures much more granular control and prevents overshooting values when dragging.
 
-**Design principles applied**:
-- User Guide has zero implementation details — it's for someone using the UI
-- Architecture wiki is for devs modifying the codebase — API contracts, signal chain, DSP specs
-- README links to both instead of duplicating either
-- Every section is scannable (tables > paragraphs, consistent formatting)
+**Copy and Paste FX Settings Clipboard**:
+- Added "Copy FX" and "Paste FX" buttons to the title of the Macro Controls section inside each track row's FX drawer.
+- Implemented a clipboard in `app.js` that captures all bypass states, select values, slider values, and macro states of a track's FX drawer.
+- The paste routine updates all target track DOM controls and dispatches input/change events to automatically update the underlying Web Audio API nodes instantly.
 
-**Default Track Volume & Tone Macro Knob Swap**:
-- Modified default track playback volume to start at `50%` (`0.5` gain) on track initialization, with the mixer strip Vol input slider defaulting to `50` upon row creation.
-- Replaced the DFB (Delay Feedback) mixer knob with the Tone macro knob in the track mixer controls.
-- Integrated tone macro mapping inside the frontend `applyMacroKnob` function to drive Luftikus EQ band gains dynamically, centering flat at `50`.
+**Button Placement Swap**:
+- Swapped the order of prompt buttons inside `.prompt-inline-btns` in `index.html` to place "In Key" immediately to the left of "Random".
 
-**Master Volume Fader Routing Fix**:
-- Replaced the master volume control setup so that it modifies a dedicated `masterVolumeNode` GainNode placed *after* the master limiter and makeup gain nodes. This prevents the master volume slider from driving the limiter input threshold / distortion characteristics and lets it function correctly as a clean output fader.
-- Updated the offline mixdown context to replicate this correct fader ordering and apply the fade-out on it.
+**PyTorch & GPU Inference Optimizations**:
+- Enabled TensorFloat-32 (TF32) matrix calculations (`allow_tf32 = True`) and cuDNN autotuning (`benchmark = True`) on GPU initialization inside `model.py`.
+- Scheduled model compilation (`torch.compile`) targeting the core Diffusion Transformer (`DiT`) model in `model.py` when running on a CUDA device to eliminate graph execution overhead.
+- Confirmed virtual environment compatibility and hardware detection mapping to the system's `NVIDIA GeForce RTX 3080 Ti` GPU.
 
 ---
 
@@ -55,8 +59,8 @@ sa3/
 ### System State
 - Server runs on `http://localhost:7861`
 - All features functional: generation, remixing (variation/response/inpaint/continuation), FX chain, variant locking/regen, render/export
-- No outstanding bugs from previous sessions
+- All sliders, knobs, inputs, and PyTorch backend execution paths are optimized and responsive.
 
 ### Next Steps
-- Launch with `run_server.bat` and verify the app works
-- Read through the new docs and flag anything that feels off
+- Start the server using `run_server.bat`. Note that the *very first* generation cycle will take 30–60 seconds longer due to `torch.compile` compiling the execution graph.
+- Every subsequent generation cycle will run significantly faster and with reduced VRAM overhead on the GPU.

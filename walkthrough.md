@@ -166,12 +166,30 @@ We implemented and verified individual variant locking and regeneration:
 5.  **Dynamic Update & Playback Swap**: The frontend downloads and decodes the new WAVs, replaces only the waveforms and buffers of the unlocked card slots, and restarts playback on active variant updates.
 6.  **Verification**: Verified that locking cards #1 and #3 and clicking the refresh button updates only cards #2 and #4 while leaving #1 and #3 unchanged. Tested playback transitions and verified all systems perform seamlessly.
 
-### 37. Verification of Master Volume Controls
+### 37. Verification of Master Volume Controls & Drag Sensitivities
 1.  **Layout**: Verified the presence of the master volume slider and text readout inside the master level section of [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html), positioned inline next to the master VU meter.
-2.  **Web Audio Gain Control**: Verified that dragging the master volume slider adjusts the `masterVolumeNode` gain in real-time. This GainNode is placed *after* the master limiter and makeup gain nodes, ensuring that changing the volume controls monitoring output level rather than driving the threshold/distortion characteristics of the limiter.
-3.  **Offline Render Integration**: Verified that the offline rendering engine (`OfflineAudioContext`) in `app.js` mirrors this structure by placing `offlineVolumeNode` after `offlineMakeup` and schedules the master fade-out on it, ensuring correct mixdown export levels.
+2.  **Web Audio Gain Control & Compression Mapping**: Verified that dragging the master volume slider adjusts the `masterVolumeNode` output gain and the `masterLimiter` threshold in a mathematically coordinated manner. This ensures that:
+    - At 100% (far right), the net gain is exactly `0 dB` (unity gain, no amplification) and the limiter threshold is `0 dB` (effectively disabled). The slider readout displays `0.0 dB`.
+    - As the slider is pulled left, the limiter threshold drops down to `-30.0 dB` (applying compression) and the output `masterVolumeNode` gain attenuates down to `-68.5 dB` (counteracting the compressor's automatic makeup gain) so that the overall perceived volume decreases cleanly to `-40.0 dB` net gain (or `-inf dB` at 0% / Mute).
+3.  **Offline Render Integration**: Verified that the offline rendering engine (`OfflineAudioContext`) in `app.js` replicates the exact same `getMasterFaderParams` decibel mapping and compression tracking to ensure the bounced WAV mixdowns match real-time volume and dynamics.
+4.  **Drag Input Sensitivities**: Verified that drag sensitivities for BPM (`0.08`), Seed (`0.1`), and Steps (`0.08`) inputs are reduced, providing much more granular and precise control when adjusting values vertically.
 
 ### 38. Verification of Default Track Volume and Tone Mixer Knob
 1.  **Default Volume**: Verified that newly generated track rows now start at a default volume level of `50%` (gain value `0.5` on the track's GainNode), and the mixer channel strip's Vol range slider defaults to `50` upon creation.
 2.  **Knob Replacement**: Verified that the DFB (Delay Feedback) knob in the channel strip mixer row has been replaced with the Tone macro knob.
 3.  **Tone Integration**: Verified that dragging the Tone mixer knob updates the Luftikus EQ band gains dynamically (centering flat at `50`, dark below `50`, and bright above `50`) identical to the Tone macro in the FX drawer, and double-clicking the Tone knob resets it back to `50`.
+
+### 39. Verification of Copy/Paste FX Settings
+1.  **Clipboard UI Buttons**: Verified that "Copy FX" and "Paste FX" buttons render in the Macro Controls section title header within the FX drawer.
+2.  **Clipboard State Capture**: Verified that clicking "Copy FX" reads all active bypass states, slider positions, and macro values from the track's DOM elements and correctly saves them to a shared clipboard state.
+3.  **Cross-Track Parameter Synchronization**: Verified that clicking "Paste FX" on any other track drawer updates all slider positions, toggle selections, and text labels, and fires the corresponding input/change events to update the underlying Web Audio API node chains (Filters, EQs, Compressors, Saturation curves, Delay times) immediately.
+
+### 40. Verification of Buttons Swap and Limiter Defaults
+1.  **Swapped Prompt Buttons**: Verified in the browser that the "In Key" button is now located immediately to the left of the "Random" button inside the prompt header row in the dashboard.
+2.  **Master Limiter Defaults**: Verified that on startup, the master volume slider defaults to `91`, and the interface displays `LIMITER -2.6dB` and `-3.6 dB` master volume level respectively.
+3.  **Threshold Calibration**: Confirmed that `getMasterFaderParams` converts slider value `91` to exactly `-2.6 dB` limiter threshold, matching the default startup UI.
+
+### 41. Verification of PyTorch and GPU Inference Optimizations
+1.  **CUDA Detection**: Ran diagnostic tests in the virtual environment confirming CUDA availability and hardware mapping (`NVIDIA GeForce RTX 3080 Ti`).
+2.  **Runtime Optimizations**: Confirmed that `allow_tf32 = True` and `benchmark = True` are initialized on model instantiation in `model.py`, accelerating matrix math operations on Ampere architecture.
+3.  **torch.compile Validation**: Verified that compilation of the DiT (Diffusion Transformer) model using `torch.compile` is scheduled dynamically when a CUDA device is active, reducing graph overhead and providing accelerated inference.

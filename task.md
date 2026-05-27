@@ -177,6 +177,22 @@
   - [x] Set default Vol input range slider value to 50 in index.html creation
   - [x] Swap dlyFb data-param with tone in mixer HTML template
   - [x] Implement tone mapping and default value logic inside applyMacroKnob
-
-
-
+- [x] Fix master volume fader behavior and update draggable input speeds:
+  - [x] Implement decibel fader mapping (`0.0 dB` at 100%, down to silence / `-inf dB` at 0%)
+  - [x] Cancel dynamics compressor auto-makeup gain by attenuating output `masterVolumeNode` correspondingly
+  - [x] Display slider readout in decibels (`dB`) and update threshold label dynamically
+  - [x] Replicate identical decibel mapping and fader parameters in the `OfflineAudioContext` mixdown engine
+  - [x] Lower sensitivity coefficients for BPM (`0.08`), Seed (`0.1`), and Steps (`0.08`) draggable inputs
+- [x] Implement Copy and Paste FX Settings between track drawers:
+  - [x] Insert "Copy FX" and "Paste FX" buttons inside the Macro Controls section of the FX drawer
+  - [x] Create a global `copiedFxSettings` clipboard object in `app.js`
+  - [x] Implement copy click listener reading all current bypass states, drop-down selections, slider values, and macro states
+  - [x] Implement paste click listener updating bypass configurations, setting slider/select elements, and dispatching event triggers to sync AudioNodes automatically
+- [x] Swap prompt button placements and set default master limiter value:
+  - [x] Swap placement of Random and In Key buttons in index.html
+  - [x] Set default master volume slider value to 91 in index.html, showing -2.6 dB limiter threshold and -3.6 dB master level initially
+  - [x] Calibrate the scaling multiplier in getMasterFaderParams to hit exactly -2.6 dB limiter threshold at slider value 91
+- [x] Implement PyTorch and GPU inference optimizations for Stable Audio 3:
+  - [x] Enable TensorFloat-32 (TF32) matrix multiplication and cuDNN autotuning (`benchmark = True`) on NVIDIA GPUs in model.py
+  - [x] Implement dynamic model compilation via `torch.compile` on the DiT transformer block when CUDA is active
+  - [x] Verify CUDA device availability and RTX 3080 Ti hardware execution status

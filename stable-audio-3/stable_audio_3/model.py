@@ -22,10 +22,10 @@ class StableAudioModel:
         self.model_half = model_half
         self.same = self.model.pretransform
         self.dit = self.model.model
-        torch.backends.cuda.matmul.allow_tf32 = False
-        torch.backends.cudnn.allow_tf32 = False
-        torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = False
-        torch.backends.cudnn.benchmark = False
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = True
+        torch.backends.cudnn.benchmark = True
 
     @staticmethod
     def from_pretrained(model_name, device=None, model_half=True):
@@ -59,6 +59,16 @@ class StableAudioModel:
         )
         model.use_lora = False
         model.lora_names = []
+        
+        # Enable torch.compile on diffusion model if CUDA is active
+        if device == "cuda" and hasattr(torch, "compile"):
+            try:
+                print("Compiling DiT (Diffusion Transformer) model using torch.compile...")
+                model.model = torch.compile(model.model, mode="reduce-overhead")
+                print("Model compilation scheduled.")
+            except Exception as compile_err:
+                print(f"Compilation notice: {compile_err}. Continuing with standard uncompiled inference.")
+
         return StableAudioModel(model, model_config, device, model_half)
 
     def load_lora(self, lora_ckpt_paths):
