@@ -37,9 +37,25 @@ import torchaudio
 from stable_audio_3 import StableAudioModel
 from stable_audio_3.verbose import set_verbose
 
-# ---------------------------------------------------------------------------
-# WAV Loop Metadata & Beat Grid Generation
-# ---------------------------------------------------------------------------
+def is_drum_prompt(prompt):
+    """
+    Checks if the prompt describes a drum, percussion, or beat loop.
+    Uses regex patterns to match standalone words to avoid substring false positives.
+    """
+    prompt_lower = prompt.lower()
+    drum_patterns = [
+        r'\bdrums?\b', r'\bperc(ussion)?s?\b', r'\bpercussive\b', 
+        r'\bkick(s)?\b', r'\bsnare(s)?\b', r'\bhi-?hat(s)?\b', 
+        r'\btom(s)?\b', r'\bclap(s)?\b', r'\bshaker(s)?\b', 
+        r'\bbeats?\b', r'\bbreaks?\b', r'\bbreakbeats?\b', 
+        r'\brhythms?\b', r'\bride(s)?\b', r'\bcrash(es)?\b', 
+        r'\bcymbals?\b', r'\bbongos?\b', r'\bcongas?\b', 
+        r'\btimbales?\b', r'\bcowbells?\b', r'\btambourines?\b', 
+        r'\brimshots?\b', r'\bwoodblocks?\b', r'\bcabasa\b', 
+        r'\bmaracas?\b', r'\bguiro\b', r'\bclaves?\b', 
+        r'\btimpani\b', r'\bhats\b', r'\bdrumkit\b'
+    ]
+    return any(re.search(pattern, prompt_lower) for pattern in drum_patterns)
 
 def parse_root_note(prompt):
     """
@@ -228,6 +244,13 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
     3. Append high-quality acoustic/production tags.
     4. Append standard BPM and Length tags.
     """
+    # Remove any existing informal BPM descriptions like "120 bpm", "120bpm", "at 120 bpm" to avoid conflicting with structured metadata
+    prompt = re.sub(r'\b(?:at\s+)?\d+\s*bpm\b', '', prompt, flags=re.IGNORECASE)
+    # Clean up trailing "at" if it got orphaned (e.g. "slow loop at")
+    prompt = re.sub(r'\bat\s*$', '', prompt, flags=re.IGNORECASE)
+    # Clean up spacing around commas and duplicate commas
+    prompt = re.sub(r'\s*,\s*', ', ', prompt)
+    prompt = re.sub(r',\s*,', ',', prompt)
     prompt = prompt.strip().strip(",")
     prompt_lower = prompt.lower()
     
@@ -273,7 +296,7 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
         else:
             if not any(k in final_prompt.lower() for k in non_solo_keywords):
                 final_prompt = "solo " + final_prompt
-
+ 
     # 2. Integrate Looping keywords
     if loop:
         if "loop" not in final_prompt.lower():
@@ -288,11 +311,10 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
             final_prompt += ", clean studio recording, high fidelity, detailed texture"
         else:
             final_prompt += ", analog warmth, high fidelity, 44.1 kHz, stereo, well-mixed"
-
+ 
     # 4. Standardized BPM & Length formatting suffix
     duration_int = int(round(duration))
-    if "bpm" not in final_prompt.lower():
-        final_prompt += f", BPM: {bpm}"
+    final_prompt += f", BPM: {bpm}"
     if "length:" not in final_prompt.lower():
         final_prompt += f", Length: {duration_int} seconds"
         
@@ -384,7 +406,26 @@ def main():
     bpm_val = args.bpm or 120
     final_prompt = enhance_prompt(args.prompt, bpm_val, args.duration, args.loop)
 
-    print(f"Final Prompt: \"{final_prompt}\"")
+    # Build prompts list for batch size 8: make the 4th variant (index 3) a fill if it's a drum prompt
+    prompts_list = []
+    is_drum = is_drum_prompt(args.prompt)
+    for i in range(8):
+        if i == 3 and is_drum:
+            fill_prompt = enhance_prompt(args.prompt, bpm_val, args.duration, loop=False)
+            fill_prompt = re.sub(r'\bseamless loop\b', 'drum fill, drum roll', fill_prompt, flags=re.IGNORECASE)
+            fill_prompt = re.sub(r'\blooping\b', 'transition', fill_prompt, flags=re.IGNORECASE)
+            fill_prompt = re.sub(r'\bloop\b', 'fill', fill_prompt, flags=re.IGNORECASE)
+            fill_prompt = re.sub(r'\bbreakbeats?\b', 'drum fill', fill_prompt, flags=re.IGNORECASE)
+            fill_prompt = re.sub(r'\bbeats?\b', 'fill', fill_prompt, flags=re.IGNORECASE)
+            if "fill" not in fill_prompt.lower():
+                fill_prompt += ", drum fill, transition fill"
+            prompts_list.append(fill_prompt)
+        else:
+            prompts_list.append(final_prompt)
+
+    print(f"Original Prompt: \"{args.prompt}\"")
+    for i, p_str in enumerate(prompts_list):
+        print(f"Variant {i+1} Prompt: \"{p_str}\"")
     print(f"Duration: {args.duration}s")
     print(f"BPM: {bpm_val}")
     print(f"Looping: {args.loop}")
@@ -402,7 +443,7 @@ def main():
     start_gen = time.time()
     with torch.inference_mode():
         audio = model.generate(
-            prompt=final_prompt,
+            prompt=prompts_list,
             negative_prompt="poor quality, bad quality, low quality, noise, distortion, artifact",
             duration=args.duration,
             steps=args.steps,
@@ -423,7 +464,10 @@ def main():
         file_path = os.path.join(out_dir, f"variant_{i+1}.wav")
         torchaudio.save(file_path, audio[i].cpu(), sample_rate)
         # Embed ACIDized loop and beat grid metadata
-        acidize_wav_file(file_path, bpm_val, args.duration, args.loop, args.prompt)
+        is_var_loop = args.loop
+        if i == 3 and is_drum:
+            is_var_loop = False
+        acidize_wav_file(file_path, bpm_val, args.duration, is_var_loop, args.prompt)
         print(f"  Saved: {file_path}")
 
     abs_out_dir = os.path.abspath(out_dir)

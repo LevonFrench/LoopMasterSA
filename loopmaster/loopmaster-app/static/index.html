@@ -125,6 +125,8 @@
             </div>
         </section>
 
+
+
         <!-- Transport Panel -->
         <div class="transport-panel">
             <div class="transport-bar" id="transport-bar">
@@ -150,34 +152,41 @@
                 </div>
 
                 <div class="transport-spacer"></div>
-                <div class="render-loops-group">
-                    <label class="render-loops-label" for="render-loops-input">Loops to Render</label>
-                    <input class="render-loops-input" id="render-loops-input" type="number" min="1" max="999" value="1" step="1">
-                </div>
-                <div class="render-loops-group" style="margin-left: 8px;">
-                    <label class="render-loops-label" for="render-format-select">Format</label>
-                    <select id="render-format-select" class="render-format-select">
-                        <option value="wav">WAV</option>
-                        <option value="mp3">MP3</option>
-                        <option value="ogg">OGG</option>
-                    </select>
-                </div>
+
+
                 <button class="btn-render-mix" id="btn-render-mix" type="button" disabled title="Render Mix">
-                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Render Mix
+                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 </button>
-                <button class="btn-export-loops" id="btn-export-loops" type="button" disabled title="Export all playing loops as ZIP">
-                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Export Loops
+                <button class="btn-export-loops" id="btn-export-loops" type="button" disabled title="Export Loops">
+                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
                 </button>
                 <button class="btn-undo" id="btn-undo" type="button" title="Undo last action" style="display:none;">
-                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Undo
+                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
                 </button>
-                <label class="toggle-switch" title="Click waveform to seek playhead">
-                    <input type="checkbox" id="toggle-seek">
-                    <span class="toggle-track"></span>Seek
-                </label>
+                <button class="btn-midi-learn" id="btn-midi-learn" type="button" title="Toggle MIDI Learn / Map Mode">
+                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="7" r="1" fill="currentColor"/>
+                        <circle cx="8" cy="10" r="1" fill="currentColor"/>
+                        <circle cx="16" cy="10" r="1" fill="currentColor"/>
+                        <circle cx="9.5" cy="14" r="1" fill="currentColor"/>
+                        <circle cx="14.5" cy="14" r="1" fill="currentColor"/>
+                    </svg>
+                </button>
+                <button class="btn-modulators-toggle" id="btn-toggle-modulators" type="button" title="Toggle Global Modulators">
+                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle;">
+                        <circle cx="12" cy="5" r="3"/>
+                        <circle cx="12" cy="19" r="3"/>
+                        <line x1="12" y1="8" x2="12" y2="16"/>
+                    </svg>
+                </button>
                 <label class="toggle-switch" title="Split cards: left = queue at loop start, right = instant switch">
                     <input type="checkbox" id="toggle-split">
                     <span class="toggle-track"></span>Split
+                </label>
+                <label class="toggle-switch" title="Toggle Song Mode and Arranger view">
+                    <input type="checkbox" id="toggle-arranger">
+                    <span class="toggle-track"></span>Song Mode
                 </label>
             </div>
 
@@ -189,14 +198,540 @@
             </div>
         </div>
 
+        <!-- Song Arranger Panel -->
+        <div class="arranger-panel" id="arranger-panel" style="display: none;">
+            <div class="arranger-header">
+                <h3>Song Arranger</h3>
+                <div class="arranger-controls">
+                    <select id="arranger-length" class="arranger-length-select">
+                        <option value="8">8 Loops</option>
+                        <option value="16">16 Loops</option>
+                        <option value="32" selected>32 Loops</option>
+                        <option value="64">64 Loops</option>
+                    </select>
+                    <button class="arranger-btn" id="btn-clear-arrangement" type="button">Clear</button>
+                </div>
+            </div>
+            <div class="arranger-timeline-container" id="arranger-timeline-container">
+                <!-- Grid will be generated dynamically -->
+            </div>
+        </div>
+
         <!-- Track Rows -->
         <div class="tracks-container empty" id="tracks-container">
             <div class="grid-empty-state">
                 <svg viewBox="0 0 24 24"><path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z"/></svg>
-                <div>Enter a prompt and hit <strong>Generate</strong></div>
+                <div>Enter a prompt and hit <strong>Generate</strong> OR Hit Random & Generate (Use The Random Buttons to Fill Out Your Arrangement)</div>
             </div>
         </div>
 
+        <!-- Global Modulators Panel -->
+        <section class="arranger-panel" id="modulators-panel" style="display: none; margin-top: 10px; margin-bottom: 10px;">
+            <div class="arranger-header">
+                <h3>Global Modulators</h3>
+            </div>
+            
+            <div class="fx-drawer" style="margin-top: 10px;">
+                <!-- LFO 1 -->
+                <div class="fx-section lfo-section">
+                    <div class="fx-section-title">
+                        <span>LFO 1</span>
+                        <button class="fx-toggle-btn lfo1-toggle" type="button">On</button>
+                    </div>
+                    <div class="fx-controls-grid">
+                        <div class="fx-control-row">
+                            <label>Shape</label>
+                            <select id="lfo1-shape" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;">
+                                <option value="sine">Sine</option>
+                                <option value="triangle">Triangle</option>
+                                <option value="sawtooth">Saw</option>
+                                <option value="square">Square</option>
+                                <option value="random">S&H</option>
+                            </select>
+                        </div>
+                        <div class="fx-control-row">
+                            <label>Sync</label>
+                            <label class="toggle-switch" title="Sync to BPM">
+                                <input type="checkbox" id="lfo1-sync-toggle" checked>
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <!-- Synced rate row -->
+                        <div class="fx-control-row" id="lfo1-rate-sync-row">
+                            <label>Rate</label>
+                            <select id="lfo1-rate-sync" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;">
+                                <option value="4">4 Bars</option>
+                                <option value="2">2 Bars</option>
+                                <option value="1" selected>1 Bar</option>
+                                <option value="0.5">1/2 Note</option>
+                                <option value="0.25">1/4 Note</option>
+                                <option value="0.125">1/8 Note</option>
+                                <option value="0.0625">1/16 Note</option>
+                            </select>
+                        </div>
+                        <!-- Free rate row -->
+                        <div class="fx-control-row" id="lfo1-rate-free-row" style="display: none;">
+                            <label>Rate</label>
+                            <input type="range" id="lfo1-rate-free" min="1" max="200" value="10" step="1" style="flex:1;">
+                            <span id="lfo1-rate-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">1.0Hz</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- LFO 2 -->
+                <div class="fx-section lfo-section">
+                    <div class="fx-section-title">
+                        <span>LFO 2</span>
+                        <button class="fx-toggle-btn lfo2-toggle" type="button">On</button>
+                    </div>
+                    <div class="fx-controls-grid">
+                        <div class="fx-control-row">
+                            <label>Shape</label>
+                            <select id="lfo2-shape" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;">
+                                <option value="sine">Sine</option>
+                                <option value="triangle">Triangle</option>
+                                <option value="sawtooth">Saw</option>
+                                <option value="square">Square</option>
+                                <option value="random">S&H</option>
+                            </select>
+                        </div>
+                        <div class="fx-control-row">
+                            <label>Sync</label>
+                            <label class="toggle-switch" title="Sync to BPM">
+                                <input type="checkbox" id="lfo2-sync-toggle" checked>
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <!-- Synced rate row -->
+                        <div class="fx-control-row" id="lfo2-rate-sync-row">
+                            <label>Rate</label>
+                            <select id="lfo2-rate-sync" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;">
+                                <option value="4">4 Bars</option>
+                                <option value="2">2 Bars</option>
+                                <option value="1" selected>1 Bar</option>
+                                <option value="0.5">1/2 Note</option>
+                                <option value="0.25">1/4 Note</option>
+                                <option value="0.125">1/8 Note</option>
+                                <option value="0.0625">1/16 Note</option>
+                            </select>
+                        </div>
+                        <!-- Free rate row -->
+                        <div class="fx-control-row" id="lfo2-rate-free-row" style="display: none;">
+                            <label>Rate</label>
+                            <input type="range" id="lfo2-rate-free" min="1" max="200" value="10" step="1" style="flex:1;">
+                            <span id="lfo2-rate-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">1.0Hz</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LFO 3 -->
+                <div class="fx-section lfo-section">
+                    <div class="fx-section-title">
+                        <span>LFO 3</span>
+                        <button class="fx-toggle-btn lfo3-toggle" type="button">On</button>
+                    </div>
+                    <div class="fx-controls-grid">
+                        <div class="fx-control-row">
+                            <label>Shape</label>
+                            <select id="lfo3-shape" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;">
+                                <option value="sine">Sine</option>
+                                <option value="triangle">Triangle</option>
+                                <option value="sawtooth">Saw</option>
+                                <option value="square">Square</option>
+                                <option value="random">S&H</option>
+                            </select>
+                        </div>
+                        <div class="fx-control-row">
+                            <label>Sync</label>
+                            <label class="toggle-switch" title="Sync to BPM">
+                                <input type="checkbox" id="lfo3-sync-toggle" checked>
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <!-- Synced rate row -->
+                        <div class="fx-control-row" id="lfo3-rate-sync-row">
+                            <label>Rate</label>
+                            <select id="lfo3-rate-sync" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;">
+                                <option value="4">4 Bars</option>
+                                <option value="2">2 Bars</option>
+                                <option value="1" selected>1 Bar</option>
+                                <option value="0.5">1/2 Note</option>
+                                <option value="0.25">1/4 Note</option>
+                                <option value="0.125">1/8 Note</option>
+                                <option value="0.0625">1/16 Note</option>
+                            </select>
+                        </div>
+                        <!-- Free rate row -->
+                        <div class="fx-control-row" id="lfo3-rate-free-row" style="display: none;">
+                            <label>Rate</label>
+                            <input type="range" id="lfo3-rate-free" min="1" max="200" value="10" step="1" style="flex:1;">
+                            <span id="lfo3-rate-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">1.0Hz</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LFO 4 -->
+                <div class="fx-section lfo-section">
+                    <div class="fx-section-title">
+                        <span>LFO 4</span>
+                        <button class="fx-toggle-btn lfo4-toggle" type="button">On</button>
+                    </div>
+                    <div class="fx-controls-grid">
+                        <div class="fx-control-row">
+                            <label>Shape</label>
+                            <select id="lfo4-shape" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;">
+                                <option value="sine">Sine</option>
+                                <option value="triangle">Triangle</option>
+                                <option value="sawtooth">Saw</option>
+                                <option value="square">Square</option>
+                                <option value="random">S&H</option>
+                            </select>
+                        </div>
+                        <div class="fx-control-row">
+                            <label>Sync</label>
+                            <label class="toggle-switch" title="Sync to BPM">
+                                <input type="checkbox" id="lfo4-sync-toggle" checked>
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <!-- Synced rate row -->
+                        <div class="fx-control-row" id="lfo4-rate-sync-row">
+                            <label>Rate</label>
+                            <select id="lfo4-rate-sync" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;">
+                                <option value="4">4 Bars</option>
+                                <option value="2">2 Bars</option>
+                                <option value="1" selected>1 Bar</option>
+                                <option value="0.5">1/2 Note</option>
+                                <option value="0.25">1/4 Note</option>
+                                <option value="0.125">1/8 Note</option>
+                                <option value="0.0625">1/16 Note</option>
+                            </select>
+                        </div>
+                        <!-- Free rate row -->
+                        <div class="fx-control-row" id="lfo4-rate-free-row" style="display: none;">
+                            <label>Rate</label>
+                            <input type="range" id="lfo4-rate-free" min="1" max="200" value="10" step="1" style="flex:1;">
+                            <span id="lfo4-rate-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">1.0Hz</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modulation Matrix -->
+                <div class="fx-section mod-matrix-section">
+                    <div class="fx-section-title">
+                        <span>Mod Matrix</span>
+                        <label class="toggle-switch" title="Bypass all modulation" style="font-size: 0.65rem; display: flex; align-items: center; gap: 4px;">
+                            <input type="checkbox" id="toggle-modulators-bypass">
+                            <span class="toggle-track"></span>Byp
+                        </label>
+                    </div>
+                    <div class="mod-matrix-slots-list">
+                        <!-- slots 1-8 -->
+                        <div class="mod-matrix-slot" data-slot="0">
+                            <div class="mod-matrix-slot-row">
+                                <span class="slot-num">1</span>
+                                <select class="mod-src">
+                                    <option value="none">None</option>
+                                    <option value="lfo1">LFO 1</option>
+                                    <option value="lfo2">LFO 2</option>
+                                    <option value="lfo3">LFO 3</option>
+                                    <option value="lfo4">LFO 4</option>
+                                </select>
+                                <select class="mod-dest-track">
+                                    <option value="none">Track...</option>
+                                </select>
+                            </div>
+                            <div class="mod-matrix-slot-row">
+                                <select class="mod-dest-param">
+                                    <option value="none">Param...</option>
+                                    <option value="level">Volume</option>
+                                    <option value="pan">Pan</option>
+                                    <option value="filter">Filter</option>
+                                    <option value="space">Space</option>
+                                </select>
+                                <input type="range" class="mod-depth" min="-100" max="100" value="0" step="5">
+                                <span class="mod-depth-val">0</span>
+                            </div>
+                        </div>
+                        <div class="mod-matrix-slot" data-slot="1">
+                            <div class="mod-matrix-slot-row">
+                                <span class="slot-num">2</span>
+                                <select class="mod-src">
+                                    <option value="none">None</option>
+                                    <option value="lfo1">LFO 1</option>
+                                    <option value="lfo2">LFO 2</option>
+                                    <option value="lfo3">LFO 3</option>
+                                    <option value="lfo4">LFO 4</option>
+                                </select>
+                                <select class="mod-dest-track">
+                                    <option value="none">Track...</option>
+                                </select>
+                            </div>
+                            <div class="mod-matrix-slot-row">
+                                <select class="mod-dest-param">
+                                    <option value="none">Param...</option>
+                                    <option value="level">Volume</option>
+                                    <option value="pan">Pan</option>
+                                    <option value="filter">Filter</option>
+                                    <option value="space">Space</option>
+                                </select>
+                                <input type="range" class="mod-depth" min="-100" max="100" value="0" step="5">
+                                <span class="mod-depth-val">0</span>
+                            </div>
+                        </div>
+                        <div class="mod-matrix-slot" data-slot="2">
+                            <div class="mod-matrix-slot-row">
+                                <span class="slot-num">3</span>
+                                <select class="mod-src">
+                                    <option value="none">None</option>
+                                    <option value="lfo1">LFO 1</option>
+                                    <option value="lfo2">LFO 2</option>
+                                    <option value="lfo3">LFO 3</option>
+                                    <option value="lfo4">LFO 4</option>
+                                </select>
+                                <select class="mod-dest-track">
+                                    <option value="none">Track...</option>
+                                </select>
+                            </div>
+                            <div class="mod-matrix-slot-row">
+                                <select class="mod-dest-param">
+                                    <option value="none">Param...</option>
+                                    <option value="level">Volume</option>
+                                    <option value="pan">Pan</option>
+                                    <option value="filter">Filter</option>
+                                    <option value="space">Space</option>
+                                </select>
+                                <input type="range" class="mod-depth" min="-100" max="100" value="0" step="5">
+                                <span class="mod-depth-val">0</span>
+                            </div>
+                        </div>
+                        <div class="mod-matrix-slot" data-slot="3">
+                            <div class="mod-matrix-slot-row">
+                                <span class="slot-num">4</span>
+                                <select class="mod-src">
+                                    <option value="none">None</option>
+                                    <option value="lfo1">LFO 1</option>
+                                    <option value="lfo2">LFO 2</option>
+                                    <option value="lfo3">LFO 3</option>
+                                    <option value="lfo4">LFO 4</option>
+                                </select>
+                                <select class="mod-dest-track">
+                                    <option value="none">Track...</option>
+                                </select>
+                            </div>
+                            <div class="mod-matrix-slot-row">
+                                <select class="mod-dest-param">
+                                    <option value="none">Param...</option>
+                                    <option value="level">Volume</option>
+                                    <option value="pan">Pan</option>
+                                    <option value="filter">Filter</option>
+                                    <option value="space">Space</option>
+                                </select>
+                                <input type="range" class="mod-depth" min="-100" max="100" value="0" step="5">
+                                <span class="mod-depth-val">0</span>
+                            </div>
+                        </div>
+                        <div class="mod-matrix-slot" data-slot="4">
+                            <div class="mod-matrix-slot-row">
+                                <span class="slot-num">5</span>
+                                <select class="mod-src">
+                                    <option value="none">None</option>
+                                    <option value="lfo1">LFO 1</option>
+                                    <option value="lfo2">LFO 2</option>
+                                    <option value="lfo3">LFO 3</option>
+                                    <option value="lfo4">LFO 4</option>
+                                </select>
+                                <select class="mod-dest-track">
+                                    <option value="none">Track...</option>
+                                </select>
+                            </div>
+                            <div class="mod-matrix-slot-row">
+                                <select class="mod-dest-param">
+                                    <option value="none">Param...</option>
+                                    <option value="level">Volume</option>
+                                    <option value="pan">Pan</option>
+                                    <option value="filter">Filter</option>
+                                    <option value="space">Space</option>
+                                </select>
+                                <input type="range" class="mod-depth" min="-100" max="100" value="0" step="5">
+                                <span class="mod-depth-val">0</span>
+                            </div>
+                        </div>
+                        <div class="mod-matrix-slot" data-slot="5">
+                            <div class="mod-matrix-slot-row">
+                                <span class="slot-num">6</span>
+                                <select class="mod-src">
+                                    <option value="none">None</option>
+                                    <option value="lfo1">LFO 1</option>
+                                    <option value="lfo2">LFO 2</option>
+                                    <option value="lfo3">LFO 3</option>
+                                    <option value="lfo4">LFO 4</option>
+                                </select>
+                                <select class="mod-dest-track">
+                                    <option value="none">Track...</option>
+                                </select>
+                            </div>
+                            <div class="mod-matrix-slot-row">
+                                <select class="mod-dest-param">
+                                    <option value="none">Param...</option>
+                                    <option value="level">Volume</option>
+                                    <option value="pan">Pan</option>
+                                    <option value="filter">Filter</option>
+                                    <option value="space">Space</option>
+                                </select>
+                                <input type="range" class="mod-depth" min="-100" max="100" value="0" step="5">
+                                <span class="mod-depth-val">0</span>
+                            </div>
+                        </div>
+                        <div class="mod-matrix-slot" data-slot="6">
+                            <div class="mod-matrix-slot-row">
+                                <span class="slot-num">7</span>
+                                <select class="mod-src">
+                                    <option value="none">None</option>
+                                    <option value="lfo1">LFO 1</option>
+                                    <option value="lfo2">LFO 2</option>
+                                    <option value="lfo3">LFO 3</option>
+                                    <option value="lfo4">LFO 4</option>
+                                </select>
+                                <select class="mod-dest-track">
+                                    <option value="none">Track...</option>
+                                </select>
+                            </div>
+                            <div class="mod-matrix-slot-row">
+                                <select class="mod-dest-param">
+                                    <option value="none">Param...</option>
+                                    <option value="level">Volume</option>
+                                    <option value="pan">Pan</option>
+                                    <option value="filter">Filter</option>
+                                    <option value="space">Space</option>
+                                </select>
+                                <input type="range" class="mod-depth" min="-100" max="100" value="0" step="5">
+                                <span class="mod-depth-val">0</span>
+                            </div>
+                        </div>
+                        <div class="mod-matrix-slot" data-slot="7">
+                            <div class="mod-matrix-slot-row">
+                                <span class="slot-num">8</span>
+                                <select class="mod-src">
+                                    <option value="none">None</option>
+                                    <option value="lfo1">LFO 1</option>
+                                    <option value="lfo2">LFO 2</option>
+                                    <option value="lfo3">LFO 3</option>
+                                    <option value="lfo4">LFO 4</option>
+                                </select>
+                                <select class="mod-dest-track">
+                                    <option value="none">Track...</option>
+                                </select>
+                            </div>
+                            <div class="mod-matrix-slot-row">
+                                <select class="mod-dest-param">
+                                    <option value="none">Param...</option>
+                                    <option value="level">Volume</option>
+                                    <option value="pan">Pan</option>
+                                    <option value="filter">Filter</option>
+                                    <option value="space">Space</option>
+                                </select>
+                                <input type="range" class="mod-depth" min="-100" max="100" value="0" step="5">
+                                <span class="mod-depth-val">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Env 1 (hidden) -->
+                <div class="fx-section env-section" style="display: none;">
+                    <div class="fx-section-title">
+                        <span>Env 1</span>
+                    </div>
+                    <div class="fx-controls-grid">
+                        <div class="fx-control-row">
+                            <label>Attack</label>
+                            <input type="range" id="env1-a" min="0" max="50" value="10" step="1" style="flex:1;">
+                            <span class="env1-a-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">1.0s</span>
+                        </div>
+                        <div class="fx-control-row">
+                            <label>Decay</label>
+                            <input type="range" id="env1-d" min="0" max="50" value="20" step="1" style="flex:1;">
+                            <span class="env1-d-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">2.0s</span>
+                        </div>
+                        <div class="fx-control-row">
+                            <label>Sustain</label>
+                            <input type="range" id="env1-s" min="0" max="100" value="50" step="5" style="flex:1;">
+                            <span class="env1-s-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">50%</span>
+                        </div>
+                        <div class="fx-control-row">
+                            <label>Release</label>
+                            <input type="range" id="env1-r" min="0" max="50" value="20" step="1" style="flex:1;">
+                            <span class="env1-r-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">2.0s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Env 2 (hidden) -->
+                <div class="fx-section env-section" style="display: none;">
+                    <div class="fx-section-title">
+                        <span>Env 2</span>
+                    </div>
+                    <div class="fx-controls-grid">
+                        <div class="fx-control-row">
+                            <label>Attack</label>
+                            <input type="range" id="env2-a" min="0" max="50" value="10" step="1" style="flex:1;">
+                            <span class="env2-a-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">1.0s</span>
+                        </div>
+                        <div class="fx-control-row">
+                            <label>Decay</label>
+                            <input type="range" id="env2-d" min="0" max="50" value="20" step="1" style="flex:1;">
+                            <span class="env2-d-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">2.0s</span>
+                        </div>
+                        <div class="fx-control-row">
+                            <label>Sustain</label>
+                            <input type="range" id="env2-s" min="0" max="100" value="50" step="5" style="flex:1;">
+                            <span class="env2-s-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">50%</span>
+                        </div>
+                        <div class="fx-control-row">
+                            <label>Release</label>
+                            <input type="range" id="env2-r" min="0" max="50" value="20" step="1" style="flex:1;">
+                            <span class="env2-r-val" style="font-size: 0.65rem; font-family: monospace; width: 35px; text-align: right;">2.0s</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Export Settings Modal -->
+    <div id="export-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h4 class="modal-title" id="export-modal-title">Export Settings</h4>
+            
+            <div class="export-modal-form">
+                <div class="control-group" id="export-filename-group">
+                    <label class="control-label" for="export-filename-input">Filename</label>
+                    <input class="control-input" id="export-filename-input" type="text"
+                           placeholder="Enter filename..." autocomplete="off" spellcheck="false">
+                </div>
+
+                <div class="control-group" id="export-loops-group">
+                    <label class="control-label" for="export-loops-input">Loops to Render</label>
+                    <input class="control-input" id="export-loops-input" type="number" min="1" max="999" value="1" step="1">
+                </div>
+
+                <div class="control-group" id="export-format-group">
+                    <label class="control-label" for="export-format-select">Format</label>
+                    <select id="export-format-select" class="render-format-select" style="width: 100%;">
+                        <option value="wav">WAV (Lossless)</option>
+                        <option value="mp3">MP3 (High Quality)</option>
+                        <option value="ogg">OGG (Vorbis)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-generate" id="btn-export-confirm" type="button" style="margin-top: 0; width: 100%;">Export</button>
+                <button class="btn-modal-cancel" id="btn-export-cancel" type="button">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <script src="/static/app.js"></script>

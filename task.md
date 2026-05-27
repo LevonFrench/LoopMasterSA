@@ -211,3 +211,72 @@
   - [x] Implement paste click handler to restore volume, pan, mute, front-facing knobs, and detailed FX settings with dynamic event propagation
   - [x] Update `updateTrackLockState` to disable the paste track button when a track is locked
 - [x] Handle non-JSON conversion error payloads gracefully in `app.js`
+- [x] Brainstorm new features (MIDI Learn/Automapping, LFO Modulation Matrix, Song Arranger) and draft the design specifications in the implementation plan
+- [x] Implement Web MIDI API integration and MIDI Learn Mode
+  - [x] Initialize midi access, add global event listeners for CC inputs
+  - [x] Add MIDI Learn button to transport bar
+  - [x] Highlight controls, wait for CC message, bind and save to localStorage
+  - [x] Apply scaled CC values to UI controls and Web Audio nodes
+- [x] Implement Global Modulators Box (2 LFOs & 2 ADSR Envelopes side-by-side)
+  - [x] Create layout and HTML elements for the 4 modules in index.html
+  - [x] Add CSS grid layout to align modules side-by-side and style sliders/selects
+  - [x] Implement ADSR envelope generator calculations and triggers
+  - [x] Implement LFO shape calculations (Sine, Tri, Saw, Square, S&H)
+- [x] Implement Central Modulation Matrix Routing
+  - [x] Add 8 routing slots UI (Source, Target Track, Target Param, Depth)
+  - [x] Add update handlers to apply modulation to Web Audio node properties in play loop
+  - [x] Add slider-wrapper overlay dots to visualize active modulation
+- [x] Implement Song Arranger Timeline Box
+  - [x] Create FL Studio-style arranger playlist grid container in index.html/app.css
+  - [x] Build grid rows and cells dynamically based on active tracks and length
+  - [x] Connect grid toggles to track unmuting/muting on bar steps
+  - [x] Add visual playhead sweep sync'd to global playback
+- [x] Replicate all modulators and arranger scheduling in OfflineAudioContext rendering
+- [x] Add LFO 3 and LFO 4 boxes to global modulators and wire them in app.js and index.html
+- [x] Move Modulation Matrix inside the Global Modulators box and format it as a scrollable list stacked vertically
+- [x] Align and size all 4 LFOs and the Modulation Matrix box identically in the drawer
+- [x] Hide global modulators by default and add toggle button in transport bar
+- [x] Polish transport tooltips and remove labels (Loops to Render, Render Mix, Export Loops, MIDI Learn, Modulators)
+- [x] Highlight the Random prompt button with a blue pulsing glow to attract clicks
+- [x] Fix `p.levelDb` reference error in `app.js` `tick()` loop
+- [x] Fix missing safety check in `isSliderModulated` in `app.js`
+- [x] Remove `%` suffix from matrix depth values in `app.js` and `index.html`
+- [x] Remove "Undo" text from `#btn-undo` in `index.html`
+- [x] Standardize transport buttons size and styling in `app.css`
+- [x] Eliminate horizontal scrolling in mod matrix via flex-shrink and min-width rules in `app.css`
+- [x] Remove export format select and loops to render inputs from transport panel
+- [x] Implement a central `#export-modal` prompting for custom filename, loop count, and format extension on export click
+- [x] Refactor export and rendering click listeners to separate async functions extracting values from modal parameters
+- [x] Defer MIDI hardware access (`navigator.requestMIDIAccess`) until first click of MIDI Learn button
+- [x] Implement a visual 1/8th tempo grid behind each card waveform canvas based on its creation BPM
+- [x] Remove Lock button from track mixer buttons
+- [x] Reorganize track mixer buttons as a 2x4 grid layout with responsive sizing
+- [x] Relocate Song Arranger panel above tracks and under transport
+- [x] Refactor arranger timeline grid to represent exactly one loop per cell (dot) rather than four
+- [x] Implement visual time bar progress fill behind the timeline numbers
+- [x] Implement click-and-drag scrubbing on arranger timeline header cells to seek playhead
+- [x] Remove Seek toggle checkbox and disable card waveform click-seeking
+- [x] Update empty-state arranger layout help text in HTML and JS to reference random arrangement suggestions
+- [x] Clean up prompt text and always append structured BPM metadata tag to guide model tempo alignment
+- [x] Clean up the codebase by removing unused untracked screenshot images (screenshot1.png)
+- [x] Combine BPM stripping regexes in app_server.py and generate_variants.py to prevent dangling "at" conjunctions or double commas when enhancing prompts
+- [x] Reorder mixer strip buttons in app.js to place Copy and Paste settings as the first two icons on the second row of track mixer icons
+- [x] Refine and verify drum fill steering for the 4th generated variant (index 3):
+  - [x] Implement robust `is_drum_prompt` utilizing comprehensive word-boundary regex patterns in `app_server.py` and `generate_variants.py`.
+  - [x] Improve prompt substitutions to convert `breakbeats` and `beats` to fills/non-looping keywords.
+  - [x] Force `loop=False` in WAV metadata (ACID chunk) for the 4th variant to tag the fill as a One-Shot for DAWs.
+- [x] Remove Valentine distortion and compression:
+  - [x] Remove Valentine parameters from matrix destination options in `index.html`.
+  - [x] Remove `satComp` mixer macro knob and Valentine section from `app.js` HTML templates.
+  - [x] Remove Valentine Saturator and Compressor Web Audio nodes and connections inside `createTrackRow` in `app.js`.
+  - [x] Remove `satComp` parameter and update `drive` macro in `applyMacroKnob` / `applyFxMacro` in `app.js`.
+  - [x] Remove `updateValentineBypass` helper and bypass listeners in `app.js`.
+  - [x] Remove Valentine from copy/paste settings routines in `app.js`.
+  - [x] Remove Valentine parameters from real-time LFO modulation sweeps in `app.js`.
+  - [x] Remove Valentine from offline mixdown context and automation in `app.js`.
+  - [x] Verify functionality (compilation, UI knobs, modulation matrix, rendering).
+- [x] Simplify Export Loops format prompt dialog:
+  - [x] Hide format selector dropdown when zipping individual loops.
+  - [x] Default loop export format to WAV.
+  - [x] Keep format selector dropdown visible for render mixdown.
+

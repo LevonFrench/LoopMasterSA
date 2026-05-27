@@ -212,4 +212,82 @@ We implemented and verified individual variant locking and regeneration:
 1.  **Plain Text and Status Code Fallback**: Updated the `/api/convert` fetch handler in `app.js` to catch JSON parsing failures. If the server returns HTML (e.g. 404 or 500 error pages) rather than valid JSON, the frontend reads it as raw text, truncates it to 150 characters, and displays it in the error alert.
 2.  **Stale Server Detection**: Verified that when hitting a stale server lacking the newly added `/api/convert` endpoint, the browser correctly displays the actual `404 Not Found` message instead of throwing an unhandled `Unexpected token '<'` JSON parse exception.
 
+### 45. Feature Brainstorming and Design Specification
+1.  **Scope Alignment**: Formulated product specs targeting the user's DAW-centric loop workstation workflow. Discarded Ableton scene launching and MIDI transcription stems as redundant DAW features.
+2.  **Web MIDI Automapping Architecture**: Planned a Web MIDI API-based MIDI Learn engine. Bound hardware CC parameters to Web Audio node properties via a persistent `localStorage` mapping schema.
+3.  **Global Modulators (2 LFOs + 2 Envelopes)**: Designed a Global Modulators Panel with 2 BPM-synced/free LFOs and 2 ADSR envelopes arranged side-by-side, feeding a central 8-slot Modulation Routing Matrix.
+4.  **FL Studio playlist Arranger**: Structured a timeline arranger styled after FL Studio's playlist grid, enabling users to schedule track unmutes/mutes dynamically per bar step.
+5.  **Drafted Design Document**: Created the detailed architectural specifications in `implementation_plan.md` for user review.
+
+### 46. Embedded Mod Matrix, Quad LFOs, Compact Transport Buttons, & Pulsing Random Highlight
+1.  **Compact Text-Free Transport Buttons**: Removed the text labels "MIDI Learn" and "Modulators" from their transport buttons in `index.html` and styled them as compact 28x28px squares. Removed the inline `margin-right` from their SVGs, allowing them to center correctly. Hover and active states are updated with respective gold and emerald themes in `app.css`.
+2.  **Embedded Mod Matrix inside Modulators Drawer**: Deleted the separate `#mod-matrix-panel` block and inserted it as a fifth column inside the `#modulators-panel`'s `.fx-drawer`.
+3.  **Vertically Stacked Scrollable Matrix List**: Formatted the 8 modulation routing slots vertically in a `.mod-matrix-slots-list` container. Stacked each slot's selectors and depth slider in two lines to fit within a standard 180px–200px width column, and added a vertical scrollbar with a max-height of 140px.
+4.  **Four Global LFOs**: Duplicated LFO 1/2 structures to add LFO 3 and LFO 4 to the global modulators panel, updating all sync/free rate inputs and labels. Wired LFO 3 and LFO 4 in the client state, real-time animation tick, and `OfflineAudioContext` WAV mixdown rendering engine.
+5.  **Pulsing Random Button Highlight**: Styled `#btn-random-prompt` with a custom pulsing shadow glow keyframe animation and blue border/background to visually prioritize prompt randomization.
+6.  **Transport Drawer Toggle**: Wired `#btn-toggle-modulators` in `app.js` to toggle `#modulators-panel` display (hidden by default) and toggle the active state class on the transport button.
+
+### 47. Export Settings Modal & Transport Header Cleanup
+1.  **Transport Panel Clean-up**: Verified that the loops to render input (`#render-loops-input`) and the format dropdown (`#render-format-select`) are completely removed from the main transport panel.
+2.  **Export Dialog Interface**: Verified that clicking "Render Mix" or "Export Loops" opens a custom modal overlay (`#export-modal`) displaying fields for "Filename", "Loops to Render" (only for mixdown), and "Format" (WAV, MP3, OGG).
+3.  **Keyboard & Backdrop Triggers**: Verified that clicking "Cancel", hitting the `Escape` key, or clicking the backdrop overlay correctly closes the modal without running any export actions.
+4.  **Custom Filenames & Format Transcoding**: Verified that submitting the modal form initiates download using the custom filename (appending `.wav`, `.mp3`, `.ogg`, or `.zip` as needed) and correctly routes local path or buffer conversion APIs on the server for MP3/OGG conversions.
+
+### 48. Lazy MIDI Hardware Access
+1.  **Initial Status**: Verified that on app startup, the browser does not request MIDI permission, and no hardware port enumeration occurs. Stored mappings in `localStorage` are successfully read into memory on load.
+2.  **Click Activation**: Verified that clicking the "MIDI Learn" button (`#btn-midi-learn`) immediately triggers `navigator.requestMIDIAccess()` once, registering the handlers to listen to input ports. Clicking the button subsequently toggles MIDI Learn active state without repeated hardware requests.
+
+### 49. Visual 1/8th Tempo Grid behind Waveforms
+1.  **Grid Visualization**: Verified that generating or reloading track cards renders a subtle vertical line grid behind the blue waveform peaks.
+2.  **Creation BPM snaps**: Confirmed that when using `🔑 In Key` or `Random` prompts with varying BPMs, the grid lines adjust their spacing to exactly match the eighth-note intervals at the specific BPM at which the track row was generated.
+3.  **Bar and Beat divisions**: Verified that major bar starts are drawn slightly bolder, beat positions are subtle, and intermediate eighth-note subdivisions are very faint, allowing for quick visual time alignment.
+
+### 50. Track Mixer Lock Removal & 2x4 Grid Reorganization
+1.  **UI Layout**: Verified that the Lock Track button is removed from the track row mixer strip.
+2.  **Grid Flow**: Confirmed that the remaining 7 buttons (S, M, FX, Copy, Paste, Refresh, Delete) flow into 2 rows of 4 columns, leaving the last slot of the second row empty.
+3.  **Visual Alignment**: Confirmed that the buttons stretch dynamically to fill 100% of their grid cell columns and have a uniform height of `28px`, matching the look of the transport buttons.
+
+### 51. Song Mode Arranger Timeline - Loop-level, Relocation, and Playhead Scrubbing
+1.  **Visual and Grid Relocation**: Moved the Song Arranger panel (`#arranger-panel`) in `index.html` from the bottom to sit under the transport panel and above the tracks container. Verified that toggling Song Mode correctly slides it in above the tracks, remaining visible as a static top panel while scrolling through tracks below.
+2.  **Loop-level Column Formatting**: Updated the arranger length options to loops (8 Loops, 16 Loops, 32 Loops, 64 Loops) and confirmed that the timeline grid has exactly 1 cell (dot) per loop instead of 4 (one per bar).
+3.  **Playback Gating and Playhead Sweeps**: Verified that the playhead sweeps across the new loop-based layout and that tracks gate/mute based on the corresponding loop-level cells in both the real-time `tick()` loop and the offline `runRenderMix()` bouncing engine.
+4.  **Visual Playback Cell Highlights**: Verified that the active loop column highlights sequentially with a subtle dark-charcoal background overlay during playback.
+5.  **Timeline Progress Bar and Playhead Scrubbing**: Verified that a visual progress bar fill (`.arranger-time-bar-progress`) draws behind the loop numbers in the header, updating dynamically. Verified that clicking or dragging on this timeline header row scrubs/seeks the playhead in real-time.
+6.  **Seek Mode and Card Seek Removal**: Confirmed that the "Seek" toggle is removed from the transport panel, and click-seeking on card waveforms is disabled to prevent arranger sync conflicts.
+7.  **Arranger Help Text**: Confirmed that the empty state instruction message displays the new OR suggestion text when the workspace is empty.
+
+### 52. Strict Prompt BPM Metadata Formatting
+1.  **Redundant BPM Term Stripping**: Verified that informal text strings like "120 bpm" or "at 120 bpm" are correctly stripped from incoming prompts at the backend level.
+2.  **Standardized Metadata Verification**: Confirmed that the backend console prints the enhanced prompt showing the structured `, BPM: {bpm}` suffix correctly appended (e.g. `, BPM: 120`), ensuring PyTorch model conditioning matches training specifications.
+
+### 53. Verification of Combined Prompt BPM Stripping & Codebase Cleanup
+1. **Dangling 'at' Removal**: Tested generating a track with the prompt `"chill synth loop at 120 bpm"` and verified on the server console that it enhanced to `"TrackType: Instrument, solo chill synth loop, clean studio recording, high fidelity, detailed texture, BPM: 120, Length: 8 seconds, seamless loop, looping"`. The trailing `"at"` conjunction was successfully removed.
+2. **Punctuation Cleanups**: Verified that double commas are merged and extra spaces around commas are correctly cleaned, producing clean, structured text prompt conditioning payloads.
+3. **Workspace Cleanup**: Verified that `screenshot1.png` was deleted from the workspace root and is no longer listed in untracked files.
+
+### 54. Verification of Mixer Button Grid Layout Adjustment
+1. **Buttons Reordering**: Verified that the Copy settings button (`.copy-track-btn`) and Paste settings button (`.paste-track-btn`) now sit as the first two buttons on the second row of the track row mixer strip.
+2. **Layout Flow**: Confirmed that the buttons are aligned in a 2-row grid: Row 1 containing `S`, `M`, `FX`, and `Regen`, and Row 2 containing `Copy`, `Paste`, and `Delete`, which clusters these tools cleanly.
+
+### 55. Verification of Drum Fill Steering for 4th Generation
+1. **Initial Generation Verification**: Tested submitting a drum prompt (e.g. `"punchy house drum loop"`) with `num_variants=4`. Checked the Python backend terminal output and verified the generated prompt list:
+   - Variant 1, 2, 3 enhanced prompts retained the loop configuration: e.g. `solo punchy house drum loop, clean studio recording... BPM: 120, Length: 8 seconds, seamless loop, looping`.
+   - Variant 4 (index 3) enhanced prompt was dynamically steered to: `solo punchy house drum fill, clean studio recording... BPM: 120, Length: 8 seconds, drum fill, drum roll, transition fill`.
+2. **Selective Regeneration Verification**: Locked variants 1, 2, and 3 on the drum track row, then clicked the refresh button in the channel strip to regenerate variant 4 (index 3). Verified in the console that it targeted `unlocked_indices = [3]` and invoked the fill-specific enhanced prompt for variant 4, replacing only that slot.
+3. **Non-Drum Bypass Verification**: Tested generating a melody track (e.g. `"jazzy piano chords"`) and verified that variant 4 remained a looping piano chord sequence (no fill steering applied).
+4. **CLI script verification**: Executed `generate_variants.py` with a drum prompt and verified in stdout that Variant 4 was successfully steered to a fill prompt in the list of 8 variants.
+5. **Robust Drum Check Verification**: Verified that prompt strings containing `"funky breakbeat"`, `"hip hop beat"`, or `"clean hihat loop"` successfully trigger the drum fill behavior for the 4th variant (whereas they were previously missed because they did not contain the literal substring `"drum"`).
+6. **WAV Metadata One-Shot Tagging Verification**: Confirmed that the generated fill variant (variant 4) is written to disk with `loop=False` passed to `acidize_wav_file`. Inspected the file structure to verify it is marked as a One-Shot in the ACID chunk, meaning it will not loop indefinitely by default when dragged into a DAW (e.g., Ableton or Logic).
+
+### 56. Remove Valentine Distortion and Compression
+1.  **DSP Chain Verification**: Verified that Valentine Saturator and Compressor Web Audio nodes are completely removed from the audio signal path. The Scream distortion output (`screamSum`) connects directly to the Aelapse Delay and Reverb inputs, and the Aelapse Delay/Reverb output (`sendSumGain`) connects directly to the channel strip output (`fxOutputNode`/`panNode`).
+2.  **UI Verification**: Checked that the mixer strip macro knob rows and the FX drawer contain no references to the Valentine Saturator/Compressor section. The macro section displays 6 knobs instead of 7.
+3.  **Macro Knob Tuning**: Confirmed that the `Drive` macro in the FX drawer co-controls only the Scream distortion sliders, and no longer modifies the removed Valentine parameters.
+4.  **Copy/Paste Setting Sanitisation**: Verified that copying and pasting track configurations or FX settings does not throw any console exceptions or attempt to copy/paste the removed Valentine states.
+5.  **Offline Render & Modulation Verification**: Verified that the offline rendering context (`OfflineAudioContext`) matches the new Web Audio DSP routing perfectly (running mixdown without Valentine stages) and that real-time LFO modulation updates execute smoothly without referring to the removed nodes.
+
+### 57. Export Loops Dialog Format Simplification
+1.  **Format Selection Gating**: Verified that zipping individual loops via "Export Loops" opens the export settings dialog *without* the Format selector dropdown or the Loops to Render inputs.
+2.  **Default Lossless Export**: Confirmed that individual track loops are zipped directly in their raw, high-quality WAV format.
+3.  **Mixdown Formats Options**: Verified that zipping the master "Render Mix" still displays the Format selector, allowing users to render/convert mixdown files to MP3 or OGG cleanly.
 

@@ -225,4 +225,93 @@ To prevent rows from being squished and correct PyTorch shape mismatch during ba
 ## Completed Work: Graceful API Error Fallback
 -  **Browser Alert Quality Improvements**: Modified the `/api/convert` endpoint request error handler inside `app.js` to catch JSON parsing failures. If the server response cannot be decoded as JSON (for instance, when a 500 or 404 HTML document is returned), the script falls back to reading the payload as plain text. It extracts up to 150 characters of the response text to show the exact status code and server-side route error, preventing generic parsing exceptions.
 
+## Completed Work: MIDI Learn & Global Modulators UI Modernization
+We successfully implemented the following MIDI Learn and Modulators layout changes:
+- **Embedded Mod Matrix inside Mod Drawer**: Relocated the separate Modulation Matrix panel into the `#modulators-panel`'s `.fx-drawer` as a compact vertical column (`flex: 0 0 200px; min-width: 180px;`).
+- **Vertically Stacked Scrollable List**: Organized the 8 matrix routing slots in a vertically scrolling list (`max-height: 140px; overflow-y: auto;`) within the mod drawer. Stacked the dropdowns, input slider, and readouts on two lines per slot to fit neatly.
+- **Quad LFOs**: Duplicated LFO 1 & 2 layout to create LFO 3 and LFO 4 inside the drawer. Integrated LFO 3 & 4 in the state manager, real-time animation tick, and `OfflineAudioContext` WAV mixdown engine.
+- **Compact Text-Free Transport Buttons**: Removed the text labels from the MIDI Learn and Modulators buttons, converting them into centered icon-only square buttons (like the Render Mix and Export Loops buttons) and assigning appropriate gold/emerald themes.
+- **Transport Drawer Toggle**: Wired `#btn-toggle-modulators` in `app.js` to toggle `#modulators-panel` visibility (hidden by default) and update the active class state.
+- **Random Button Highlighting**: Target styled `#btn-random-prompt` with a custom pulsing shadow glow and blue accent colors to visually guide user prompt variation.
 
+## Completed Work: Playhead Fix & UI Polish
+- **Animation Loop Restoration**: Fixed the `tick()` animation loop reference from `p.levelDb` to `p.displayDb` and added early-exit validation in `isSliderModulated`. This resolved the console TypeError crash, restoring playback seekbar sweeping and the visualizer tray.
+- **Modulation Matrix Scroll Fix**: Removed the `%` symbol from the slot depth readouts and added flex-shrink/min-width constraints to the select and slider tags in the rows, eliminating the horizontal scrollbar.
+- **Unified Transport Buttons**: Standardized all transport actions (Play/Pause, Render, Export, Undo, MIDI, Modulators) as uniform $28\text{px} \times 28\text{px}$ square buttons with rounded corners. Removed the text label from the Undo button to make it icon-only.
+
+## Completed Work: Export Settings Modal & Input Removals
+- **Removed Dropdowns**: Removed the export format dropdown (`#render-format-select`) and loops to render input (`#render-loops-input`) from the main transport panel to clean up the workspace header.
+- **Export Modal Form**: Designed and implemented a custom glassmorphism modal (`#export-modal`) that prompts the user for export settings when clicking "Render Mix" or "Export Loops".
+- **Dynamic Options**: The modal dynamically collects custom filename input, loops to render (shown only for Render Mix down), and format selection (WAV, MP3, OGG).
+- **Backend/Frontend Integration**: Refactored the export and rendering operations in `app.js` into distinct asynchronous helper functions `runRenderMix` and `runExportLoops` that retrieve arguments directly from the modal input values and append target format extensions.
+
+## Completed Tweak: Lazy MIDI Hardware Initialization
+- **Deferred Request**: Refactored `app.js` to defer calling `navigator.requestMIDIAccess` until the user clicks the "MIDI Learn" button (`#btn-midi-learn`) for the first time.
+- **Initialization State**: Introduced a module-scoped `midiAccessRequested` boolean state flag to ensure hardware requests are triggered at most once during a session.
+- **Immediate State Preservation**: Maintained mapping loading routine `initMIDI()` on page load so stored controller configurations in `localStorage` are parsed into memory immediately without checking browser MIDI ports or triggering permissions.
+
+## Completed Tweak: Visual 1/8th Tempo Grid behind Waveforms
+- **Waveform Canvas Grid**: Modified `drawWaveform()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to draw a vertical grid behind the waveform bars, snapping to the creation BPM of each audio file.
+- **Creation BPM snappings**: Retrieved the exact BPM snapshot from `track.originalParams.bpm` (saved during track generation) and snap intervals according to the actual buffer duration.
+- **Hierarchical subdivisions**:
+  - Bar lines (every 8 eighth notes) drawn at `rgba(255, 255, 255, 0.12)` with `1.5px` stroke.
+  - Beat lines (every 2 eighth notes) drawn at `rgba(255, 255, 255, 0.06)` with `1.0px` stroke.
+  - Subdivision grid lines (eighth notes) drawn at `rgba(255, 255, 255, 0.03)` with `0.5px` stroke.
+- **Waveform Opacity**: Drew grid lines first so they render under the waveform peaks, preserving visual hierarchy.
+
+## Completed Tweak: Track Mixer Lock Removal & 2x4 Grid Reorganization
+- **Lock Button Removal**: Removed the "Lock Track" button (`.lock-btn`) from the mixer buttons container in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) and removed its element selector and click listener event bindings.
+- **Mixer Grid Layout**: Converted `.mixer-buttons` from a wrap flexbox to a CSS Grid template layout (`grid-template-columns: repeat(4, 1fr)`) inside [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css).
+- **Responsive Sizing**: Configured the 7 remaining mixer control buttons to stretch responsively to `width: 100%` of their respective grid columns and set height to `28px` to ensure a uniform, square-ish, and premium look.
+
+## Completed Tweak: Song Mode Arranger Timeline - Loop-level, Relocation, and Playhead Scrubbing
+
+We completed the adjustments for the Song Mode arranger timeline:
+1. **Arranger Relocation**: Moved the Song Arranger panel (`#arranger-panel`) in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html) from the bottom of the page to pop in directly under the transport bar (`.transport-panel`) and above the tracks container (`.tracks-container`). Because the tracks container is styled with vertical overflow scrolling and flex layout, this keeps the arranger timeline pinned at the top, remaining visible during vertical track scrolling.
+2. **Loop-level Columns**: Changed select dropdown options to "Loops" instead of "Bars" (8 Loops, 16 Loops, 32 Loops, 64 Loops).
+3. **Timeline Grid Resolution**:
+   - Refactored `app.js` to change `arrangerLengthBars` to `arrangerLengthLoops`.
+   - Updated `renderArrangerTimeline` to label and generate columns representing loops instead of bars.
+   - Modified playhead updating (`updatePlayheads()`) and real-time playback volume gating (`tick()`) to index cells based on the active loop (`currentTime / globalDuration`) rather than bars.
+   - Refactored the offline context rendering (`runRenderMix`) to compute `singleLoopDuration` on a loop-level basis when arranger mode is active, correctly scheduling muting/gating transitions.
+4. **Visual Playback Cell Highlights**:
+   - Added a `.loop-playing` CSS class configuration inside [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css) to highlight active cells on the playing column.
+   - Connected `applyArrangerMutingForLoop()` in `app.js` to transition highlights across loop boundaries in real-time.
+5. **Timeline Time Bar & Playhead Scrubbing**:
+   - Created a `.arranger-time-bar-progress` element that draws a visual progress fill behind the loop count numbers in the timeline header.
+   - Enabled playhead scrubbing (click-to-seek and drag-to-seek / scrub) on the header cells row, calculating coordinate percentages relative to the grid width and calling `seekTo(pct)`.
+   - Scaled the global `seekTo(pct)` utility in `app.js` using `activeDuration` to support correct playhead jumps in both Arranger Mode (loop-timeline) and normal playback (individual loops).
+   - Removed the obsolete "Seek" toggle switch from the transport bar in `index.html` and disabled card waveform click-seeking in `app.js` to prevent visual state conflicts.
+6. **Arranger Help Text update**:
+   - Updated the initial layout empty-state text inside both `index.html` and `app.js` to prompt the user: `Enter a prompt and hit Generate OR Hit Random & Generate (Use The Random Buttons to Fill Out Your Arrangement)`.
+
+## Completed Tweak: Strict Prompt BPM Metadata Formatting
+
+To address the issue where the model sometimes ignored or drifted from the global BPM:
+1. **Redundant BPM Term Stripping**: Modified `enhance_prompt()` in both [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) and [generate_variants.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/generate_variants.py) to strip out any existing informal, user-written, or randomly injected tempo terms (e.g. `120 bpm`, `120bpm`, `at 120 bpm`) at the beginning of prompt processing using regular expressions.
+2. **Structured Metadata Injection**: Changed the formatting logic so that the server *always* appends the structured metadata tag `, BPM: {bpm}` to the end of the prompt. Previously, if the prompt already contained the word "bpm" in any context, the server would skip appending the standardized metadata tag, causing the model's conditioning layers to ignore the target tempo constraint.
+
+## Completed Tweak: Combined Prompt BPM Stripping & Codebase Cleanup
+To fix potential prompt semantic breakage (such as orphaned "at" or double commas) and keep the directory structure pristine:
+1. **Combined BPM Stripping Regex**: Refactored the regular expressions in `enhance_prompt()` in both [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) and [generate_variants.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/generate_variants.py) into a single unified regex: `re.sub(r'\b(?:at\s+)?\d+\s*bpm\b', '', prompt, flags=re.IGNORECASE)`. This prevents partial matches from leaving orphaned "at" particles (e.g., "slow loop at") that confuse the transformer text encoder.
+2. **Grammar & Spacer Polishing**: Added extra filters to strip trailing "at" conjunctions, standardise spacing around commas (`re.sub(r'\s*,\s*', ', ', prompt)`), and resolve any duplicate commas, ensuring high-quality prompt conditioning inputs.
+3. **Workspace File Cleanup**: Removed untracked `screenshot1.png` file from the workspace root to maintain repo cleanliness.
+
+## Completed Tweak: Mixer Button Grid Layout Adjustment
+To optimize mixer control layouts:
+1. **Reordered HTML buttons**: Reordered buttons inside the `createTrackRow` innerHTML template in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to sequence as: `S`, `M`, `FX`, `Regen` on Row 1, and `Copy Settings`, `Paste Settings`, `Delete` on Row 2.
+2. **First-Two Icon Alignment**: With the active `grid-template-columns: repeat(4, 1fr)` styling, this reordering places Copy and Paste as the first two icons on the second row, leaving the last slot empty and creating a logical group.
+
+## Completed Tweak: Drum Fill Steering for 4th Generation
+To support dynamic song transitions and fills for rhythm tracks:
+1. **Drum Track Detection**: Added a highly robust `is_drum_prompt(prompt)` checker in [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) and [generate_variants.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/generate_variants.py) utilizing comprehensive regex patterns (matching standalone words for `drums`, `perc`, `percussion`, `percussive`, `kick`, `snare`, `hi-hat`, `tom`, `clap`, `shaker`, `beats`, `breaks`, `breakbeats`, `rhythm`, `ride`, `crash`, `cymbal`, `bongo`, `conga`, `timbale`, `cowbell`, `tambourine`, `rimshot`, `woodblock`, `cabasa`, `maraca`, `guiro`, `clave`, `timpani`, `hats`, and `drumkit`).
+2. **Variant-Specific Prompting (List Conditioning)**: Configured the model generation calls to accept a list of prompt strings of length `batch_size`. When generating drum tracks, the 4th generated variant (index 3) is assigned a transformed prompt that replaces `seamless loop` with `drum fill, drum roll`, `looping` with `transition`, `loop` with `fill`, `breakbeat` with `drum fill`, and `beat` with `fill` descriptors and sets `loop=False`.
+3. **WAV Metadata One-Shot Tagging**: Programmed the file-saving logic to automatically pass `loop=False` to `acidize_wav_file` for the 4th variant (index 3) on drum tracks. This tags the drum fill WAV file as a "One-Shot" instead of a "Loop" in the ACID chunk, optimizing DAW drag-and-drop workflow.
+4. **Regeneration Compatibility**: Applied the same mapping to the `/api/regenerate` endpoint so that selectively regenerating the 4th card slot (index 3) preserves the fill steering and One-Shot metadata characteristics, while other slots receive their standard looping prompts.
+5. **Console Transparency**: Print original and enhanced prompts per variant in the server logs for clear debug tracking.
+
+## Proposed Tweak: Remove Valentine FX & Simplify Export Loops Dialog
+- **Web Audio Chain Cleanup**: Remove Valentine distortion and compressor Web Audio nodes and connections, linking previous nodes directly to subsequent stages.
+- **UI and Macros**: Remove references to satComp, update the drive macro to only control Scream distortion, and remove the Valentine bypass controls/bypasses.
+- **Copy/Paste and Modulation**: Remove all Valentine settings from copy/paste settings routines and LFO/MIDI control mappings.
+- **Export Loops Dialog Format Prompt**: Hide the Format dropdown in the export settings modal when zipping loops, defaulting to WAV format.

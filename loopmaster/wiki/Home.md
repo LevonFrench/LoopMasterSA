@@ -150,7 +150,28 @@ Three-layer horizontal canvas meters per track and master:
 ### Ælapse
 - **Delay**: `DelayNode` (up to 2.0s) with feedback `GainNode` (up to 95%). 2Hz LFO modulates delay time by ±2ms for tape wow/flutter.
 - **Reverb**: `ConvolverNode` with programmatically generated stereo impulse response (decayed white noise + chirp for spring dispersion).
-- Tempo-synced delay times via beat division lookup.
+- **Tempo-Synced delay times** via beat division lookup.
+
+---
+
+## Global Modulators & Modulation Matrix
+
+LoopMaster SA3 features a global modulation engine containing four independent Low Frequency Oscillators (LFOs) routed via an 8-slot Modulation Routing Matrix embedded directly in the Global Modulators panel.
+
+### LFO Modulators (LFO 1–4)
+- **Controls**: Shape (Sine, Triangle, Saw, Square, S&H/Random), Sync to BPM (on/off), Rate (Synced to beat divisions from 4 bars down to 1/16 note, or free-running from 0.1Hz to 20Hz), and On/Off bypass.
+- **Real-Time Integration**: The `requestAnimationFrame` loop calculates phase progress per LFO based on `AudioContext.currentTime` and BPM parameters, dynamically updating target parameters.
+- **Offline bounce replication**: The `OfflineAudioContext` mixdown engine duplicates LFO shape calculations and applies parameter offsets at 50ms intervals during offline rendering.
+
+### Modulation Matrix
+- **Slots**: 8 independent routing paths.
+- **Routing parameters**:
+  - **Source**: LFO 1, LFO 2, LFO 3, or LFO 4 (Envelopes disabled).
+  - **Destination**: Any active track channel (T1, T2, etc.) or Master bus.
+  - **Target Parameter**: Volume (`level`), Pan (`pan`), Filter (`filter`), Saturation/Compression (`satComp`), Space (`space`), and Drive (`drive`).
+  - **Depth**: ±100% bipolar modulation depth.
+- **Bypassing**: Global "Byp" toggle checkbox in the Matrix container bypasses all matrix slots simultaneously.
+- **Modulation Indicators**: Sliders on mapped parameters display real-time animated indicator dots mapping active modulation values.
 
 ---
 
