@@ -633,6 +633,75 @@ body::before {
     margin-bottom: 10px;
 }
 
+/* Controls Guide */
+.controls-guide {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+}
+
+.guide-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+}
+
+.guide-desc {
+    line-height: 1.4;
+}
+
+.guide-desc strong {
+    color: var(--text-secondary);
+}
+
+.guide-card-diagram {
+    display: flex;
+    width: 120px;
+    height: 28px;
+    border: 1px solid var(--border-card);
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.guide-zone {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.45rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.guide-zone-left {
+    background: rgba(245, 158, 11, 0.1);
+    color: rgba(245, 158, 11, 0.7);
+    border-right: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.guide-zone-right {
+    background: rgba(59, 130, 246, 0.1);
+    color: rgba(59, 130, 246, 0.7);
+}
+
+.guide-zone-divider {
+    display: none;
+}
+
+.guide-toggle-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--text-tertiary);
+    opacity: 0.6;
+}
+
 /* --- Track Row --- */
 .track-row {
     display: flex;
@@ -940,15 +1009,34 @@ body::before {
     position: relative;
 }
 
+/* Card click zone indicators — visible on hover */
+.audio-card::before,
 .audio-card::after {
-    content: '';
     position: absolute;
-    top: 4px;
-    bottom: 4px;
-    left: 50%;
-    width: 1px;
-    background: rgba(255, 255, 255, 0.06);
+    bottom: 2px;
+    font-size: 0.45rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0);
     pointer-events: none;
+    transition: color 0.2s;
+    z-index: 2;
+}
+
+.audio-card::before {
+    content: '◀ queue';
+    left: 4px;
+}
+
+.audio-card::after {
+    content: 'instant ▶';
+    right: 4px;
+}
+
+.audio-card:hover::before,
+.audio-card:hover::after {
+    color: rgba(255, 255, 255, 0.25);
 }
 
 .audio-card:hover {

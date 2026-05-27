@@ -1264,7 +1264,7 @@
                     <button class="fx-toggle-btn aelapse-toggle" type="button">On</button>
                 </div>
                 <div class="fx-controls-grid">
-                    <div class="fx-control-row"><label>Sync</label><input type="range" class="aelapse-sync" min="0" max="8" value="3" step="1"><span class="aelapse-sync-val">d8th</span></div>
+                    <div class="fx-control-row"><label>Sync</label><input type="range" class="aelapse-sync" min="0" max="8" value="2" step="1"><span class="aelapse-sync-val">1/8</span></div>
                     <div class="fx-control-row"><label>Feedback</label><input type="range" class="aelapse-feedback" min="0" max="95" value="30" step="5"><span class="aelapse-fb-val">30%</span></div>
                     <div class="fx-control-row"><label>Delay Mix</label><input type="range" class="aelapse-mix" min="0" max="100" value="0" step="5"><span class="aelapse-mix-val">0%</span></div>
                     <div class="fx-control-row"><label>Reverb Size</label><input type="range" class="aelapse-size" min="5" max="50" value="20" step="1"><span class="aelapse-size-val">2.0s</span></div>
