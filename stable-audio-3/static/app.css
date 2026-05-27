@@ -756,8 +756,8 @@ body::before {
     min-width: 0;
     -webkit-appearance: none;
     appearance: none;
-    height: 4px;
-    border-radius: 2px;
+    height: 6px;
+    border-radius: 3px;
     background: var(--border-input);
     outline: none;
     cursor: pointer;
@@ -765,8 +765,8 @@ body::before {
 
 .level-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     background: var(--text-secondary);
     border: 2px solid var(--bg-mixer);
@@ -937,6 +937,18 @@ body::before {
     min-width: 0;
     overflow: hidden;
     box-sizing: border-box;
+    position: relative;
+}
+
+.audio-card::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 50%;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    pointer-events: none;
 }
 
 .audio-card:hover {

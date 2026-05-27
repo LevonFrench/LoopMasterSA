@@ -38,31 +38,31 @@
                 </div>
 
                 <div class="control-group">
-                    <label class="control-label" for="bpm-input">BPM</label>
+                    <label class="control-label" for="bpm-input" title="Tempo in beats per minute. Determines loop length (4 bars). Drag to change, double-click to type.">BPM</label>
                     <input class="control-input" id="bpm-input" type="number"
                            min="40" max="300" value="120" step="1"
-                           title="4 bars = 8.00s">
+                           title="Drag ↕ to change, double-click to type. 120 BPM = 8s loop (4 bars)">
                 </div>
 
                 <div class="control-group">
-                    <label class="control-label" for="seed-input" title="Seed (-1 = random)">Seed</label>
+                    <label class="control-label" for="seed-input" title="Random seed for reproducible generations. -1 = random each time. Set a number to get the same output.">Seed</label>
                     <input class="control-input control-input-sm" id="seed-input" type="number"
                            min="-1" max="999999" value="-1" step="1"
-                           title="Random seed (-1 for random)">
+                           title="Drag ↕ to change, double-click to type. -1 = random">
                 </div>
 
                 <div class="control-group">
-                    <label class="control-label" for="cfg-input" title="Classifier-Free Guidance scale. Higher = more adherence to prompt. Lower = more creative/varied.">CFG</label>
+                    <label class="control-label" for="cfg-input" title="Classifier-Free Guidance. 1.0 = creative/varied, 3-5 = balanced, 7-15 = strict prompt adherence.">CFG</label>
                     <input class="control-input control-input-sm" id="cfg-input" type="number"
                            min="0.5" max="15" value="1.0" step="0.5"
-                           title="Higher = stricter prompt adherence, Lower = more creative">
+                           title="Drag ↕ to change. Low = creative, High = strict prompt following">
                 </div>
 
                 <div class="control-group">
-                    <label class="control-label" for="steps-input" title="Diffusion steps. More steps = higher quality but slower generation.">Steps</label>
+                    <label class="control-label" for="steps-input" title="Diffusion denoising passes. 8 = fast iteration, 20-30 = high quality, 50+ = diminishing returns.">Steps</label>
                     <input class="control-input control-input-sm" id="steps-input" type="number"
                            min="1" max="100" value="8" step="1"
-                           title="More steps = higher quality, slower generation">
+                           title="Drag ↕ to change. More steps = better quality but slower">
                 </div>
 
                 <div class="control-group">
@@ -124,10 +124,6 @@
                 <label class="toggle-switch" title="Click waveform to seek playhead">
                     <input type="checkbox" id="toggle-seek" checked>
                     <span class="toggle-track"></span>Seek
-                </label>
-                <label class="toggle-switch" title="Queue clip switch at next loop start">
-                    <input type="checkbox" id="toggle-queue">
-                    <span class="toggle-track"></span>Queue
                 </label>
             </div>
 

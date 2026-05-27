@@ -229,6 +229,48 @@
         if (e.key === 'Enter') { bpmInput.blur(); }
     });
 
+    // --- Drag-to-change for Seed, CFG, Steps ---
+    function makeDraggableInput(inputEl, { min, max, step, sensitivity }) {
+        if (!inputEl) return;
+        let dragging = false, startY = 0, startVal = 0, typing = false;
+
+        inputEl.addEventListener('mousedown', (e) => {
+            if (typing) return;
+            e.preventDefault();
+            inputEl.blur();
+            dragging = true;
+            startY = e.clientY;
+            startVal = parseFloat(inputEl.value) || 0;
+            document.body.style.cursor = 'ns-resize';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const delta = (startY - e.clientY) * (sensitivity || 1);
+            let newVal = startVal + delta * step;
+            newVal = Math.max(min, Math.min(max, Math.round(newVal / step) * step));
+            inputEl.value = step < 1 ? newVal.toFixed(1) : newVal;
+            inputEl.dispatchEvent(new Event('input'));
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (dragging) { dragging = false; document.body.style.cursor = ''; }
+        });
+
+        inputEl.addEventListener('dblclick', () => {
+            typing = true;
+            inputEl.focus();
+            inputEl.select();
+        });
+
+        inputEl.addEventListener('blur', () => { typing = false; });
+        inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') inputEl.blur(); });
+    }
+
+    makeDraggableInput(document.getElementById('seed-input'), { min: -1, max: 999999, step: 1, sensitivity: 1 });
+    makeDraggableInput(document.getElementById('cfg-input'), { min: 0.5, max: 15, step: 0.5, sensitivity: 0.1 });
+    makeDraggableInput(document.getElementById('steps-input'), { min: 1, max: 100, step: 1, sensitivity: 1 });
+
     // --- Solo/Mute logic ---
     function updateMixerState() {
         const anySoloed = tracks.some(t => t.soloed);
@@ -1934,22 +1976,24 @@
 
             cardEl.addEventListener('click', (e) => {
                 if (track.locked) return;
+                const cardRect = cardEl.getBoundingClientRect();
+                const clickX = e.clientX - cardRect.left;
+                const isLeftHalf = clickX < cardRect.width / 2;
+
                 const seekBar = cardEl.querySelector('.card-seek-bar');
                 const seekRect = seekBar.getBoundingClientRect();
                 const inSeekBar = e.clientX >= seekRect.left && e.clientX <= seekRect.right
                                && e.clientY >= seekRect.top  && e.clientY <= seekRect.bottom;
 
                 const seekToggle = document.getElementById('toggle-seek');
-                const queueToggle = document.getElementById('toggle-queue');
                 const seekEnabled = seekToggle ? seekToggle.checked : true;
-                const queueEnabled = queueToggle ? queueToggle.checked : false;
 
-                if (queueEnabled && isPlaying && i !== track.selectedVariant) {
-                    // Queue: mark this variant as pending, switch at loop boundary
+                if (isLeftHalf && isPlaying && i !== track.selectedVariant) {
+                    // Left half = queue at next loop boundary
                     track._pendingVariant = i;
-                    // Visual indicator: outline the queued card
                     track.variants.forEach((v, vi) => v.el.classList.toggle('is-queued', vi === i));
                 } else {
+                    // Right half = instant switch
                     selectVariant(track, i);
                 }
 
