@@ -633,73 +633,101 @@ body::before {
     margin-bottom: 10px;
 }
 
-/* Controls Guide */
-.controls-guide {
-    margin-top: 16px;
+/* Visual Guide */
+.guide-visual {
+    margin-top: 20px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 18px;
     align-items: center;
+    max-width: 320px;
 }
 
-.guide-item {
+.guide-section {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 10px;
-    font-size: 0.65rem;
-    color: var(--text-tertiary);
+    gap: 8px;
+    width: 100%;
 }
 
-.guide-desc {
-    line-height: 1.4;
-}
-
-.guide-desc strong {
-    color: var(--text-secondary);
-}
-
-.guide-card-diagram {
-    display: flex;
-    width: 120px;
-    height: 28px;
-    border: 1px solid var(--border-card);
-    border-radius: 4px;
-    overflow: hidden;
-    flex-shrink: 0;
-}
-
-.guide-zone {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.45rem;
+.guide-heading {
+    font-size: 0.55rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    opacity: 0.6;
 }
 
-.guide-zone-left {
-    background: rgba(245, 158, 11, 0.1);
+.guide-card-demo {
+    display: flex;
+    width: 100%;
+    height: 52px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--border-card);
+}
+
+.guide-card-zone {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px;
+}
+
+.guide-card-zone svg {
+    opacity: 0.5;
+}
+
+.guide-card-zone span {
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.guide-card-zone em {
+    font-size: 0.45rem;
+    font-style: normal;
+    opacity: 0.5;
+}
+
+.zone-queue {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.03));
     color: rgba(245, 158, 11, 0.7);
-    border-right: 1px dashed rgba(255, 255, 255, 0.1);
 }
 
-.guide-zone-right {
-    background: rgba(59, 130, 246, 0.1);
+.zone-instant {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.03), rgba(59, 130, 246, 0.08));
     color: rgba(59, 130, 246, 0.7);
 }
 
-.guide-zone-divider {
-    display: none;
+.guide-card-split {
+    width: 1px;
+    background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.1), transparent);
 }
 
-.guide-toggle-icon {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
+.guide-tips {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+}
+
+.guide-tip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.55rem;
     color: var(--text-tertiary);
-    opacity: 0.6;
+    opacity: 0.5;
+}
+
+.guide-tip svg {
+    flex-shrink: 0;
+    opacity: 0.4;
 }
 
 /* --- Track Row --- */

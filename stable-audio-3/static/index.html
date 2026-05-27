@@ -122,7 +122,7 @@
                     <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Undo
                 </button>
                 <label class="toggle-switch" title="Click waveform to seek playhead">
-                    <input type="checkbox" id="toggle-seek" checked>
+                    <input type="checkbox" id="toggle-seek">
                     <span class="toggle-track"></span>Seek
                 </label>
             </div>
@@ -139,24 +139,35 @@
         <div class="tracks-container empty" id="tracks-container">
             <div class="grid-empty-state">
                 <svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6Z"/></svg>
-                <div>Enter a prompt and hit <strong>Generate</strong> to add a track</div>
-                <div class="controls-guide">
-                    <div class="guide-item">
-                        <div class="guide-card-diagram">
-                            <div class="guide-zone guide-zone-left">◀ queue</div>
-                            <div class="guide-zone-divider"></div>
-                            <div class="guide-zone guide-zone-right">instant ▶</div>
+                <div>Enter a prompt and hit <strong>Generate</strong></div>
+
+                <div class="guide-visual">
+                    <div class="guide-section">
+                        <div class="guide-heading">Clip Switching</div>
+                        <div class="guide-card-demo">
+                            <div class="guide-card-zone zone-queue">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg>
+                                <span>Queue</span>
+                                <em>waits for loop</em>
+                            </div>
+                            <div class="guide-card-split"></div>
+                            <div class="guide-card-zone zone-instant">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                <span>Instant</span>
+                                <em>switches now</em>
+                            </div>
                         </div>
-                        <span class="guide-desc">Click <strong>left half</strong> to queue at loop start · <strong>right half</strong> for instant switch</span>
                     </div>
-                    <div class="guide-item">
-                        <div class="guide-toggle-icon">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="12" x2="15" y2="14"/></svg>
+
+                    <div class="guide-tips">
+                        <div class="guide-tip">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="22"/><polyline points="8 6 12 2 16 6"/><polyline points="8 18 12 22 16 18"/></svg>
+                            <span>Drag numbers to change</span>
                         </div>
-                        <span class="guide-desc"><strong>Seek</strong> toggle — click waveform to jump playhead (on) or just select clip (off)</span>
-                    </div>
-                    <div class="guide-item">
-                        <span class="guide-desc">All number inputs: <strong>click</strong> to type · <strong>drag ↕</strong> to change</span>
+                        <div class="guide-tip">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+                            <span>Click numbers to type</span>
+                        </div>
                     </div>
                 </div>
             </div>
