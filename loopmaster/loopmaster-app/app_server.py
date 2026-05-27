@@ -374,7 +374,7 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
         print(f"[Prompt Enhancement] Enhanced: '{final_prompt}'\n")
 
         with jobs_lock:
-            jobs[job_id]["progress"] = f"Generating {num_variants} variants…"
+            jobs[job_id]["progress"] = "GENERATING"
 
         start_gen = time.time()
 
@@ -499,7 +499,7 @@ def _run_regeneration(job_id, prompt, bpm, duration, loop, steps, cfg_scale, tra
         num_variants = len(unlocked_indices)
 
         with jobs_lock:
-            jobs[job_id]["progress"] = f"Regenerating {num_variants} variants…"
+            jobs[job_id]["progress"] = "GENERATING"
 
         start_gen = time.time()
 

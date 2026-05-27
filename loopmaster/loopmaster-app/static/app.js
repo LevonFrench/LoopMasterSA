@@ -1331,7 +1331,7 @@
                 }
                 
                 const N = unlockedVariants.length;
-                showStatus(`Regenerating ${N} unlocked variants…`);
+                showStatus('GENERATING');
                 
                 unlockedVariants.forEach(v => {
                     v.el.classList.add('is-loading');
@@ -2678,7 +2678,7 @@
             }
 
             const { job_id } = await res.json();
-            showStatus(`Generating ${numVariants} variants…`);
+            showStatus('GENERATING');
 
             const result = await pollJob(job_id);
             if (result.status === 'error') throw new Error(result.error || 'Failed');
