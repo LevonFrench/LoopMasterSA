@@ -21,7 +21,9 @@
     const btnRandomInKey = document.getElementById('btn-random-in-key');
     const btnRandomDrums = document.getElementById('btn-random-drums');
     const btnRandomBass = document.getElementById('btn-random-bass');
+    const btnRandomLead = document.getElementById('btn-random-lead');
     const btnRenderMix = document.getElementById('btn-render-mix');
+    const btnExportLoops = document.getElementById('btn-export-loops');
 
     // --- State ---
     let audioCtx = null;
@@ -160,6 +162,9 @@
 
             // Start meter animation loop
             startMeterLoop();
+
+            // Initialize visualizer tray analyser
+            initVizAnalyser();
         }
         if (audioCtx.state === 'suspended') {
             audioCtx.resume();
@@ -467,10 +472,174 @@
     }
 
     // --- RAF ---
+    // --- Visualizer Tray ---
+    const vizSpectrumCanvas = document.getElementById('viz-spectrum');
+    const vizOscCanvas = document.getElementById('viz-oscilloscope');
+    const vizMetersCanvas = document.getElementById('viz-meters');
+    let vizAnalyser = null; // separate analyser with larger FFT for spectrum
+    let vizTimeDomain = null;
+    let vizFreqData = null;
+    let vizPeakL = 0, vizPeakR = 0;
+    const vizDecay = 0.92;
+
+    function initVizAnalyser() {
+        if (vizAnalyser || !audioCtx) return;
+        vizAnalyser = audioCtx.createAnalyser();
+        vizAnalyser.fftSize = 2048;
+        vizAnalyser.smoothingTimeConstant = 0.8;
+        // Tap off the masterGain node (before limiter, same as master chain)
+        masterGain.connect(vizAnalyser);
+        vizFreqData = new Uint8Array(vizAnalyser.frequencyBinCount);
+        vizTimeDomain = new Uint8Array(vizAnalyser.fftSize);
+    }
+
+    function renderVizSpectrum() {
+        if (!vizSpectrumCanvas || !vizAnalyser) return;
+        const canvas = vizSpectrumCanvas;
+        const ctx2d = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx2d.scale(dpr, dpr);
+        const w = rect.width, h = rect.height;
+
+        ctx2d.clearRect(0, 0, w, h);
+        vizAnalyser.getByteFrequencyData(vizFreqData);
+
+        // Log-scale spectrum bars (pulse-style)
+        const binCount = vizAnalyser.frequencyBinCount;
+        const nyquist = audioCtx.sampleRate / 2;
+        const minFreq = 20, maxFreq = 20000;
+        const logMin = Math.log(minFreq), logMax = Math.log(maxFreq);
+        const barCount = Math.min(128, Math.floor(w / 2));
+
+        // Create gradient
+        const grad = ctx2d.createLinearGradient(0, h, 0, 0);
+        grad.addColorStop(0, 'rgba(59, 130, 246, 0.6)');
+        grad.addColorStop(0.4, 'rgba(139, 92, 246, 0.7)');
+        grad.addColorStop(0.7, 'rgba(236, 72, 153, 0.8)');
+        grad.addColorStop(1.0, 'rgba(239, 68, 68, 0.9)');
+
+        for (let i = 0; i < barCount; i++) {
+            // Log-spaced frequency bands
+            const f0 = Math.exp(logMin + (i / barCount) * (logMax - logMin));
+            const f1 = Math.exp(logMin + ((i + 1) / barCount) * (logMax - logMin));
+            const bin0 = Math.max(0, Math.floor(f0 / nyquist * binCount));
+            const bin1 = Math.min(binCount - 1, Math.floor(f1 / nyquist * binCount));
+
+            // Average bins in this band
+            let sum = 0, count = 0;
+            for (let b = bin0; b <= bin1; b++) { sum += vizFreqData[b]; count++; }
+            const val = count > 0 ? sum / count / 255 : 0;
+
+            const barW = w / barCount;
+            const barH = val * h * 0.95;
+            const x = i * barW;
+
+            ctx2d.fillStyle = grad;
+            ctx2d.fillRect(x, h - barH, barW - 1, barH);
+        }
+    }
+
+    function renderVizOscilloscope() {
+        if (!vizOscCanvas || !vizAnalyser) return;
+        const canvas = vizOscCanvas;
+        const ctx2d = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx2d.scale(dpr, dpr);
+        const w = rect.width, h = rect.height;
+
+        ctx2d.clearRect(0, 0, w, h);
+        vizAnalyser.getByteTimeDomainData(vizTimeDomain);
+
+        // Center line
+        ctx2d.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+        ctx2d.lineWidth = 1;
+        ctx2d.beginPath();
+        ctx2d.moveTo(0, h / 2);
+        ctx2d.lineTo(w, h / 2);
+        ctx2d.stroke();
+
+        // Waveform with glow
+        ctx2d.shadowColor = 'rgba(59, 130, 246, 0.5)';
+        ctx2d.shadowBlur = 6;
+        ctx2d.strokeStyle = 'rgba(139, 200, 255, 0.85)';
+        ctx2d.lineWidth = 1.5;
+        ctx2d.beginPath();
+
+        const bufLen = vizTimeDomain.length;
+        const sliceW = w / bufLen;
+        for (let i = 0; i < bufLen; i++) {
+            const v = vizTimeDomain[i] / 128.0;
+            const y = (v * h) / 2;
+            if (i === 0) ctx2d.moveTo(0, y);
+            else ctx2d.lineTo(i * sliceW, y);
+        }
+        ctx2d.stroke();
+        ctx2d.shadowBlur = 0;
+    }
+
+    function renderVizMeters() {
+        if (!vizMetersCanvas || !vizAnalyser) return;
+        const canvas = vizMetersCanvas;
+        const ctx2d = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx2d.scale(dpr, dpr);
+        const w = rect.width, h = rect.height;
+
+        ctx2d.clearRect(0, 0, w, h);
+
+        // Get peak from time domain
+        vizAnalyser.getByteTimeDomainData(vizTimeDomain);
+        let peakNow = 0;
+        for (let i = 0; i < vizTimeDomain.length; i++) {
+            const v = Math.abs(vizTimeDomain[i] - 128) / 128;
+            if (v > peakNow) peakNow = v;
+        }
+        vizPeakL = Math.max(peakNow, vizPeakL * vizDecay);
+        vizPeakR = Math.max(peakNow * (0.9 + Math.random() * 0.1), vizPeakR * vizDecay);
+
+        const barW = Math.floor(w / 3);
+        const gap = Math.floor((w - barW * 2) / 3);
+
+        // Draw L and R meter bars
+        [vizPeakL, vizPeakR].forEach((peak, ch) => {
+            const x = gap + ch * (barW + gap);
+            const barH = peak * h * 0.9;
+
+            // Gradient from green to yellow to red
+            const grad = ctx2d.createLinearGradient(0, h, 0, 0);
+            grad.addColorStop(0, '#22c55e');
+            grad.addColorStop(0.6, '#eab308');
+            grad.addColorStop(0.85, '#ef4444');
+            ctx2d.fillStyle = grad;
+            ctx2d.fillRect(x, h - barH - 2, barW, barH);
+
+            // Label
+            ctx2d.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx2d.font = '8px sans-serif';
+            ctx2d.textAlign = 'center';
+            ctx2d.fillText(ch === 0 ? 'L' : 'R', x + barW / 2, h - 1);
+        });
+    }
+
     function startRAF() {
         cancelRAF();
         function tick() {
             updatePlayheads();
+            // Visualizer rendering
+            if (isPlaying && vizAnalyser) {
+                renderVizSpectrum();
+                renderVizOscilloscope();
+                renderVizMeters();
+            }
             rafId = requestAnimationFrame(tick);
         }
         rafId = requestAnimationFrame(tick);
@@ -519,10 +688,9 @@
         const barCount = Math.max(1, Math.floor(w / 2.5));
         const samplesPerBar = Math.floor(samples / barCount);
 
-        ctx.fillStyle = isSelected
-            ? 'rgba(59, 130, 246, 0.55)'
-            : 'rgba(59, 130, 246, 0.25)';
-
+        // First pass: compute per-bar peaks and find the global max
+        const peaks = new Float32Array(barCount);
+        let globalPeak = 0;
         for (let i = 0; i < barCount; i++) {
             let max = 0;
             const start = i * samplesPerBar;
@@ -531,7 +699,20 @@
                 const abs = Math.abs(data[j]);
                 if (abs > max) max = abs;
             }
-            const barH = max * h * 0.85;
+            peaks[i] = max;
+            if (max > globalPeak) globalPeak = max;
+        }
+
+        // Scale factor: tallest bar fills 90% of height
+        const scale = globalPeak > 0.001 ? 0.9 / globalPeak : 1;
+
+        ctx.fillStyle = isSelected
+            ? 'rgba(59, 130, 246, 0.55)'
+            : 'rgba(59, 130, 246, 0.25)';
+
+        // Second pass: draw scaled bars
+        for (let i = 0; i < barCount; i++) {
+            const barH = peaks[i] * scale * h;
             const y = (h - barH) / 2;
             ctx.fillRect(i * (w / barCount), y, Math.max(1, w / barCount - 1), barH);
         }
@@ -1660,6 +1841,7 @@
 
             const variant = {
                 name,
+                filePath,
                 buffer: null,
                 el: cardEl,
                 sourceNode: null,
@@ -1715,7 +1897,7 @@
                 });
             }
 
-            loadVariantAudio(variant, `/outputs/${filePath}`, i === 0);
+            loadVariantAudio(variant, `/outputs/${filePath}`, i === 0, track);
         });
 
         rowEl.appendChild(variantsEl);
@@ -1727,7 +1909,7 @@
         return track;
     }
 
-    async function loadVariantAudio(variant, url, isSelected) {
+    async function loadVariantAudio(variant, url, isSelected, track) {
         try {
             const resp = await fetch(url);
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -1736,6 +1918,17 @@
             variant.buffer = await ctx.decodeAudioData(buf);
             variant.el.classList.remove('is-loading');
             drawWaveform(variant.el.querySelector('.card-waveform'), variant.buffer, isSelected);
+
+            // Auto-play: if this is variant 0 and it just loaded, start it
+            if (track && track.selectedVariant === 0 && variant === track.variants[0]) {
+                if (isPlaying && audioCtx) {
+                    const elapsed = audioCtx.currentTime - playStartCtxTime;
+                    playOffset = elapsed % globalDuration;
+                    startTrackSource(track);
+                } else if (!isPlaying && track._autoPlay) {
+                    playAll();
+                }
+            }
         } catch (err) {
             console.error(`Failed to load ${variant.name}:`, err);
             variant.el.classList.remove('is-loading');
@@ -1884,6 +2077,53 @@
         });
     }
 
+    // --- Random Lead Prompt Generator ---
+    const leadStyles = [
+        'synth lead', 'lead melody', 'lead riff', 'arpeggio lead', 'pluck lead',
+        'pad lead', 'supersaw lead', 'square wave lead', 'sawtooth lead',
+        'FM synth lead', 'bell lead', 'brass lead', 'string lead',
+        'vocal chop lead', 'glitch lead', 'chip tune lead', 'theremin lead',
+        'whistle melody', 'flute lead', 'electric guitar lead',
+        'organ lead', 'marimba lead', 'kalimba melody', 'steel drum lead',
+        'sitar lead', 'erhu melody', 'pizzicato lead', 'harp arpeggio',
+        'music box melody', 'glass lead', 'crystal lead', 'ethereal lead'
+    ];
+
+    const leadDescriptors = [
+        'soaring', 'bright', 'dreamy', 'euphoric', 'melancholic', 'energetic',
+        'ambient', 'sharp', 'shimmering', 'lush', 'epic', 'catchy',
+        'hypnotic', 'playful', 'dark', 'ethereal', 'punchy', 'airy',
+        'nostalgic', 'cinematic', 'pulsing', 'gliding'
+    ];
+
+    function generateRandomLeadPrompt() {
+        const style = leadStyles[Math.floor(Math.random() * leadStyles.length)];
+        const desc = leadDescriptors[Math.floor(Math.random() * leadDescriptors.length)];
+        const bpm = parseInt(bpmInput.value) || 120;
+
+        let keyPart = '';
+        if (currentKeyOrChord) {
+            if (currentKeyOrChord.type === 'key') {
+                keyPart = ` in ${currentKeyOrChord.value}`;
+            } else {
+                keyPart = ` playing ${currentKeyOrChord.value}`;
+            }
+        } else {
+            const key = keys[Math.floor(Math.random() * keys.length)];
+            currentKeyOrChord = { type: 'key', value: key };
+            keyPart = ` in ${key}`;
+        }
+
+        promptInput.value = `${desc} ${style}${keyPart} at ${bpm} bpm`;
+        promptInput.focus();
+    }
+
+    if (btnRandomLead) {
+        btnRandomLead.addEventListener('click', () => {
+            generateRandomLeadPrompt();
+        });
+    }
+
     // --- Generation ---
     btnGenerate.addEventListener('click', () => {
         const prompt = promptInput.value.trim();
@@ -1937,11 +2177,8 @@
             if (result.status === 'error') throw new Error(result.error || 'Failed');
 
             showStatus(`Done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
-            addTrackRow(result.files, prompt, result.track_num);
+            addTrackRow(result.files, prompt, result.track_num, true);
             clearInitAudio();
-
-            // Auto-play the new track
-            if (!isPlaying) playAll();
 
         } catch (err) {
             console.error('Generation error:', err);
@@ -1965,12 +2202,13 @@
         throw new Error('Timed out');
     }
 
-    function addTrackRow(files, prompt, trackNum) {
+    function addTrackRow(files, prompt, trackNum, autoPlay = false) {
         tracksContainer.classList.remove('empty');
         const empty = tracksContainer.querySelector('.grid-empty-state');
         if (empty) empty.remove();
 
         const track = createTrackRow(prompt, files, trackNum);
+        track._autoPlay = autoPlay;
         tracks.push(track);
         tracksContainer.appendChild(track.wrapper);
 
@@ -1981,14 +2219,10 @@
 
         btnPlayPause.disabled = false;
         if (btnRenderMix) btnRenderMix.disabled = false;
+        if (btnExportLoops) btnExportLoops.disabled = false;
         updateDurationLabel();
 
-        // If already playing, start this track's source in sync with current playhead
-        if (isPlaying && audioCtx) {
-            const elapsed = audioCtx.currentTime - playStartCtxTime;
-            playOffset = elapsed % globalDuration;
-            startTrackSource(track);
-        }
+        // If already playing, buffer will auto-start via loadVariantAudio callback
     }
 
     // --- Status ---
@@ -2576,6 +2810,58 @@
             } finally {
                 btnRenderMix.innerHTML = originalHTML;
                 btnRenderMix.disabled = false;
+            }
+        });
+    }
+
+    // --- Export Loops (zip all playing variants) ---
+    if (btnExportLoops) {
+        btnExportLoops.addEventListener('click', async () => {
+            const playing = tracks.filter(t => t.selectedVariant >= 0 && !t.muted);
+            if (playing.length === 0) return;
+
+            const originalHTML = btnExportLoops.innerHTML;
+            btnExportLoops.innerHTML = 'Zipping...';
+            btnExportLoops.disabled = true;
+
+            try {
+                // Load JSZip from CDN if not already loaded
+                if (typeof JSZip === 'undefined') {
+                    await new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                        s.onload = resolve;
+                        s.onerror = reject;
+                        document.head.appendChild(s);
+                    });
+                }
+
+                const zip = new JSZip();
+                const bpm = parseInt(bpmInput.value) || 120;
+
+                for (const t of playing) {
+                    const v = t.variants[t.selectedVariant];
+                    if (!v || !v.filePath) continue;
+                    const resp = await fetch(`/outputs/${v.filePath}`);
+                    if (!resp.ok) continue;
+                    const blob = await resp.blob();
+                    const filename = v.filePath.split('/').pop();
+                    zip.file(filename, blob);
+                }
+
+                const content = await zip.generateAsync({ type: 'blob' });
+                const url = URL.createObjectURL(content);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `loopmastersa_loops_${bpm}bpm.zip`;
+                link.click();
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                console.error('Export failed:', err);
+                alert('Export failed: ' + err.message);
+            } finally {
+                btnExportLoops.innerHTML = originalHTML;
+                btnExportLoops.disabled = false;
             }
         });
     }
