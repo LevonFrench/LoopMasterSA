@@ -212,3 +212,13 @@ To prevent rows from being squished and correct PyTorch shape mismatch during ba
 - **Render Mix Integration**: Updated the render mixdown logic in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to send the bounced WAV mixdown blob to `/api/convert` via a `FormData` POST request when MP3 or OGG is selected, then download the returned format.
 - **ZIP Loop Export Integration**: Configured individual loop zipping in `app.js` to trigger local-path server-side conversion on loop download, zipping correctly transcoded files dynamically.
 - **Conversion Quality Calibration**: Calibrated the conversion path for local server file paths in `/api/convert` to dynamically match high-quality variable bitrate configurations (`-q:a 4` for OGG Vorbis, `-q:a 2` for MP3) instead of hardcoding a low quality level.
+
+## Completed Work: Copy & Paste Track settings (Volume, Pan, Mute, Macro Knobs, and FX)
+-  **Mixer Button Elements**: Added Copy and Paste track buttons with clean Feather SVG icons to `.mixer-buttons` in the mixer channel strip template in `app.js`.
+-  **CSS Wrapping**: Added `flex-wrap: wrap;` to `.mixer-buttons` in `app.css` to accommodate the expanded row of control buttons.
+-  **Top Scope Variable Declaration**: Declared `macroKnobState` and `fxMacroState` at the top of the `createTrackRow` function scope in `app.js` to ensure the outer scope handles state bindings without temporal dead zone errors.
+-  **Fidelity Copy/Paste Functions**:
+    -   Copy: Serializes volume (`track.level`), pan (`track.pan`), mute (`track.muted`), all 7 front-facing macro knob values, and all detailed internal FX settings (filters, EQ gains, compressor/saturation drives, tape delays, spring reverb sizes, and active bypass states).
+    -   Paste: Restores settings on target tracks, updates visual controls, and triggers AudioNode update events immediately.
+-  **Lock State Compatibility**: Updated `updateTrackLockState` to disable the paste button on locked track rows, and configured the paste handler to ignore locked tracks.
+

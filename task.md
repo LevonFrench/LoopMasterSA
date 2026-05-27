@@ -202,3 +202,11 @@
   - [x] Add `/api/convert` endpoint using local FFmpeg to convert WAV outputs to MP3/OGG (with high-quality VBR)
   - [x] Update Render Mix click handler to convert the rendered mixdown WAV blob via convert API when MP3/OGG is selected
   - [x] Update Export Loops click handler to convert and package individual track loop WAVs to the chosen format inside the ZIP file
+- [x] Implement copy and paste for all track strip settings:
+  - [x] Declare `copiedTrackSettings` global variable in `app.js`
+  - [x] Insert Copy and Paste buttons styled as `.mixer-btn` inside `.mixer-buttons` in `createTrackRow` template
+  - [x] Declare `macroKnobState` and `fxMacroState` at the top of `createTrackRow` to avoid temporal dead zone issues
+  - [x] Enable wrapping (`flex-wrap: wrap;`) on `.mixer-buttons` in `app.css` to accommodate new buttons cleanly
+  - [x] Implement copy click handler to serialize volume, pan, mute, all 7 front-facing macro knobs, and all detailed FX drawer settings
+  - [x] Implement paste click handler to restore volume, pan, mute, front-facing knobs, and detailed FX settings with dynamic event propagation
+  - [x] Update `updateTrackLockState` to disable the paste track button when a track is locked

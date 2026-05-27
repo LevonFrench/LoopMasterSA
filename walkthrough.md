@@ -200,3 +200,11 @@ We implemented and verified individual variant locking and regeneration:
 3.  **Mixdown Multi-format Bouncing**: Clicked "Render Mix" with "MP3" and "OGG" selected and verified it downloads the full mixdown correctly converted to the selected extension.
 4.  **ZIP Export Format Consistency**: Clicked "Export Loops" with "MP3" or "OGG" selected and verified that the downloaded ZIP file contains all individual track loops correctly transcoded to the selected format.
 5.  **Local Loop Transcoding Quality Calibration**: Calibrated the conversion path for local server file paths (used when zipping individual track loops) to correctly apply high-quality VBR settings (quality level `4` for OGG Vorbis, `2` for MP3) dynamically instead of hardcoding quality level `2` for both.
+
+### 43. Verification of Copy/Paste Track settings (Volume, Pan, Mute, Macro Knobs, and FX)
+1.  **HTML Control Buttons**: Added "Copy Track Settings" and "Paste Track Settings" buttons inside the `.mixer-buttons` container on the channel strip mixer row, utilizing clean Feather SVG icons (Copy overlapping squares and Clipboard) to match the dark theme interface cleanly.
+2.  **Layout Wrap**: Enabled `flex-wrap: wrap;` on `.mixer-buttons` in `app.css` to accommodate the two new buttons gracefully without breaking the mixer strip layout.
+3.  **Fidelity Copy Routine**: Programmed the copy handler to capture the track's volume level, pan position, mute state, all 7 front-facing macro knobs (Filter, Reso, Tone, Delay Mix, Reverb Size, Reverb Mix, Sat/Comp), and all detailed FX drawer settings.
+4.  **Paste and Synchronization**: Wired the paste handler to restore mute states, volume slider values, pan knobs, the 7 front-facing knobs, and all detailed FX configurations on the target track, firing events to immediately synchronize underlying Web Audio API nodes.
+5.  **Lock State Compatibility**: Updated `updateTrackLockState` to visually disable the paste settings button when the track row is locked, and confirmed that pasting settings is blocked on locked rows.
+

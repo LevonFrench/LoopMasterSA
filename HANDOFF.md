@@ -40,6 +40,13 @@
 - Connected the "Render Mix" and "Export Loops" functions in `app.js` to trigger conversions automatically, downloading the mixdown or zipping individual loops in the selected format.
 - Calibrated local path transcoding in `/api/convert` to dynamically map `-q:a 4` for OGG and `-q:a 2` for MP3 to match the high-quality upload conversion settings.
 
+**Copy and Paste Track Settings (Volume, Pan, Mute, Macro Knobs, and FX)**:
+- Added "Copy Track Settings" and "Paste Track Settings" buttons directly onto the mixer channel strip next to each track row's other control buttons.
+- Implemented a clipboard in `app.js` that captures volume (`track.level`), pan (`track.pan`), mute (`track.muted`), the 7 front-facing macro knobs, and all detailed FX drawer settings.
+- Wired the paste routine to apply all parameters to target tracks, visually update the controls, and fire all node update events immediately.
+- Updated `updateTrackLockState` to disable the paste button on locked track rows, and configured the paste handler to ignore locked tracks.
+
+
 ---
 
 ### Key Repository Layout

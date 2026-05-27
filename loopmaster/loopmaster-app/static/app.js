@@ -48,6 +48,7 @@
     let meterLoopRunning = false;
     let meterRafId = null;
     let copiedFxSettings = null;
+    let copiedTrackSettings = null;
 
     // --- Init Audio & Prompt State ---
     let selectedInitAudio = null; // { trackId, variantIndex, filePath, name }
@@ -895,6 +896,8 @@
         const panKnobEl = track.el.querySelector('.pan-knob');
         if (levelSlider) levelSlider.disabled = isLocked;
         if (panKnobEl) panKnobEl.style.pointerEvents = isLocked ? 'none' : '';
+        const pasteTrackBtnEl = track.el.querySelector('.paste-track-btn');
+        if (pasteTrackBtnEl) pasteTrackBtnEl.disabled = isLocked;
 
         // Disable/enable FX drawer inputs
         const inputs = track.wrapper.querySelectorAll('.fx-drawer input');
@@ -916,6 +919,8 @@
     function createTrackRow(prompt, batchFiles, trackNum) {
         const ctx = ensureAudioCtx();
         const id = trackNum;
+        const macroKnobState = {};
+        const fxMacroState = {};
 
         // 1. Core Web Audio Nodes
         const gainNode = ctx.createGain();
@@ -1204,6 +1209,8 @@
                 <button class="mixer-btn solo-btn" title="Solo">S</button>
                 <button class="mixer-btn mute-btn" title="Mute">M</button>
                 <button class="mixer-btn fx-btn" title="Toggle FX Drawer">FX</button>
+                <button class="mixer-btn copy-track-btn" title="Copy Track Settings"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+                <button class="mixer-btn paste-track-btn" title="Paste Track Settings"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></button>
                 <button class="mixer-btn lock-btn" title="Lock Track"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></button>
                 <button class="mixer-btn regen-btn" title="Regenerate Unlocked"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
                 <button class="mixer-btn delete-btn" title="Delete Track"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
@@ -1329,6 +1336,8 @@
         const soloBtn = mixerEl.querySelector('.solo-btn');
         const muteBtn = mixerEl.querySelector('.mute-btn');
         const fxBtn = mixerEl.querySelector('.fx-btn');
+        const copyTrackBtn = mixerEl.querySelector('.copy-track-btn');
+        const pasteTrackBtn = mixerEl.querySelector('.paste-track-btn');
         const lockBtn = mixerEl.querySelector('.lock-btn');
         const deleteBtn = mixerEl.querySelector('.delete-btn');
         const levelSlider = mixerEl.querySelector('.level-slider');
@@ -1371,6 +1380,221 @@
             pushUndo('deleteTrack', { wrapperEl: track.wrapper, track, index: idx });
             deleteTrackRow(track);
         });
+
+        if (copyTrackBtn) {
+            copyTrackBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                copiedTrackSettings = {
+                    level: track.level,
+                    pan: track.pan,
+                    muted: track.muted,
+                    macroValues: {
+                        filter: macroKnobState.filter ? macroKnobState.filter.value : 50,
+                        reso: macroKnobState.reso ? macroKnobState.reso.value : 0,
+                        tone: macroKnobState.tone ? macroKnobState.tone.value : 50,
+                        dlyMix: macroKnobState.dlyMix ? macroKnobState.dlyMix.value : 0,
+                        revSize: macroKnobState.revSize ? macroKnobState.revSize.value : 0,
+                        revMix: macroKnobState.revMix ? macroKnobState.revMix.value : 0,
+                        satComp: macroKnobState.satComp ? macroKnobState.satComp.value : 0
+                    },
+                    fxSettings: {
+                        filtrEnabled: track.filtrEnabled,
+                        screamEnabled: track.screamEnabled,
+                        eqEnabled: track.eqEnabled,
+                        valentineEnabled: track.valentineEnabled,
+                        aelapseEnabled: track.aelapseEnabled,
+                        
+                        filtrType: fxDrawerEl.querySelector('.filtr-type').value,
+                        filtrCutoff: fxDrawerEl.querySelector('.filtr-cutoff').value,
+                        filtrReso: fxDrawerEl.querySelector('.filtr-reso').value,
+                        filtrMix: fxDrawerEl.querySelector('.filtr-mix').value,
+                        
+                        screamCutoff: fxDrawerEl.querySelector('.scream-cutoff').value,
+                        screamAmount: fxDrawerEl.querySelector('.scream-amount').value,
+                        screamMix: fxDrawerEl.querySelector('.scream-mix').value,
+                        
+                        eqGains: Array.from(fxDrawerEl.querySelectorAll('.eq-slider')).map(s => s.value),
+                        
+                        valentineDrive: fxDrawerEl.querySelector('.valentine-drive').value,
+                        valentineThresh: fxDrawerEl.querySelector('.valentine-thresh').value,
+                        valentineRatio: fxDrawerEl.querySelector('.valentine-ratio').value,
+                        valentineMix: fxDrawerEl.querySelector('.valentine-mix').value,
+                        
+                        aelapseSync: fxDrawerEl.querySelector('.aelapse-sync').value,
+                        aelapseFeedback: fxDrawerEl.querySelector('.aelapse-feedback').value,
+                        aelapseMix: fxDrawerEl.querySelector('.aelapse-mix').value,
+                        aelapseSize: fxDrawerEl.querySelector('.aelapse-size').value,
+                        aelapseReverbMix: fxDrawerEl.querySelector('.aelapse-reverb-mix').value,
+
+                        macros: {
+                            space: fxMacroState.space ? fxMacroState.space.value : 0,
+                            drive: fxMacroState.drive ? fxMacroState.drive.value : 0,
+                            tone: fxMacroState.tone ? fxMacroState.tone.value : 50,
+                            filter: fxMacroState.filter ? fxMacroState.filter.value : 50,
+                            reso: fxMacroState.reso ? fxMacroState.reso.value : 0,
+                            delay: fxMacroState.delay ? fxMacroState.delay.value : 0,
+                            feedback: fxMacroState.feedback ? fxMacroState.feedback.value : 0,
+                            crush: fxMacroState.crush ? fxMacroState.crush.value : 0,
+                        }
+                    }
+                };
+
+                const originalColor = copyTrackBtn.style.color;
+                copyTrackBtn.style.color = '#10b981'; // Green accent
+                setTimeout(() => { copyTrackBtn.style.color = originalColor; }, 1000);
+            });
+        }
+
+        if (pasteTrackBtn) {
+            pasteTrackBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (track.locked) return;
+                if (!copiedTrackSettings) {
+                    alert('No track settings copied yet!');
+                    return;
+                }
+                const settings = copiedTrackSettings;
+
+                // Mute
+                if (track.muted !== settings.muted) {
+                    track.muted = settings.muted;
+                    muteBtn.classList.toggle('is-on', track.muted);
+                }
+
+                // Volume
+                track.level = settings.level;
+                levelSlider.value = Math.round(settings.level * 100);
+                levelValue.textContent = levelSlider.value;
+                updateMixerState();
+
+                // Pan
+                const panVal = Math.round(settings.pan * 100);
+                updatePanKnob(panVal);
+
+                // Front-facing macro knobs
+                for (const param in settings.macroValues) {
+                    if (macroKnobState[param]) {
+                        macroKnobState[param].value = settings.macroValues[param];
+                        applyMacroKnob(param, settings.macroValues[param]);
+                    }
+                }
+
+                // Detailed FX
+                const fx = settings.fxSettings;
+                track.filtrEnabled = fx.filtrEnabled;
+                const filtrToggleBtn = fxDrawerEl.querySelector('.filtr-toggle');
+                if (filtrToggleBtn) {
+                    filtrToggleBtn.textContent = track.filtrEnabled ? 'On' : 'Off';
+                    filtrToggleBtn.classList.toggle('is-off', !track.filtrEnabled);
+                }
+                const filtrSection = fxDrawerEl.querySelector('.filtr-section');
+                if (filtrSection) {
+                    filtrSection.classList.toggle('is-bypassed', !track.filtrEnabled);
+                }
+                updateFiltrBypass(track);
+
+                track.eqEnabled = fx.eqEnabled;
+                const eqToggleBtn = fxDrawerEl.querySelector('.eq-toggle');
+                if (eqToggleBtn) {
+                    eqToggleBtn.textContent = track.eqEnabled ? 'On' : 'Bypass';
+                    eqToggleBtn.classList.toggle('is-off', !track.eqEnabled);
+                }
+                const eqSection = fxDrawerEl.querySelector('.eq-section');
+                if (eqSection) {
+                    eqSection.classList.toggle('is-bypassed', !track.eqEnabled);
+                }
+                updateEqBypass(track);
+
+                track.screamEnabled = fx.screamEnabled;
+                const screamToggleBtn = fxDrawerEl.querySelector('.scream-toggle');
+                if (screamToggleBtn) {
+                    screamToggleBtn.textContent = track.screamEnabled ? 'On' : 'Off';
+                    screamToggleBtn.classList.toggle('is-off', !track.screamEnabled);
+                }
+                const screamSection = fxDrawerEl.querySelector('.scream-section');
+                if (screamSection) {
+                    screamSection.classList.toggle('is-bypassed', !track.screamEnabled);
+                }
+                updateScreamBypass(track);
+
+                track.valentineEnabled = fx.valentineEnabled;
+                const valToggleBtn = fxDrawerEl.querySelector('.valentine-toggle');
+                if (valToggleBtn) {
+                    valToggleBtn.textContent = track.valentineEnabled ? 'On' : 'Bypass';
+                    valToggleBtn.classList.toggle('is-off', !track.valentineEnabled);
+                }
+                const valSection = fxDrawerEl.querySelector('.valentine-section');
+                if (valSection) {
+                    valSection.classList.toggle('is-bypassed', !track.valentineEnabled);
+                }
+                updateValentineBypass(track);
+
+                track.aelapseEnabled = fx.aelapseEnabled;
+                const aeToggleBtn = fxDrawerEl.querySelector('.aelapse-toggle');
+                if (aeToggleBtn) {
+                    aeToggleBtn.textContent = track.aelapseEnabled ? 'On' : 'Bypass';
+                    aeToggleBtn.classList.toggle('is-off', !track.aelapseEnabled);
+                }
+                const aeSection = fxDrawerEl.querySelector('.aelapse-section');
+                if (aeSection) {
+                    aeSection.classList.toggle('is-bypassed', !track.aelapseEnabled);
+                }
+                updateAelapseBypass(track);
+
+                const typeSelect = fxDrawerEl.querySelector('.filtr-type');
+                if (typeSelect) {
+                    typeSelect.value = fx.filtrType;
+                    typeSelect.dispatchEvent(new Event('change'));
+                }
+
+                const sliders = {
+                    '.filtr-cutoff': fx.filtrCutoff,
+                    '.filtr-reso': fx.filtrReso,
+                    '.filtr-mix': fx.filtrMix,
+                    '.scream-cutoff': fx.screamCutoff,
+                    '.scream-amount': fx.screamAmount,
+                    '.scream-mix': fx.screamMix,
+                    '.valentine-drive': fx.valentineDrive,
+                    '.valentine-thresh': fx.valentineThresh,
+                    '.valentine-ratio': fx.valentineRatio,
+                    '.valentine-mix': fx.valentineMix,
+                    '.aelapse-sync': fx.aelapseSync,
+                    '.aelapse-feedback': fx.aelapseFeedback,
+                    '.aelapse-mix': fx.aelapseMix,
+                    '.aelapse-size': fx.aelapseSize,
+                    '.aelapse-reverb-mix': fx.aelapseReverbMix,
+                };
+
+                for (const selector in sliders) {
+                    const el = fxDrawerEl.querySelector(selector);
+                    if (el) {
+                        el.value = sliders[selector];
+                        el.dispatchEvent(new Event('input'));
+                    }
+                }
+
+                const eqSliders = fxDrawerEl.querySelectorAll('.eq-slider');
+                eqSliders.forEach((slider, b) => {
+                    if (fx.eqGains[b] !== undefined) {
+                        slider.value = fx.eqGains[b];
+                        slider.dispatchEvent(new Event('input'));
+                    }
+                });
+
+                if (fx.macros) {
+                    for (const key in fx.macros) {
+                        if (fxMacroState[key]) {
+                            fxMacroState[key].value = fx.macros[key];
+                            applyFxMacro(key, fx.macros[key]);
+                        }
+                    }
+                }
+
+                const originalColor = pasteTrackBtn.style.color;
+                pasteTrackBtn.style.color = '#10b981'; // Green accent
+                setTimeout(() => { pasteTrackBtn.style.color = originalColor; }, 1000);
+            });
+        }
 
         const regenBtn = mixerEl.querySelector('.regen-btn');
         if (regenBtn) {
@@ -1518,7 +1742,7 @@
 
         // 9.5. Wire mixer macro knobs
         const macroKnobs = mixerEl.querySelectorAll('.macro-knob');
-        const macroKnobState = {}; // { param: { value: 0, dragging: false, startY, startVal } }
+        // macroKnobState is declared at the top of createTrackRow
 
         function applyMacroKnob(param, value) {
             const knobEl = mixerEl.querySelector(`.macro-knob[data-param="${param}"]`);
@@ -1872,7 +2096,7 @@
 
         // 12. Wire FX Drawer Macro Knobs (Space, Drive, Tone)
         const fxMacroKnobs = fxDrawerEl.querySelectorAll('.fx-macro-knob');
-        const fxMacroState = {};
+        // fxMacroState is declared at the top of createTrackRow
 
         function applyFxMacro(macroName, value) {
             const knobEl = fxDrawerEl.querySelector(`.fx-macro-knob[data-macro="${macroName}"]`);
