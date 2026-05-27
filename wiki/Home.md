@@ -97,11 +97,15 @@ A real-time audio visualizer panel sits between the transport bar and the track 
 ### Seek Toggle
 When **Seek** is ON (default), clicking on a waveform card jumps the playhead to that position. When OFF, clicks only select the variant without seeking.
 
-### Queue Toggle
-When **Queue** is ON, clicking a different variant in a track row queues it with a pulsing amber dashed border. The switch happens automatically at the next loop boundary. When OFF (default), variant switches are immediate.
+### Card Click Zones
+Each variant card has two click zones:
+*   **Left half** — Queues the variant switch at the next loop boundary (pulsing amber dashed border). On hover, shows `◀ queue`.
+*   **Right half** — Instantly switches to the variant. On hover, shows `instant ▶`.
 
-### BPM Drag
-Click-and-drag on the BPM input for rapid adjustment. Double-click for type-in mode.
+### Number Input Interaction
+All number inputs (BPM, Seed, CFG, Steps) support two interaction modes:
+*   **Click** — Focuses the input for keyboard typing.
+*   **Drag ↕** — After 3px of vertical mouse movement, enters drag mode for rapid value adjustment.
 
 ### Reverse
 Reverses a clip's audio data in-place. Only restarts the specific track source — does not interrupt other tracks.

@@ -184,89 +184,59 @@
     });
     updateDurationLabel();
 
-    // BPM click-and-drag (always drags; double-click to type)
-    let bpmDragging = false;
-    let bpmStartY = 0;
-    let bpmStartVal = 0;
-    let bpmTyping = false;
-
-    bpmInput.addEventListener('mousedown', (e) => {
-        if (bpmTyping) return; // already in type mode
-        e.preventDefault();
-        bpmInput.blur();
-        bpmDragging = true;
-        bpmStartY = e.clientY;
-        bpmStartVal = parseInt(bpmInput.value) || 120;
-        document.body.style.cursor = 'ns-resize';
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!bpmDragging) return;
-        const delta = bpmStartY - e.clientY;
-        const newVal = Math.max(40, Math.min(300, bpmStartVal + delta));
-        bpmInput.value = newVal;
-        bpmInput.dispatchEvent(new Event('input'));
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (bpmDragging) {
-            bpmDragging = false;
-            document.body.style.cursor = '';
-        }
-    });
-
-    bpmInput.addEventListener('dblclick', () => {
-        bpmTyping = true;
-        bpmInput.focus();
-        bpmInput.select();
-    });
-
-    bpmInput.addEventListener('blur', () => {
-        bpmTyping = false;
-    });
-
-    bpmInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { bpmInput.blur(); }
-    });
-
-    // --- Drag-to-change for Seed, CFG, Steps ---
+    // --- Unified drag-or-type for number inputs ---
+    // Single click = focus for typing. Drag 3px+ = drag mode.
     function makeDraggableInput(inputEl, { min, max, step, sensitivity }) {
         if (!inputEl) return;
-        let dragging = false, startY = 0, startVal = 0, typing = false;
+        const DEADZONE = 3;
+        let pending = false, activated = false, startY = 0, startVal = 0;
+
+        inputEl.style.cursor = 'ns-resize';
 
         inputEl.addEventListener('mousedown', (e) => {
-            if (typing) return;
+            // If already focused (typing), don't interfere
+            if (document.activeElement === inputEl) return;
             e.preventDefault();
-            inputEl.blur();
-            dragging = true;
+            pending = true;
+            activated = false;
             startY = e.clientY;
             startVal = parseFloat(inputEl.value) || 0;
-            document.body.style.cursor = 'ns-resize';
         });
 
         document.addEventListener('mousemove', (e) => {
-            if (!dragging) return;
-            const delta = (startY - e.clientY) * (sensitivity || 1);
-            let newVal = startVal + delta * step;
-            newVal = Math.max(min, Math.min(max, Math.round(newVal / step) * step));
-            inputEl.value = step < 1 ? newVal.toFixed(1) : newVal;
-            inputEl.dispatchEvent(new Event('input'));
+            if (!pending) return;
+            const dy = Math.abs(e.clientY - startY);
+            if (!activated && dy >= DEADZONE) {
+                activated = true;
+                inputEl.blur();
+                document.body.style.cursor = 'ns-resize';
+            }
+            if (activated) {
+                const delta = (startY - e.clientY) * (sensitivity || 1);
+                let newVal = startVal + delta * step;
+                newVal = Math.max(min, Math.min(max, Math.round(newVal / step) * step));
+                inputEl.value = step < 1 ? newVal.toFixed(1) : newVal;
+                inputEl.dispatchEvent(new Event('input'));
+            }
         });
 
         document.addEventListener('mouseup', () => {
-            if (dragging) { dragging = false; document.body.style.cursor = ''; }
+            if (pending) {
+                if (!activated) {
+                    // Was a click, not a drag — focus for typing
+                    inputEl.focus();
+                    inputEl.select();
+                }
+                pending = false;
+                activated = false;
+                document.body.style.cursor = '';
+            }
         });
 
-        inputEl.addEventListener('dblclick', () => {
-            typing = true;
-            inputEl.focus();
-            inputEl.select();
-        });
-
-        inputEl.addEventListener('blur', () => { typing = false; });
         inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') inputEl.blur(); });
     }
 
+    makeDraggableInput(bpmInput, { min: 40, max: 300, step: 1, sensitivity: 1 });
     makeDraggableInput(document.getElementById('seed-input'), { min: -1, max: 999999, step: 1, sensitivity: 1 });
     makeDraggableInput(document.getElementById('cfg-input'), { min: 0.5, max: 15, step: 0.5, sensitivity: 0.1 });
     makeDraggableInput(document.getElementById('steps-input'), { min: 1, max: 100, step: 1, sensitivity: 1 });

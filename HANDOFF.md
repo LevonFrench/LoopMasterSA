@@ -4,31 +4,31 @@
 
 ### What Was Done
 
-**App Rename** → LoopMaster SA3
+**Number Input Interaction** — All number inputs (BPM, Seed, CFG, Steps) use unified deadzone logic: single click = focus for typing, drag ↕ 3px+ = drag mode. Cursor shows `ns-resize`. No double-click required.
 
-**SA3 Generation Controls** — Seed (-1=random, 0-999999), CFG (0.5-15), Steps (1-100). All draggable like BPM (drag ↕, double-click to type). Wired through API to `model.generate()`.
+**8 FX Macro Knobs** — Space, Drive, Tone + Filter (bipolar LP/HP), Reso, Delay, Feedback, Crush. Each dispatches to its FX sliders.
 
-**FX Text Overflow Fix** — Label width 36→48px, font 0.55→0.5rem, value span 40→36px. FX sections 220→200px min. All text truncates cleanly.
+**Card Click Zones** — Left half = queue at loop boundary (pulsing amber). Right half = instant switch. Hover shows `◀ queue` / `instant ▶` labels. Queue toggle removed from transport.
 
-**8 FX Macro Knobs** — Space, Drive, Tone (original) + Filter (bipolar LP/HP), Reso, Delay, Feedback, Crush. Each dispatches to the relevant FX sliders.
+**Controls Guide** — Empty state shows visual diagram: card zones, seek toggle, input interaction tips.
 
-**Card Click Zones** — Left half of card = queue variant switch for next loop boundary (pulsing amber dashed border). Right half = instant switch. Subtle vertical center divider line. Removed Queue toggle from transport bar.
+**Delay Default** → 1/8th note (was dotted 8th).
 
-**Volume Slider** — Track height 4→6px, thumb 12→14px.
+**FX Text Overflow** — Labels 48px wide, font 0.5rem, values 36px. All text truncates.
 
-**Tooltips** — All generation controls have detailed mouseover info explaining what each parameter does and how to interact.
+**Volume Slider** — 6px track, 14px thumb.
 
-**Seek Toggle** — ON by default. Click waveform to seek playhead. Turn OFF to disable.
+**SA3 Params** — Seed (-1=random), CFG (0.5–15), Steps (1–100). Tooltips on all labels and inputs.
 
-**Reverse Fix** — Only restarts the specific track source, not all playback.
+**Seek Toggle** — Click waveform to jump playhead (on) or just select (off).
 
-**Export Loops** — Zips all selected variant WAVs via JSZip.
+**Reverse Fix** — Only restarts specific track source, not all playback.
 
-**Lead/Bass Buttons** — Key/BPM aware prompt generators.
+**Export Loops** — Zips selected variant WAVs via JSZip.
 
-**Visualizer Tray** — Spectrum analyzer, oscilloscope, peak meters.
+**Lead/Bass/Drums/In-Key Buttons** — Key/BPM aware prompt generators.
 
-**Transport Panel** — Wrapped in styled box matching other panels.
+**Visualizer Tray** — Spectrum, oscilloscope, peak meters.
 
 ---
 
@@ -38,27 +38,31 @@
 
 ---
 
+### Key Implementation Details
+
+**Deadzone Drag Pattern** (`makeDraggableInput`):
+```
+mousedown → pending=true, activated=false
+mousemove → if |dy| >= 3px: activated=true, blur, start drag
+mouseup → if !activated: focus+select (click). Reset.
+```
+
+**Card Click Zone Logic**:
+```
+clickX < cardWidth/2 → queue (left half)
+else → selectVariant (right half, instant)
+```
+
+**Audio Signal Chain**:
+```
+Source → EQ → Valentine → Ælapse → Compressor → Panner → Gain → Analyser → Master → Limiter(-11dB) → Makeup(+11dB) → Dest
+```
+
 ### Key Files
 
-| File | Changes |
-|------|---------|
-| `static/index.html` | SA3 inputs with tooltips, seek toggle, card zones, 8 macros |
-| `static/app.js` | Draggable inputs, card left/right zones, 8 macro handlers, reverse fix, queue at loop boundary |
-| `static/app.css` | Thicker slider, card zone divider, FX text overflow fix, macro layout for 8 knobs |
-| `app_server.py` | Seed param plumbed through API |
-
-### Audio Signal Chain
-```
-TrackSource → Luftikus EQ → Valentine → Ælapse → Compressor(-6dB,5:1) → Panner → Gain → Analyser → MasterGain → Limiter(-11dB) → Makeup(+11dB) → Analyser → Dest
-                                                                                                          ↘ VizAnalyser (FFT 2048)
-```
-
-### Card Click Behavior
-```
-┌─────────────────┬─────────────────┐
-│   LEFT HALF     │   RIGHT HALF    │
-│   Queue at      │   Instant       │
-│   loop start    │   switch        │
-│   (amber dash)  │                 │
-└─────────────────┴─────────────────┘
-```
+| File | Role |
+|------|------|
+| `static/app.js` | All frontend logic, audio routing, drag handlers, macros |
+| `static/app.css` | Styling, card zones, guides, FX layout |
+| `static/index.html` | Layout, controls, tooltips, empty state guide |
+| `app_server.py` | Flask API, seed/cfg/steps plumbing |
