@@ -1,49 +1,53 @@
 # HANDOFF — LoopMaster SA3
 
-## Session Summary (2026-05-27 morning)
+## Session Summary (2026-05-27)
 
 ### What Was Done This Session
 
-**Workspace Reorganization & Cleanup**:
-- Moved all custom LoopMaster code and documentation into a dedicated `loopmaster/` directory to separate it from the core `stable-audio-3` generator library.
-- Completely removed unused reference and helper repositories (`pulse-visualizer`, `audio-file-mcp-app`, and `audio-grid-mcp-app`) to keep the project clean and minimalist.
-- Deleted the empty root `outputs/` folder.
+**Complete Documentation Rewrite**:
+Rewrote all three documentation files from scratch. The previous docs were dry specification dumps — LaTeX formulas, raw Web Audio node names, backend tensor implementation details mixed into user-facing content. No clear separation between user docs and developer docs.
 
-**Model Localization for Offline Use**:
-- Created `stable-audio-3/scripts/localize_models.py` which pulls model configurations and safetensors from the Hugging Face Hub (or local cache) and copies them into local directories under `stable-audio-3/models/`.
-- Localized checkpoints for both:
-  - `stable-audio-3-medium` (1.4B parameters, high quality, GPU)
-  - `stable-audio-3-small-music` (433M parameters, lightweight, CPU/GPU)
-- The application automatically bypasses Hugging Face API token requests and online verification checks when running locally if these files are present.
+**New documentation structure**:
 
-**Interactive Batch Launcher Menu**:
-- Re-wrote `run_server.bat` in the workspace root to prompt the user with an interactive model selection menu.
-- Defaults to option `[1] Medium Model` on pressing Enter, but allows selection of `[2] Small Music Model` or `[3] Small SFX Model` to customize hardware load.
+| File | Purpose | Key change |
+|------|---------|------------|
+| `README.md` | Front door / elevator pitch | Cut from 92 lines of spec to 60 lines of product + setup. No duplicated content. |
+| `wiki/User-Guide.md` | Feature walkthrough & workflows | Removed all backend internals (WAV ACIDization, prompt preprocessing rules, tensor operations). Every section now answers "what does this do and how do I use it." |
+| `wiki/Home.md` | Architecture & dev reference | Kept technical depth but made it scannable — clean tables, mermaid diagram, organized by subsystem. Removed LaTeX and prose padding. |
 
-**Scaffolding & Reference Credits**:
-- Added dedicated credits to `README.md` and `Home.md` acknowledging the role of the deleted projects (`pulse-visualizer` for UI visual design reference, `audio-file-mcp-app`/`audio-grid-mcp-app` for initial coding scaffolding).
+**Design principles applied**:
+- User Guide has zero implementation details — it's for someone using the UI
+- Architecture wiki is for devs modifying the codebase — API contracts, signal chain, DSP specs
+- README links to both instead of duplicating either
+- Every section is scannable (tables > paragraphs, consistent formatting)
 
 ---
 
-### Key Reorganized Repository Layout
+### Key Repository Layout
 
 ```
-j:\projects\sa3
-├── stable-audio-3/          # Stable Audio 3 core generator library & virtualenv
-│   ├── models/              # Localized checkpoints for offline bypass
-│   │   ├── stable-audio-3-medium/
-│   │   └── stable-audio-3-small-music/
-│   ├── pyproject.toml       # Backend dependencies
-│   └── stable_audio_3/      # Core Stable Audio 3 model package
-├── loopmaster/              # Dedicated LoopMaster subfolder
-│   ├── loopmaster-app/      # Custom Web App (Flask backend + JS frontend)
-│   └── wiki/                # LoopMaster project documentation
-├── run_server.bat           # Launcher script (interactive model selector menu)
-└── HANDOFF.md, task.md, walkthrough.md, implementation.md, AGENTS.md # Workspace tracking
+sa3/
+├── stable-audio-3/           # SA3 model library, virtualenv, localized weights
+│   ├── models/               # Localized checkpoints (medium, small-music)
+│   └── stable_audio_3/       # Core model package
+├── loopmaster/
+│   ├── loopmaster-app/       # Flask backend + JS frontend
+│   │   ├── app_server.py     # API server & generation worker
+│   │   └── static/           # Dashboard (index.html, app.js, app.css)
+│   └── wiki/                 # Documentation
+│       ├── Home.md           # Architecture & technical reference
+│       └── User-Guide.md     # Feature walkthrough & workflows
+├── run_server.bat            # Interactive launcher (model selector menu)
+└── AGENTS.md                 # Agent operating rules
 ```
 
 ---
+
+### System State
+- Server runs on `http://localhost:7861`
+- All features functional: generation, remixing (variation/response/inpaint/continuation), FX chain, variant locking/regen, render/export
+- No outstanding bugs from previous sessions
 
 ### Next Steps
-
-- **Run the launcher**: Double-click `run_server.bat` at the root, press Enter to default to the `medium` model (or enter `2` for `small-music`), and load the dashboard in your browser!
+- Launch with `run_server.bat` and verify the app works
+- Read through the new docs and flag anything that feels off

@@ -362,7 +362,7 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
         
     return final_prompt
 
-def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cfg_scale, track_num, duration_padding_sec=6.0, init_audio_path=None, init_noise_level=0.6, seed=-1, remix_mode="variation", inpaint_start=0.0, inpaint_end=0.0, continue_start=0.0):
+def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cfg_scale, track_num, duration_padding_sec=6.0, init_audio_path=None, init_noise_level=0.6, seed=-1, remix_mode="variation", inpaint_start=0.0, inpaint_end=0.0, continue_start=0.0, invert_timing=False):
     global model
     try:
         with jobs_lock:
@@ -386,6 +386,12 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
             if os.path.exists(full_init_path) and os.path.isfile(full_init_path):
                 try:
                     init_waveform, init_sr = torchaudio.load(full_init_path)
+                    
+                    # Reverse audio waveform if invert_timing is requested
+                    if invert_timing:
+                        init_waveform = torch.flip(init_waveform, dims=[-1])
+                        print(f"[Seed Audio] Inverted timing/progression (reversed waveform along time dimension) for {full_init_path}.")
+                        
                     if model.model_half:
                         init_waveform = init_waveform.half()
                     init_waveform = init_waveform.to(model.device)
@@ -416,11 +422,17 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
                         gen_kwargs["init_audio"] = seed_audio
                         gen_kwargs["init_noise_level"] = init_noise_level
                         print(f"[Generation] Running variation with noise level {init_noise_level}.")
-                    elif remix_mode == "inpaint":
+                    elif remix_mode == "inpaint" or remix_mode == "response":
                         gen_kwargs["inpaint_audio"] = seed_audio
-                        gen_kwargs["inpaint_mask_start_seconds"] = inpaint_start
-                        gen_kwargs["inpaint_mask_end_seconds"] = inpaint_end
-                        print(f"[Generation] Running inpaint with range {inpaint_start}s to {inpaint_end}s.")
+                        if remix_mode == "response":
+                            # Call & Response: keep first half (call), regenerate second half (response)
+                            gen_kwargs["inpaint_mask_start_seconds"] = duration / 2.0
+                            gen_kwargs["inpaint_mask_end_seconds"] = duration
+                            print(f"[Generation] Running Call & Response. Masking {duration / 2.0}s to {duration}s.")
+                        else:
+                            gen_kwargs["inpaint_mask_start_seconds"] = inpaint_start
+                            gen_kwargs["inpaint_mask_end_seconds"] = inpaint_end
+                            print(f"[Generation] Running inpaint with range {inpaint_start}s to {inpaint_end}s.")
                     elif remix_mode == "continuation":
                         gen_kwargs["inpaint_audio"] = seed_audio
                         gen_kwargs["inpaint_mask_start_seconds"] = continue_start
@@ -458,6 +470,114 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
             
             # Retain relative path format for API response: session_YYYYMMDD_HHMMSS/track_X/filename.wav
             files.append(f"{SESSION_DIR_NAME}/{track_dir_name}/{filename}")
+
+        with jobs_lock:
+            jobs[job_id].update({
+                "status": "done",
+                "progress": None,
+                "elapsed": elapsed,
+                "files": files,
+                "prompt": final_prompt,
+                "track_num": track_num,
+            })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        with jobs_lock:
+            jobs[job_id]["status"] = "error"
+            jobs[job_id]["error"] = str(e)
+
+def _run_regeneration(job_id, prompt, bpm, duration, loop, steps, cfg_scale, track_num, unlocked_indices, duration_padding_sec=6.0, seed=-1):
+    global model
+    try:
+        with jobs_lock:
+            jobs[job_id]["status"] = "generating"
+            jobs[job_id]["progress"] = "Preparing prompt…"
+
+        final_prompt = enhance_prompt(prompt, bpm, duration, loop)
+        num_variants = len(unlocked_indices)
+
+        with jobs_lock:
+            jobs[job_id]["progress"] = f"Regenerating {num_variants} variants…"
+
+        start_gen = time.time()
+
+        with model_lock:
+            with torch.inference_mode():
+                gen_duration = duration + 2.0
+                gen_kwargs = {
+                    "prompt": final_prompt,
+                    "negative_prompt": "poor quality, bad quality, low quality, noise, distortion, artifact",
+                    "duration": gen_duration,
+                    "steps": steps,
+                    "cfg_scale": cfg_scale,
+                    "batch_size": num_variants,
+                    "seed": seed,
+                    "duration_padding_sec": duration_padding_sec,
+                }
+                
+                audio = model.generate(**gen_kwargs)
+
+        elapsed = time.time() - start_gen
+
+        # Trim to exact loop duration
+        sample_rate = model.model.sample_rate
+        exact_samples = int(duration * sample_rate)
+        audio = audio[:, :, :exact_samples]
+
+        # Target directory inside session
+        track_dir_name = f"track_{track_num}"
+        out_dir = os.path.join(SESSION_DIR, track_dir_name)
+        os.makedirs(out_dir, exist_ok=True)
+
+        prompt_slug = slugify_prompt(prompt, 16)
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+
+        # Scan out_dir for all files matching this track
+        existing_files = {}
+        for f in os.listdir(out_dir):
+            if f.endswith(".wav"):
+                for var_idx in range(1, 5):
+                    if f"_var_{var_idx}_" in f:
+                        existing_files[var_idx - 1] = f
+                        break
+
+        # Generate and save new files for unlocked_indices
+        for gen_i, target_idx in enumerate(unlocked_indices):
+            # Delete old file if exists
+            old_f = existing_files.get(target_idx)
+            if old_f:
+                old_f_path = os.path.join(out_dir, old_f)
+                if os.path.exists(old_f_path):
+                    try:
+                        os.remove(old_f_path)
+                    except Exception as del_err:
+                        print(f"[Regen] Error deleting old file {old_f_path}: {del_err}")
+
+            # Save new file
+            if prompt_slug:
+                new_filename = f"track_{track_num}_{prompt_slug}_var_{target_idx + 1}_{timestamp}.wav"
+            else:
+                new_filename = f"track_{track_num}_var_{target_idx + 1}_{timestamp}.wav"
+            
+            file_path = os.path.join(out_dir, new_filename)
+            torchaudio.save(file_path, audio[gen_i].cpu(), sample_rate)
+            
+            # Embed ACIDized loop and beat grid metadata
+            acidize_wav_file(file_path, bpm, duration, loop, prompt)
+            
+            # Update existing_files map with new filename
+            existing_files[target_idx] = new_filename
+
+        # Compile final files list in sorted order of variant index (0 to 3)
+        files = []
+        for i in range(4):
+            f_name = existing_files.get(i)
+            if f_name:
+                files.append(f"{SESSION_DIR_NAME}/{track_dir_name}/{f_name}")
+            else:
+                files.append("")
 
         with jobs_lock:
             jobs[job_id].update({
@@ -530,6 +650,7 @@ def api_generate():
     inpaint_start = float(data.get("inpaint_start", 0.0))
     inpaint_end = float(data.get("inpaint_end", 0.0))
     continue_start = float(data.get("continue_start", 0.0))
+    invert_timing = bool(data.get("invert_timing", False))
 
     # Determine track number sequentially
     with jobs_lock:
@@ -561,9 +682,50 @@ def api_generate():
             "remix_mode": remix_mode,
             "inpaint_start": inpaint_start,
             "inpaint_end": inpaint_end,
-            "continue_start": continue_start
+            "continue_start": continue_start,
+            "invert_timing": invert_timing
         },
         daemon=True,
+    ).start()
+
+    return jsonify({"job_id": job_id})
+
+@app.post("/api/regenerate")
+def api_regenerate():
+    data = request.json or {}
+    track_num = int(data.get("track_num"))
+    prompt = data.get("prompt", "").strip()
+    if not prompt:
+        return jsonify({"error": "Prompt is required"}), 400
+
+    bpm = max(40, min(300, int(data.get("bpm", 120))))
+    loop = bool(data.get("loop", True))
+    steps = int(data.get("steps", 8))
+    cfg_scale = float(data.get("cfg_scale", 1.0))
+    seed = int(data.get("seed", -1))
+    duration_padding_sec = float(data.get("duration_padding_sec", 6.0))
+    duration = 960.0 / bpm
+    
+    unlocked_indices = data.get("unlocked_indices", [])
+    if not unlocked_indices:
+        return jsonify({"error": "No unlocked indices provided"}), 400
+
+    job_id = uuid.uuid4().hex[:12]
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "queued",
+            "progress": None,
+            "error": None,
+            "elapsed": None,
+            "files": None,
+            "prompt": prompt,
+            "track_num": track_num,
+        }
+
+    threading.Thread(
+        target=_run_regeneration,
+        args=(job_id, prompt, bpm, duration, loop, steps, cfg_scale, track_num, unlocked_indices, duration_padding_sec, seed),
+        daemon=True
     ).start()
 
     return jsonify({"job_id": job_id})

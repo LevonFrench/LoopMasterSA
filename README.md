@@ -1,91 +1,79 @@
-# LoopMasterSA
+# LoopMaster SA3
 
-**LoopMasterSA** is a premium, real-time synchronized multi-track loop generator and mixing dashboard built on top of the Stable Audio 3 generative music model. It provides a cohesive, browser-based studio environment to generate musical loops from text prompts, arrange them in a synchronized grid, and mix them using professional-grade channel strips and master processor nodes.
-
-> [!TIP]
-> For step-by-step instructions, prompting guidelines, workflow walk-throughs, and detailed DSP configuration details, see the comprehensive [User Guide](file:///j:/projects/sa3/loopmaster/wiki/User-Guide.md) and the technical [Wiki Home Page](file:///j:/projects/sa3/loopmaster/wiki/Home.md).
+A browser-based loop production studio powered by Stable Audio 3. Generate synchronized multi-track loops from text prompts, shape them with hardware-modeled FX, and export DAW-ready stems — all from one page.
 
 ---
 
-## Key Features
+## What It Does
 
-*   **Synchronized Multi-Track Playback**: Audios are decoded into high-performance Web Audio API buffers and played simultaneously in absolute synchronization, allowing seamless loop testing.
-*   **Interactive Channel Strip Mixers**:
-    *   **Solo / Mute / Loop**: Control focus and playback behavior per track row.
-    *   **Volume & Pan Controls**: High-legibility slider controls mapped to Web Audio gain and stereo panner nodes.
-    *   **Real-time Metering**: Horizontal canvas meters showing perceived loudness (RMS) and instantaneous peak transients.
-*   **Integrated Master Limiter**: Built-in brickwall master limiter (`DynamicsCompressorNode` at `-11dB` threshold, hard knee, `20` ratio, `3ms` attack, `100ms` release) combined with a `+11dB` makeup gain stage to boost output loudness without digital clipping.
-*   **Init Audio Seed Variant Generation**: Pick any generated track variant as the active "Init Audio" seed, configure a noise level (`0.10` to `0.90`), and generate similar variation iterations.
-*   **Custom Prompt Generator**: A specialized prompt generator helper that creates structured solo instrument phrases (following the solo style, key, and chord progressions guideline).
-*   **Clean and Modern Interface**: Sleek dark-mode aesthetic utilizing glassmorphism, responsive grid layouts, custom-rendered waveforms, and smooth animations.
+- **Text-to-Loop Generation** — Type a prompt, get four stereo loop variants at 44.1kHz. Drums, bass, leads, anything SA3 can produce.
+- **Synchronized Grid** — Every track plays in lockstep. Add layers, audition variants, build arrangements in real time.
+- **Channel Strip FX** — Each track gets a full effects chain: Luftikus EQ, Valentine saturation/compression, Ælapse tape delay & spring reverb, Scream distortion, and Filtr resonant filter. All hardware-modeled in Web Audio.
+- **Remix Engine** — Use any variant as a seed for Variation, Inpainting, Continuation, or Call & Response regeneration.
+- **Macro Controls** — One-knob sweeps for Space, Drive, Tone, Filter, and Crush. Musical results without tweaking individual parameters.
+- **Master Limiter** — Brickwall limiter with makeup gain on the master bus. Loud and clean without clipping.
+- **DAW Export** — Render the full mix to WAV (with FX and fade-out tail), or batch-export individual stems as a ZIP. All WAVs are ACIDized with tempo/key/beat markers for instant DAW import.
 
 ---
 
-## Repository Structure
+## Quick Start
 
+### Requirements
+- Windows 10/11 with CUDA GPU (CPU works but is slow)
+- Python 3.10 or 3.11
+- SA3 model weights (see Setup)
+
+### Setup
+```bash
+cd stable-audio-3
+python -m venv .venv
+.venv\Scripts\activate
+pip install -e .
 ```
-├── stable-audio-3/          # Stable Audio 3 core generator library
-│   ├── pyproject.toml       # Backend dependencies
-│   └── stable_audio_3/      # Core Stable Audio 3 model package
-├── loopmaster/              # Dedicated LoopMaster subfolder
-│   ├── loopmaster-app/      # Custom Web App (Flask backend + JS frontend)
-│   │   ├── app_server.py    # Flask API server & generation worker
-│   │   ├── generate_variants.py # CLI prompt generator helper
-│   │   └── static/          # Web dashboard assets
-│   │       ├── index.html   # Main dashboard layout
-│   │       ├── app.js       # Real-time audio routing & state sync
-│   │       └── app.css      # Premium dark theme stylesheet
-│   └── wiki/                # LoopMaster project documentation
-│       ├── Home.md          # Technical architecture details
-│       └── User-Guide.md    # Step-by-step user walkthrough
-├── run_server.bat           # Launcher script for Windows
-├── .gitignore               # Strict gitignore keeping AI assets/models off git
-```
+Download the SA3 checkpoint (`small-music` or `medium`) from Hugging Face, or run `python scripts/localize_models.py` to pull from cache.
 
----
-
-## Getting Started
-
-### 1. Requirements
-*   **OS**: Windows 10/11 (with CUDA-capable GPU recommended for fast generation)
-*   **Python**: Python `3.10` or `3.11`
-*   **Node.js**: Recommended (for running MCP helper tools)
-
-### 2. Setup
-Create a virtual environment named `.venv` under the `stable-audio-3` subdirectory, install dependencies, and download the Stable Audio 3 model weights (`small-music` checkpoint).
-
-### 3. Launching
-To launch LoopMasterSA, simply run the batch script at the root directory:
+### Launch
 ```bash
 .\run_server.bat
 ```
-This runs the Flask server on port `7861`. Open your browser and navigate to:
+Pick a model from the menu, then open [http://localhost:7861](http://localhost:7861).
+
+---
+
+## Project Layout
+
 ```
-http://localhost:7861
+sa3/
+├── stable-audio-3/           # SA3 model library, virtualenv, localized weights
+├── loopmaster/
+│   ├── loopmaster-app/       # Flask backend + JS/CSS/HTML frontend
+│   │   ├── app_server.py     # API server & generation worker
+│   │   └── static/           # Dashboard (index.html, app.js, app.css)
+│   └── wiki/                 # Documentation
+│       ├── Home.md           # Architecture & technical reference
+│       └── User-Guide.md     # Feature walkthrough & workflows
+├── run_server.bat            # Interactive launcher (model selector)
+└── AGENTS.md                 # Agent operating rules
 ```
 
 ---
 
-## Git Distribution Rules
+## Documentation
 
-To keep the repository lightweight and clean for distribution:
-1.  **AI Weights Excluded**: Model checkpoints (`.safetensors`, `.ckpt`, `.pt`, `.onnx`) are automatically ignored.
-2.  **Generated Assets Excluded**: Generated loops (`*.wav`, `*.mp3`) and intermediate directories (`outputs/`, `optimized/`) are kept off Git.
-3.  **Local Environments Excluded**: Virtual environments (`.venv/`) and package manager lockfiles/node modules are excluded.
-4.  **No Hardcoded Paths**: All script execution and asset paths are fully relative.
+| Document | What's in it |
+|----------|-------------|
+| [User Guide](loopmaster/wiki/User-Guide.md) | Every feature explained with workflows. Start here. |
+| [Architecture](loopmaster/wiki/Home.md) | Signal chain, API contracts, DSP specs, generation pipeline. |
 
 ---
 
-## Credits & Acknowledgements
+## Credits
 
-*   **Generative Music Model**: Stable Audio 3 (SA3) by Stability AI, providing high-fidelity stereo generation.
-*   **DSP Effects Integration**:
-    *   **Luftikus Analog EQ**: Inspired by the lkjbdsp [Luftikus EQ](https://github.com/lkjbdsp/lkjb-plugins/tree/master/Luftikus) hardware modeling.
-    *   **Valentine Distortion & Compressor**: Adapted from the tote-bag-labs [Valentine](https://github.com/tote-bag-labs/valentine) saturator/compressor style.
-    *   **Ælapse Delay & Reverb**: Modeled after the smiarx [Ælapse](https://github.com/smiarx/aelapse) wow delay and spring convolver.
-    *   **Scream Distortion Filter**: Inspired by the Cure-Audio [Scream](https://github.com/Cure-Audio/Scream) resonant distortion effect.
-    *   **Filtr Filter Modulator**: Based on the tiagolr [Filtr](https://github.com/tiagolr/filtr) multi-type filter plugin.
-*   **Development Reference & Scaffolding**:
-    *   **pulse-visualizer**: Acted as the visual UI reference for building our browser-based FFT spectrum analyzer and oscilloscope canvases.
-    *   **audio-file-mcp-app**: Used as development scaffolding for media metadata parsing tools during initial coding phases.
-    *   **audio-grid-mcp-app**: Used as development scaffolding to analyze multi-track session matrix and loop synchronization options.
+**Model**: [Stable Audio 3](https://stability.ai/) by Stability AI
+
+**DSP References**:
+- [Luftikus EQ](https://github.com/lkjbdsp/lkjb-plugins/tree/master/Luftikus) — 6-band analog EQ
+- [Valentine](https://github.com/tote-bag-labs/valentine) — Saturation & pumping compressor
+- [Ælapse](https://github.com/smiarx/aelapse) — Tape delay & spring reverb
+- [Scream](https://github.com/Cure-Audio/Scream) — Resonant distortion
+- [Filtr](https://github.com/tiagolr/filtr) — Multi-type filter

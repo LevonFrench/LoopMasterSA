@@ -1,240 +1,242 @@
-# LoopMaster SA3 User Guide & Documentation
+# User Guide
 
-Welcome to **LoopMaster SA3**, a professional, real-time synchronized multi-track loop generator and mixing dashboard built on top of the Stable Audio 3 generative music foundation model. LoopMaster SA3 provides a cohesive, browser-based studio environment to generate musical loops from text prompts, arrange them in a synchronized grid, and mix them using professional-grade channel strips, master processor nodes, and advanced visualizers.
-
----
-
-## Table of Contents
-1. [Getting Started & Installation](#1-getting-started--installation)
-2. [Core Generation Engine & AI Prompts](#2-core-generation-engine--ai-prompts)
-3. [The Mixer Grid & Card Controls](#3-the-mixer-grid--card-controls)
-4. [Channel Strip DSP Effects](#4-channel-strip-dsp-effects)
-5. [Macro Controls & Automation](#5-macro-controls--automation)
-6. [Offline Rendering & Exporting](#6-offline-rendering---exporting)
-7. [Keyboard Shortcuts & Advanced Workflows](#7-keyboard-shortcuts--advanced-workflows)
+Everything you need to know to use LoopMaster SA3.
 
 ---
 
-## 1. Getting Started & Installation
+## Setup & Launch
 
-### Requirements
-- **OS**: Windows 10 or 11
-- **Hardware**: CUDA-capable NVIDIA GPU (recommended for fast inference)
-- **Python**: Version `3.10` or `3.11`
-- **Node.js**: Recommended (for optional MCP developer server integrations)
+1. Run `.\run_server.bat` from the project root
+2. Pick a model (Medium for quality, Small for speed)
+3. Open [http://localhost:7861](http://localhost:7861)
 
-### Installation Steps
-1. **Virtual Environment Setup**:
-   Create a Python virtual environment inside the `stable-audio-3` subdirectory:
-   ```bash
-   cd stable-audio-3
-   python -m venv .venv
-   .venv\Scripts\activate
-   pip install -r pyproject.toml  # or install via uv/poetry if locked
-   ```
-2. **Model Checkpoint**:
-   Ensure you have downloaded the Stable Audio 3 model weights (such as the `small-music` or `medium` checkpoint) and placed them in the appropriate directory mapping to your local configuration.
-3. **Launching the Studio**:
-   From the project root directory, run the Windows batch launcher script:
-   ```powershell
-   .\run_server.bat
-   ```
-   This script activates the virtual environment, configures the necessary PyTorch DLL paths, and boots the Flask backend server on port `7861`.
-4. **Accessing the UI**:
-   Open a web browser and navigate to:
-   [http://localhost:7861](http://localhost:7861)
+You need Python 3.10+, a CUDA GPU (optional but recommended), and the SA3 model weights downloaded. See the [README](../../README.md) for full setup instructions.
 
 ---
 
-## 2. Core Generation Engine & AI Prompts
+## Generating Loops
 
-LoopMaster SA3 leverages Stability AI’s **Stable Audio 3 (SA3)** model to generate 44.1kHz high-fidelity stereo loops. The backend automatically enhances user prompts and formats output files for optimal loop synchronization.
-
-### Prompt Auto-Enhancement Rules
-To ensure the AI generates high-quality, easily loopable elements, the backend applies prompt preprocessing:
-- **TrackType Classification**: Prepends `TrackType: Instrument` or `TrackType: SFX` depending on keyword matching (e.g., sound effects vs drums/guitar).
-- **Solo Defaults**: Prepends `solo` to instrument prompts unless multi-instrument keywords (such as *duo*, *ensemble*, *band*, *orchestra*) are found.
-- **Looping Tags**: Appends `seamless loop, looping` tags and the word `loop`.
-- **Quality Enhancement**: Adds production descriptors (`analog warmth, high fidelity, 44.1 kHz, stereo, well-mixed`).
-- **Timing Constraint**: Explicitly appends `BPM: [value], Length: [seconds]` to guide the model's rhythmic alignment.
-
-### Key Prompt Formats
-For manual prompt writing, SA3 responds best to structured inputs:
-```
-[Mood/Vibe] + [Instrumentation] + [Genre/Style] + [Key/Chord] + [Production Style]
-```
-*Example:* `dreamy solo grand piano jazz improvisation in C minor, tape saturated`
-
-### Prompt Helpers (Dashboard Icons)
-Five preset buttons provide rapid, structured prompt generation:
-- **🎲 Random**: Generates a random key-signature solo instrument prompt (53 instruments × 35 styles × 24 moods).
-- **🔑 In Key**: Generates a random prompt while **locking the current key or chord progression** to maintain harmonic compatibility with existing tracks.
-- **🥁 Drums**: Generates drum loop prompts with descriptors (32 genres × 24 descriptors × 10 drum elements) formatted with the active BPM.
-- **🎸 Bass**: Generates basslines locked to the current key or chord progression (48 styles × 28 descriptors).
-- **🎹 Lead**: Generates lead synth or instrument melodies locked to the key/chord (48 styles × 32 descriptors).
-
-### Backend Loop Processing
-- **Audio Headroom (+2s Generation)**: To prevent audio waveforms from decaying or cutting off in the last 1-2 seconds of a loop, the Flask backend generates `duration + 2.0` seconds of audio. It then trims the audio back to the exact loop boundary (`duration = 960 / BPM` seconds, representing 4 bars) before saving.
-- **WAV ACIDization**: Generated WAV files are post-processed on the server to insert **Acidized loop metadata** (`acid` chunk), **cue points** (`cue ` chunk), and **beat labels** (`LIST` chunk) directly into the WAV binary header. This ensures the output files import seamlessly into major Digital Audio Workstations (DAWs) with correct tempo, key, and 16-beat transient grid markers.
-
----
-
-## 3. The Mixer Grid & Card Controls
-
-The LoopMaster SA3 dashboard displays tracks as rows, each containing a **Mixer Strip** on the left and **four generated variant cards** on the right.
+### The Prompt Bar
+Type what you want to hear. SA3 works best with structured prompts:
 
 ```
-+-----------------------------------------------------------------------------------+
-| MIXER STRIP           |  [ Variant Card 1 ]  [ Variant Card 2 ]  [ Variant Card 3 ]...|
-| Vol/Pan/M/S/Lock/FX  |  Waveform Playhead  |  Waveform Playhead  |  Waveform Playhead|
-+-----------------------------------------------------------------------------------+
+dreamy solo grand piano jazz improvisation in C minor, tape saturated
 ```
 
-### Draggable Inputs
-The BPM, Seed, and Steps controls in the top header utilize a **deadzone drag pattern**:
-- **Single Click**: Focuses the input field to let you type values with the keyboard.
-- **Mouse Drag (Vertical ↕)**: Click and drag vertically. If the mouse moves more than 3 pixels, the input enters drag-to-adjust mode for quick scanning.
+Good prompts include: **mood** + **instrument** + **genre** + **key** + **production style**.
 
-### Transport Controls
-- **Play/Pause (Spacebar)**: Starts or pauses playback. All tracks are synchronized to a shared playhead.
-- **Seek Toggle**: When Seek is **ON**, clicking anywhere on a variant card's waveform seeks the global playhead to that relative percentage. When **OFF**, clicking only selects the variant.
-- **Split Toggle**:
-  - **Split OFF**: Clicking a card instantly selects and plays it.
-  - **Split ON**: Divides the card horizontally. Clicking the **left half** queues the variant to switch at the next loop boundary (flashing amber border). Clicking the **right half** triggers an instant variant switch.
+The backend automatically adds looping tags, quality descriptors, and timing metadata — you don't need to include those.
 
-- **Remix (Init Audio Flow)**: Clicking the `Remix` button on any variant card loads that specific audio file as the initial seed for subsequent generations. This enables three powerful remix modes:
-  - **Variation Mode**: The standard style-transfer mode using a noise slider (0.10 to 0.90) to control the deviations from the seed audio. Lower values generate closer variations, while higher values allow the model to drift further.
-  - **Inpaint Mode**: Targeted segment regeneration. Set start and end sliders (in seconds) to designate the region to regenerate. The rest of the loop is preserved exactly as in the seed audio.
-  - **Continuation Mode**: Extends a track from a split point. Set the "Keep First" slider (in seconds) to lock the beginning of the track, and the engine will generate fresh continuation material for the remainder of the loop.
-- **In-place Reversal (⇄)**: Reverses the underlying audio buffer in-place. If the track is currently playing, it restarts just that track's playback source in sync, avoiding clicks.
+### Prompt Buttons
+Eight buttons sit below the prompt field for fast prompt generation:
 
-### Track Mixer Strip
-- **S (Solo)**: Mutes all other non-soloed tracks.
-- **M (Mute)**: Silences the track.
-- **Lock**: Disables all mixers, volume/pan sliders, FX drawer controls, card selections, and deletion for that row. Highlighted with an amber border.
-- **FX**: Toggles the visibility of the Track-Level DSP Drawer.
-- **Delete (Trash)**: Removes the track row.
-- **Volume Slider**: Mapped to a linear gain node (0 to 100%).
-- **Pan Knob**: Mapped to a `StereoPannerNode` (-100 Left to +100 Right). Drag vertically to adjust; double-click to center.
-- **Meters**: Canvas-based metering showing perceived loudness (RMS, dark alpha block), instantaneous peak (bright bar decaying at 12dB/s), and peak hold (cyan tick held for 1.5s then decaying at 15dB/s).
-- **Mixer Macros (Flt, Res, DFb, DMx, RSz, RMx, S/C)**: A row of micro-knobs on the mixer strip mapping directly to the most critical DSP effects parameters. Drag vertically to adjust, double-click to reset.
+| Button | What it does |
+|--------|-------------|
+| **Random** | Full random prompt — picks instrument, style, mood, key |
+| **In Key** | Random prompt locked to the current key/chord |
+| **Chord** | Swaps only the key/chord in your current prompt |
+| **Style** | Swaps only the genre/style |
+| **Inst** | Swaps only the instrument |
+| **Drums** | Random drum loop prompt (BPM-aware, no key) |
+| **Bass** | Random bassline locked to current key |
+| **Lead** | Random melody/lead locked to current key |
 
----
+### Generation Parameters
 
-## 4. Channel Strip DSP Effects
+| Control | Default | What it controls |
+|---------|---------|-----------------|
+| **BPM** | 120 | Tempo. Determines loop length (4 bars). |
+| **Seed** | -1 | Reproducibility. -1 = random. Set a number to get the same output. |
+| **Steps** | 8 | Quality vs speed. 8 = fast drafts, 20+ = polished output. |
 
-Each track possesses a dedicated DSP effects drawer containing five hardware-modeled creative processors. Toggling the **On/Bypass** buttons routes the audio click-free through parallel dry/wet gain nodes.
-
-```
-[Audio Buffer Source]
-        |
-        +-----> [ Filtr Filter ] -------------> (Mix / Bypass Node)
-        |                                                 |
-        +-----> [ Luftikus Analog EQ ] --------> (Mix / Bypass Node)
-        |                                                 |
-        +-----> [ Scream Distortion ] ---------> (Mix / Bypass Node)
-        |                                                 |
-        +-----> [ Valentine Saturator ] -------> (Mix / Bypass Node)
-        |                                                 |
-        +-----> [ Ælapse Wow Delay & Spring ] -> (Mix / Bypass Node)
-        |                                                 |
-        +-----> [ Valentine Compressor ] ------> (Mix / Bypass Node)
-                                                          |
-                                                    [ Track Compressor ]
-                                                          |
-                                                    [ Track Panner ]
-                                                          |
-                                                    [ Track Volume Gain ]
-                                                          |
-                                                    [ Master Dynamics Chain ]
-```
-
-### 1. Filtr Filter
-A multi-type resonant filter:
-- **Type**: Selectable Lowpass (LP), Bandpass (BP), Highpass (HP), or Notch.
-- **Cutoff**: Range from `20Hz` to `20,000Hz`.
-- **Reso**: Adjusts resonance ($Q$ factor) from `0.1` to `25`.
-- **Mix**: Dry/wet blend from `0%` to `100%`.
-
-### 2. Luftikus Analog EQ
-A 6-band analog-modeled equalizer featuring fixed-frequency bands for musical tone shaping:
-- **Bands**: Peaking filters at `10Hz`, `40Hz`, `160Hz`, `640Hz`, and `2.5kHz`, plus a high-shelf boost (`Air Band`) at `12kHz`.
-- **Range**: Each band provides boost/cut of up to `±12.0 dB` (adjustable in `0.5 dB` increments).
-
-### 3. Scream Distortion
-A resonant distortion module:
-- **Cutoff**: Lowpass filter cutoff frequency (`200Hz` to `16,000Hz`) to tame harsh highs.
-- **Scream**: Controls resonance ($Q$) and waveshaper drive intensity simultaneously (`0%` to `100%`).
-- **Mix**: Dry/wet blend from `0%` to `100%`.
-
-### 4. Valentine Distortion & Compressor
-Parallel saturator and Justice-style pumping compressor:
-- **Drive**: Sigmoid waveshaper gain scale (`1.0x` to `10.0x`) introducing odd-order harmonics.
-- **Thresh**: Compressor threshold (`-40dB` to `0dB` / Off).
-- **Ratio**: Compression ratio (`1:1` to `20:1`).
-- **Mix**: Parallel blend of the saturated and compressed signal.
-
-### 5. Ælapse Tape Delay & Spring Reverb
-Time and space send-routing effects:
-- **Sync**: Tempo-synced delay times linked to the global BPM using beat divisions (1/16, 1/8T, 1/8, dotted 8th, 1/4, dotted 1/4, 1/2, dotted 1/2, 1/1).
-- **Feedback**: Tape delay feedback loop gain (`0%` to `95%`). Introduces pitch flutter via a `2Hz` LFO modulating delay time by `2ms`.
-- **Reverb Size**: Repurpositions synthetic stereo convolution impulse response lengths (`0.5s` to `5.0s`).
-- **Mixes**: Independent delay and reverb send levels.
+All number inputs support **click-to-type** and **vertical drag** to adjust.
 
 ---
 
-## 5. Macro Controls & Automation
+## The Grid
 
-The FX drawer features a **Macro Controls** panel. These sliders act as master coordinators, automating multiple DSP parameters simultaneously:
+Each generation creates a **track row** with four variant cards. Tracks stack vertically — add as many layers as you want.
 
-| Macro | Modulates | Behavior / Mapping |
-|---|---|---|
-| **Space** | Reverb Mix + Delay Mix + Reverb Size | Sweeps from dry to fully washed with long decay times. |
-| **Drive** | Valentine Drive + Saturation Mix + Scream Amount + Scream Mix | Morphing control that transitions from clean to fuzzy, distorted saturation. |
-| **Tone** | Luftikus EQ Bands | Sweeps from **Dark** (bass boost, treble cut) to **Flat** to **Bright** (air boost, bass cut). |
-| **Filter** | Filtr Cutoff + Filtr Mix | Sweeps from **Lowpass** (bipolar left) to **Off** (center) to **Highpass** (bipolar right). |
-| **Reso** | Filtr Resonance | Increases filter peak sharpness. |
-| **Delay** | Delay Mix | Increases delay presence. |
-| **Feedback**| Delay Feedback | Increases feedback length up to 95%. |
-| **Crush** | Scream Cutoff + Scream Amount | Swings lowpass filter down while driving distortion up for lo-fi decimation. |
+### Variant Cards
+Each card shows the waveform and filename. Click a card to switch to that variant.
+
+With **Split mode ON** (toggle in the transport bar):
+- **Left half click** → Queues the switch at the next loop boundary (pulsing amber border)
+- **Right half click** → Instant switch
+
+With **Seek ON**, clicking a waveform also seeks the playhead to that position.
+
+### Track Controls (Mixer Strip)
+Every track row has a mixer strip on the left:
+
+| Control | What it does |
+|---------|-------------|
+| **S** | Solo — mutes everything except soloed tracks |
+| **M** | Mute — silences this track |
+| **Lock** | Freezes all controls for this row (amber border) |
+| **FX** | Opens/closes the effects drawer |
+| **Volume** | Track gain (0–100%) |
+| **Pan** | Stereo position. Drag vertical, double-click to center. |
+| **Delete** | Removes the track row |
+| **Reverse** | Flips the audio backward in-place |
+| **Meters** | Real-time RMS loudness + peak + peak hold |
+
+### Mixer Macro Knobs
+A row of small knobs on each mixer strip for quick FX access:
+
+**Flt** (Filter cutoff), **Res** (Resonance), **DFb** (Delay feedback), **DMx** (Delay mix), **RSz** (Reverb size), **RMx** (Reverb mix), **S/C** (Scream/Crush)
+
+Drag vertically to adjust. Double-click to reset.
 
 ---
 
-## 6. Offline Rendering & Exporting
+## Variant Locking & Regeneration
 
-LoopMaster SA3 provides tools to export your work without loss of quality.
-
-### Render Mix (Offline WAV Compilation)
-Clicking the `⬇ Render Mix` button compiles the entire multi-track grid into a high-fidelity 16-bit PCM WAV file.
-- **Offline Context**: The browser spawns an `OfflineAudioContext` running at the native hardware sample rate.
-- **DSP Graph Replication**: Replicates all active track gains, pan positions, solo/mute/loop configurations, and all active FX drawer parameters (including convolver buffers and LFO delay modulations).
-- **Render Length**: Renders the exact number of loops specified in the **Loops to Render** input field.
-- **Faded Tail**: Automatically adds a `5.0` second tail at the end of the rendering with a linear fade-out, allowing delay echoes and reverb decays to ring out cleanly without clipping.
-
-### Export Loops (Batch Export)
-Clicking `Export Loops` fetches all active (unmuted and selected) variant WAV files, packages them client-side into a ZIP container using **JSZip**, and downloads them as `loopmastersa_loops_[BPM]bpm.zip` for instant drag-and-drop integration into external DAWs.
-
-### Undo System
-An internal stack-based Undo manager tracks track row deletions. Clicking **Undo** restores the deleted track’s DOM element, connects its Web Audio graph nodes in sync, and restores its mixer and FX parameters.
+- Click the **lock icon** on any variant card to protect it
+- Locked variants show an amber border and won't change during regeneration
+- Click the **refresh icon** on the mixer strip to regenerate only the unlocked variants
+- Useful for keeping your best take while auditioning alternatives for the others
 
 ---
 
-## 7. Keyboard Shortcuts & Advanced Workflows
+## Remixing
 
-### Keyboard Shortcuts
-- **Spacebar**: Toggles play/pause (disabled when focused inside input fields).
-- **Enter**: Submits the text input inside the Prompt box.
-- **Double-Click**: Resets pan knobs, mixer macros, and FX macros to their default center values.
+Click **Remix** on any variant card to use it as a seed for new generations. Four remix modes:
 
-### Recommended Workflows
-#### 1. Cohesive Track Construction
-1. Set your project BPM (e.g. `124`) and Steps (`20` for solid quality).
-2. Click `🥁 Drums` to generate a drum loop prompt. Click **Generate** and choose the best sounding variant card.
-3. Hit `🎸 Bass` to create a bassline. Because the bassline generator is key-aware, it will lock onto a musical key (e.g. `A minor`). Choose a bass variant.
-4. Click `🔑 In Key` or `🎹 Lead` to generate lead synths and melodies. The prompts will remain harmonically locked to `A minor`.
-5. Open the FX drawer on individual rows to sculpt frequencies using the Luftikus EQ or add depth using the **Space** macro.
+### Variation
+The default. Generates new variants based on the seed audio. Use the **Noise** slider to control how far the output deviates:
+- **Low (0.10–0.30)** — Subtle changes, same character
+- **Mid (0.40–0.60)** — Noticeable variation, same vibe
+- **High (0.70–0.90)** — Major creative departures
 
-#### 2. The Remix, Inpaint & Continue Method
-1. **Variation**: If you generate a guitar loop that you like, but want a slightly different melody, click the **Remix** button on its variant card. In **Variation** mode, set the **Noise Slider** to `0.40`. Click **Generate** to get four new variations with subtle melodic deviations.
-2. **Inpaint**: If you want to regenerate just the middle section (e.g. seconds 2.0 to 6.0) of a guitar loop, click **Remix**, select **Inpaint** mode, drag the start slider to `2.0s` and the end slider to `6.0s`, then click **Generate**.
-3. **Continuation**: If you want to keep the first `4.0s` of a loop but have the AI extend it with a new tail, click **Remix**, select **Continuation** mode, drag the "Keep First" slider to `4.0s`, and click **Generate**.
+### Response (Call & Response)
+Keeps the first half of the seed loop exactly, regenerates the second half. Creates natural musical call-and-response patterns.
+
+### Inpaint
+Regenerates a specific time range within the loop. Set **start** and **end** sliders to define the region. Everything outside the region stays intact.
+
+### Continuation
+Keeps the beginning of the loop up to a split point, generates fresh material for the remainder. Set the **Keep First** slider to control the split.
+
+### Invert Timing
+A toggle available in all remix modes. Reverses the seed audio's timing before generating — creates variations that mirror the original's rhythmic structure.
+
+---
+
+## Effects (FX Drawer)
+
+Click **FX** on any track to open its effects drawer. Five processors, each with On/Bypass:
+
+### Filtr — Resonant Filter
+Multi-type filter with LP, BP, HP, and Notch modes.
+- **Cutoff**: 20Hz–20kHz
+- **Reso**: Resonance peak sharpness (0.1–25)
+- **Mix**: Dry/wet blend
+
+### Luftikus — Analog EQ
+Six fixed-frequency bands for musical tone shaping:
+- **10Hz, 40Hz, 160Hz, 640Hz, 2.5kHz** — Peaking filters, ±12dB in 0.5dB steps
+- **Air** — High-shelf at 12kHz
+
+### Scream — Distortion
+Resonant distortion with taming control:
+- **Cutoff**: Lowpass filter (200Hz–16kHz) to control harshness
+- **Scream**: Drive intensity + resonance (0–100%)
+- **Mix**: Dry/wet blend
+
+### Valentine — Saturation & Compression
+Parallel saturator and pumping compressor:
+- **Drive**: Waveshaper intensity (1x–10x)
+- **Thresh**: Compressor threshold (-40dB to 0dB)
+- **Ratio**: Compression ratio (1:1 to 20:1)
+- **Mix**: Parallel blend
+
+### Ælapse — Tape Delay & Spring Reverb
+Time and space effects:
+- **Sync**: Tempo-synced delay times (1/16 through 1/1, including dotted and triplet divisions)
+- **Feedback**: Delay feedback with tape-style pitch flutter (0–95%)
+- **Reverb Size**: Convolution IR length (0.5s–5.0s)
+- **Delay Mix / Reverb Mix**: Independent send levels
+
+---
+
+## Macro Controls
+
+The FX drawer includes macro knobs that control multiple parameters at once:
+
+| Macro | What it sweeps |
+|-------|---------------|
+| **Space** | Reverb mix + delay mix + reverb size → dry to washed |
+| **Drive** | Valentine drive + saturation + scream → clean to destroyed |
+| **Tone** | Luftikus EQ → dark to bright |
+| **Filter** | Filtr cutoff + mix → lowpass (left) to off (center) to highpass (right) |
+| **Reso** | Filter resonance peak |
+| **Delay** | Delay presence |
+| **Feedback** | Delay feedback length |
+| **Crush** | Scream cutoff down + distortion up → lo-fi decimation |
+
+---
+
+## Transport & Visualizers
+
+### Transport Bar
+- **Play/Pause** (or Spacebar) — Starts/stops all tracks in sync
+- **Time display** — Current position and loop length
+- **Master meter** — Real-time level with limiter indicator
+- **Seek toggle** — Whether waveform clicks seek the playhead
+- **Split toggle** — Whether cards have queue/instant click zones
+
+### Visualizer Tray
+Three real-time displays driven by the master output:
+- **Spectrum Analyzer** — 128-band FFT (20Hz–20kHz)
+- **Oscilloscope** — Waveform trace
+- **Peak Meters** — L/R level bars
+
+---
+
+## Exporting
+
+### Render Mix
+Bounces the entire session to a single 16-bit WAV file:
+- All track volumes, pans, mute/solo states, and FX are applied
+- Set **Loops to Render** to control the output length
+- Automatic 5-second fade-out tail for reverb/delay decay
+
+### Export Loops
+Downloads all active variant WAVs as a ZIP file. Files are already ACIDized with BPM, key, and beat markers — ready for drag-and-drop into any DAW.
+
+### Undo
+Restores the last deleted track (DOM, audio graph, mixer state, FX parameters).
+
+---
+
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| **Spacebar** | Play / Pause |
+| **Enter** | Submit prompt |
+| **Double-click** | Reset knobs/macros to default |
+
+---
+
+## Recommended Workflows
+
+### Building a Track from Scratch
+1. Set BPM (e.g. 124) and Steps (20 for quality)
+2. Click **Drums** → Generate → pick the best variant
+3. Click **Bass** → it auto-locks to a key → Generate → pick a variant
+4. Click **In Key** or **Lead** → stays in the same key → Generate
+5. Open FX drawers to sculpt — use **Tone** macro for quick EQ, **Space** for reverb
+
+### Iterating with Remix
+1. Find a variant you almost like
+2. Click **Remix** on its card
+3. Use **Variation** mode with noise at 0.40 → Generate
+4. Lock the best variants, regenerate the rest
+5. Use **Inpaint** to fix just one section if needed
+
+### Exporting to a DAW
+1. Mute anything you don't want
+2. Click **Export Loops** for individual stems (ACIDized WAV ZIP)
+3. Or click **Render Mix** for a single mixed bounce with FX applied

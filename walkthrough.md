@@ -120,3 +120,53 @@ We added support to run either the high-fidelity `medium` model or standard `sma
 1.  **Checking and Localizing Weights**: Created `stable-audio-3/scripts/localize_models.py` which resolved both `stabilityai/stable-audio-3-medium` and `stabilityai/stable-audio-3-small-music` checkpoints and stored them inside `stable-audio-3/models/` for tokenless offline execution.
 2.  **Batch Launcher Menu**: Re-wrote `run_server.bat` to present a menu selector prompt on startup, allowing the user to select `medium` (default, choice 1), `small-music` (choice 2), or `small-sfx` (choice 3).
 3.  **Verification**: Checked script execution, verified that local checkpoint copies completed successfully on disk, and confirmed that launching with `medium` loads the local model files correctly.
+
+### 30. Visual Design - Loop Icon Upgrade
+We updated the dashboard branding and placeholder icons to fit the "LoopMaster" identity:
+1.  **Icon Upgrades**: Replaced the standard single-music-note SVG icon inside both the header logo (`.app-logo`) and the initial layout empty-state screen (`.grid-empty-state`) with a vector double-arrow circular loop icon.
+2.  **Verification**: Confirmed the new icons load and render correctly under standard fills.
+
+### 31. Verification of Remix Options: Row Ordering, Call & Response, and Invert Timing
+We implemented and verified the new remix options:
+1.  **Row Ordering**: Updated `addTrackRow()` in `app.js` to accept a `parentTrackId` parameter. If a track is a remix (i.e., generated from an initial audio seed), the script locates the parent track within the `tracks` array and inserts the new track row immediately below the parent track row in both the logical `tracks` array and visually in the DOM container (`tracksContainer`) using `insertBefore`.
+2.  **Call & Response Mode**: Configured the frontend to support the `"response"` remix mode. The backend maps `remix_mode == "response"` to stable audio inpainting, specifying a mask starting at `duration / 2.0` and ending at `duration`. This preserves the first half of the loop (the call) and regenerates the second half (the response).
+3.  **Invert Timing**: Added the "Invert Timing" checkbox next to the remix modes. If checked, the client passes `invert_timing: true` to the `/api/generate` endpoint, which reverses the seed audio tensor along the time dimension (`torch.flip(init_waveform, dims=[-1])`) before performing the generation.
+
+### 32. Verification of Interface Split Layout
+We split the interface layout so that the header, control panel, and transport/visualizer panel remain fixed in viewport space, while the track rows scroll independently:
+1.  **Body and Layout Constraints**: Disabled page-level vertical scrollbar by setting `overflow: hidden` and `height: 100dvh` on `body`.
+2.  **App Container Height**: Constrained `.app-container` to `height: 100dvh` with `box-sizing: border-box` and `overflow: hidden`, establishing a rigid outer grid.
+3.  **Scrollable Track Container**: Configured `.tracks-container` to absorb the remaining vertical space using `flex: 1`, enabled vertical scrolling via `overflow-y: auto`, and styled custom subtle scrollbars using webkit pseudo-elements to maintain the sleek, dark Geist aesthetic.
+
+### 33. Verification of FX Tray Layout Fixes
+We resolved the styling issues that mangled the FX drawer sections:
+1.  **Vertical Height Expansion**: Set `min-height: 185px` on `.fx-drawer` to ensure the 6-band Luftikus Analog EQ sliders are completely visible without vertical scrolling or bottom-edge clipping.
+2.  **Overlapping Title Resolution**: Re-styled `.fx-section-title` into a flex row (`display: flex; justify-content: space-between; align-items: center`) and removed absolute positioning of `.fx-toggle-btn`. This positions the On/Bypass buttons naturally next to the titles on the same baseline, resolving overlapping and text truncation.
+3.  **Macro Knob Spacing**: Expanded the macro controls section width to `min-width: 420px`, removed flex-wrap, and spaced the 8 macro knobs evenly to prevent them from squishing, wrapping, or overlapping.
+
+### 34. Verification of Track Height Squishing & Tensor Size Mismatch Fixes
+We resolved two critical bugs introduced during the split layout integration:
+1.  **Track Height Squishing**: Added `flex-shrink: 0` to `.track-wrapper` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css). This prevents the flex container from compressing the track rows vertically, resolving the clipping of the channel strip knobs (FLT, RCS, DFB, DMX, etc.) and keeping all UI rows at their full natural height.
+2.  **PyTorch Size Mismatch on Remixing**: Fixed the batch shape error in `generate` inside [model.py](file:///j:/projects/sa3/stable-audio-3/stable_audio_3/model.py). When an initial seed audio is provided with a batch size greater than 1, we explicitly expand/repeat the `inpaint_mask` tensor (shape `[1, 1, samples]`) along the batch dimension to match the batch size (e.g. `[4, 1, samples]`). This resolves `Error: Sizes of tensors must match except in dimension 1`.
+3.  **Scrollbar Flexbox Constraint**: Set `min-height: 0` on `.tracks-container` in `app.css`. Without this, flexbox defaults to `min-height: auto` which prevents the container from shrinking below its content height, resulting in rows overflowing off-screen without triggering the scrollbar.
+
+### 35. Verification of Prompt Modification Buttons (Chord, Style, and Instrument)
+1. **Buttons Relocation**: Verified that all prompt pill buttons (Random, In Key, Chord, Style, Inst, Drums, Bass, Lead) have been relocated out of the text entry input box and placed inside the label header row container next to the "Prompt" text label in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html).
+2. **Layout Sizing Stability**: Verified that removing absolute positioning from `.prompt-inline-btns` and deleting the input box padding-right in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css) allows the text input to stretch dynamically across the dashboard panel without overlapping button text or leaving vertical dead space below the input field.
+3. **Change Instrument Action**: Tested clicking the "Inst" button and verified that it successfully identifies the current instrument in the text box (matching multi-word names first) and replaces it with a randomly selected new instrument while retaining the mood, style, key/chord, and formatting of the rest of the prompt.
+4. **Fallback Handling**: Verified that if the prompt has no recognizable instrument pattern, clicking "Inst" generates a structured, styled prompt using the new instrument, a random mood, and style, keeping the current key signature.
+5. **Spellings & Selection Exclusions**: Confirmed that `glockenspeil` (as a common misspelling) is matched correctly in prompts. Confirmed that the randomized replacement filters out the active instrument, guaranteeing that the instrument changes to a different option on every click.
+6. **Vector Icons Integration**: Verified that all 8 prompt buttons (Random, In Key, Chord, Style, Inst, Drums, Bass, Lead) render with modern inline SVG icons and no text emojis, conforming to anti-emoji requirements.
+7. **Macro FX Knobs 2x4 Layout**: Confirmed that the 8 macro dials in the FX drawer collapse into 2 rows of 4 knobs. Tested changing panel widths and verified the CSS Grid maintains alignment cleanly.### 36. Verification of Individual Variant Locking & Regeneration
+We implemented and verified individual variant locking and regeneration:
+1.  **Variant Lock Control**: Added a lock button with a padlock/unlock SVG to each variant card. Clicking it toggles `variant.locked`, toggles the `.card-is-locked` CSS class on the card, and updates the icon state.
+2.  **Visual Styling**: Added HSL-tailored amber borders and subtle glow styling for locked cards in `app.css` (`.card-is-locked`), visually separating locked configurations from editable variants.
+3.  **Circular Regeneration Action**: Placed a circular refresh button (`.regen-btn`) in the mixer strip. Clicking it checks the count of unlocked variants $N$, packages the original prompt and generation parameters (BPM, seed, CFG scale, steps) stored in `originalParams` during creation, and sends a POST request to `/api/regenerate`.
+4.  **Backend Target Processing**: The backend (`_run_regeneration` inside `app_server.py`) generates $N$ new variants, matches them to the unlocked target indices, replaces only the target WAV files on disk with new timestamped names (preventing browser cache hits), and returns the updated 4-file array.
+5.  **Dynamic Update & Playback Swap**: The frontend downloads and decodes the new WAVs, replaces only the waveforms and buffers of the unlocked card slots, and restarts playback on active variant updates.
+6.  **Verification**: Verified that locking cards #1 and #3 and clicking the refresh button updates only cards #2 and #4 while leaving #1 and #3 unchanged. Tested playback transitions and verified all systems perform seamlessly.
+
+### 37. Verification of Master Volume Controls
+1.  **Layout**: Verified the presence of the master volume slider and text readout inside the master level section of [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html), positioned inline next to the master VU meter.
+2.  **Web Audio Gain Control**: Verified that dragging the master volume slider adjusts the master `GainNode` value in real-time, scaling overall playback volume.
+3.  **Offline Render Integration**: Verified that the offline rendering engine (`OfflineAudioContext`) in `app.js` reads the master volume slider value and applies it during the mixdown bounce, ensuring the exported WAV matches the output mix levels.

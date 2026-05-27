@@ -19,6 +19,9 @@
     const tracksContainer = document.getElementById('tracks-container');
     const btnRandomPrompt = document.getElementById('btn-random-prompt');
     const btnRandomInKey = document.getElementById('btn-random-in-key');
+    const btnChangeChord = document.getElementById('btn-change-chord');
+    const btnChangeStyle = document.getElementById('btn-change-style');
+    const btnChangeInstrument = document.getElementById('btn-change-instrument');
     const btnRandomDrums = document.getElementById('btn-random-drums');
     const btnRandomBass = document.getElementById('btn-random-bass');
     const btnRandomLead = document.getElementById('btn-random-lead');
@@ -159,6 +162,17 @@
             const masterMeterSection = document.getElementById('master-meter-section');
             if (masterMeterSection) {
                 masterMeterSection.style.display = 'flex';
+            }
+
+            // Wire master volume slider
+            const masterVolSlider = document.getElementById('master-volume-slider');
+            const masterVolReadout = document.getElementById('master-volume-readout');
+            if (masterVolSlider) {
+                masterVolSlider.addEventListener('input', () => {
+                    const val = parseInt(masterVolSlider.value) / 100;
+                    masterGain.gain.setTargetAtTime(val, audioCtx.currentTime, 0.01);
+                    if (masterVolReadout) masterVolReadout.textContent = masterVolSlider.value + '%';
+                });
             }
 
             // Start meter animation loop
@@ -1139,7 +1153,8 @@
                 <button class="mixer-btn mute-btn" title="Mute">M</button>
                 <button class="mixer-btn fx-btn" title="Toggle FX Drawer">FX</button>
                 <button class="mixer-btn lock-btn" title="Lock Track"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></button>
-                <button class="mixer-btn delete-btn" title="Delete Track"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                <button class="mixer-btn regen-btn" title="Regenerate Unlocked"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
+                <button class="mixer-btn delete-btn" title="Delete Track"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
             </div>
             <div class="mixer-vol-pan">
                 <div class="mixer-level">
@@ -1298,6 +1313,101 @@
             pushUndo('deleteTrack', { wrapperEl: track.wrapper, track, index: idx });
             deleteTrackRow(track);
         });
+
+        const regenBtn = mixerEl.querySelector('.regen-btn');
+        if (regenBtn) {
+            regenBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (track.locked) return;
+                
+                const unlockedVariants = track.variants.filter(v => !v.locked);
+                if (unlockedVariants.length === 0) {
+                    showStatus('No variants are unlocked to regenerate!', 'error');
+                    return;
+                }
+                
+                const N = unlockedVariants.length;
+                showStatus(`Regenerating ${N} unlocked variants…`);
+                
+                unlockedVariants.forEach(v => {
+                    v.el.classList.add('is-loading');
+                    v.buffer = null;
+                    const titleEl = v.el.querySelector('.card-title');
+                    if (titleEl) titleEl.textContent = 'loading…';
+                });
+                
+                regenBtn.disabled = true;
+                regenBtn.classList.add('is-generating');
+                
+                try {
+                    const unlockedIndices = track.variants.map((v, idx) => v.locked ? -1 : idx).filter(idx => idx !== -1);
+                    
+                    const payload = {
+                        track_num: track.id,
+                        prompt: track.originalParams?.prompt || track.prompt,
+                        bpm: track.originalParams?.bpm || parseInt(bpmInput.value) || 120,
+                        seed: track.originalParams?.seed ?? -1,
+                        cfg_scale: track.originalParams?.cfgScale ?? 1.0,
+                        steps: track.originalParams?.steps ?? 8,
+                        unlocked_indices: unlockedIndices,
+                        duration_padding_sec: 6.0,
+                        loop: true
+                    };
+                    
+                    const res = await fetch('/api/regenerate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        throw new Error(err.error || `HTTP ${res.status}`);
+                    }
+                    
+                    const { job_id } = await res.json();
+                    const result = await pollJob(job_id);
+                    if (result.status === 'error') throw new Error(result.error || 'Failed');
+                    
+                    for (let idx of unlockedIndices) {
+                        const newFilePath = result.files[idx];
+                        if (newFilePath) {
+                            const variant = track.variants[idx];
+                            variant.filePath = newFilePath;
+                            const name = newFilePath.split('/').pop();
+                            variant.name = name;
+                            
+                            const titleEl = variant.el.querySelector('.card-title');
+                            if (titleEl) {
+                                titleEl.textContent = name;
+                                titleEl.title = name;
+                            }
+                            
+                            await loadVariantAudio(variant, `/outputs/${newFilePath}`, track.selectedVariant === idx, track);
+                        }
+                    }
+                    
+                    showStatus(`Regeneration done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
+                    
+                    if (isPlaying && unlockedIndices.includes(track.selectedVariant)) {
+                        stopTrackSource(track);
+                        startTrackSource(track);
+                    }
+                    
+                } catch (err) {
+                    console.error('Regeneration failed:', err);
+                    showStatus(`Regeneration failed: ${err.message}`, 'error');
+                    unlockedVariants.forEach(v => {
+                        v.el.classList.remove('is-loading');
+                        const titleEl = v.el.querySelector('.card-title');
+                        if (titleEl) titleEl.textContent = v.name;
+                    });
+                } finally {
+                    regenBtn.disabled = false;
+                    regenBtn.classList.remove('is-generating');
+                }
+            });
+        }
 
         levelSlider.addEventListener('input', () => {
             track.level = parseInt(levelSlider.value) / 100;
@@ -1933,6 +2043,9 @@
                     <div style="display: flex; align-items: center; gap: 2px;">
                         <button class="btn-use-init" title="Use as Remix Audio" type="button">Remix</button>
                         <button class="btn-reverse" title="Reverse" type="button">⇄</button>
+                        <button class="btn-lock-variant" title="Lock Variant" type="button">
+                            <svg class="btn-icon icon-unlock" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+                        </button>
                         <span class="card-variant-num">#${i + 1}</span>
                     </div>
                 </div>
@@ -1950,6 +2063,7 @@
                 buffer: null,
                 el: cardEl,
                 sourceNode: null,
+                locked: false,
             };
             track.variants.push(variant);
             variantsEl.appendChild(cardEl);
@@ -2022,6 +2136,22 @@
                 });
             }
 
+            const lockVariantBtn = cardEl.querySelector('.btn-lock-variant');
+            if (lockVariantBtn) {
+                lockVariantBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (track.locked) return;
+                    variant.locked = !variant.locked;
+                    cardEl.classList.toggle('card-is-locked', variant.locked);
+                    
+                    if (variant.locked) {
+                        lockVariantBtn.innerHTML = `<svg class="btn-icon icon-lock" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+                    } else {
+                        lockVariantBtn.innerHTML = `<svg class="btn-icon icon-unlock" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
+                    }
+                });
+            }
+
             loadVariantAudio(variant, `/outputs/${filePath}`, i === 0, track);
         });
 
@@ -2073,7 +2203,7 @@
         'hammond organ', 'church organ', 'accordion',
         'marimba', 'vibraphone', 'xylophone', 'kalimba', 'steel drums',
         'classical harp', 'sitar', 'erhu', 'koto', 'tabla',
-        'music box', 'celesta', 'glockenspiel', 'harmonica', 'banjo', 'mandolin',
+        'music box', 'celesta', 'glockenspiel', 'glockenspeil', 'harmonica', 'banjo', 'mandolin',
         'theremin', 'mellotron', 'vocoder'
     ];
     
@@ -2152,6 +2282,7 @@
         
         if (btnRandomInKey) {
             btnRandomInKey.title = `Generate Random Prompt in ${currentKeyOrChord.value}`;
+            btnRandomInKey.innerHTML = `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L14 9"/></svg>${currentKeyOrChord.value}`;
         }
         
         promptInput.value = generated;
@@ -2168,6 +2299,142 @@
         btnRandomInKey.addEventListener('click', () => {
             generateRandomPrompt(true);
         });
+    }
+
+    function changeChordOnly() {
+        if (Math.random() < 0.5) {
+            const key = keys[Math.floor(Math.random() * keys.length)];
+            currentKeyOrChord = { type: 'key', value: key };
+        } else {
+            const chord = chords[Math.floor(Math.random() * chords.length)];
+            currentKeyOrChord = { type: 'chord', value: chord };
+        }
+        
+        const currentPrompt = promptInput.value.trim();
+        if (btnRandomInKey) {
+            btnRandomInKey.title = `Generate Random Prompt in ${currentKeyOrChord.value}`;
+            btnRandomInKey.innerHTML = `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L14 9"/></svg>${currentKeyOrChord.value}`;
+        }
+        
+        let newPrompt = currentPrompt;
+        const inRegex = /\bin\s+([A-Ga-g][#b]?(?:\s+[a-zA-Z0-9#\/\-\+]+)*)/i;
+        const playingRegex = /\bplaying\s+([^,]+)/i;
+        
+        const newVal = currentKeyOrChord.value;
+        const transitionWord = currentKeyOrChord.type === 'key' ? 'in' : 'playing';
+        
+        if (inRegex.test(currentPrompt)) {
+            newPrompt = currentPrompt.replace(inRegex, `${transitionWord} ${newVal}`);
+        } else if (playingRegex.test(currentPrompt)) {
+            newPrompt = currentPrompt.replace(playingRegex, `${transitionWord} ${newVal}`);
+        } else {
+            generateRandomPrompt(true);
+            return;
+        }
+        
+        promptInput.value = newPrompt;
+        promptInput.focus();
+    }
+
+    function changeStyleOnly() {
+        const currentPrompt = promptInput.value.trim();
+        const newStyle = styles[Math.floor(Math.random() * styles.length)];
+        
+        let matchedInstrument = null;
+        for (const inst of instruments) {
+            if (currentPrompt.toLowerCase().includes(inst.toLowerCase())) {
+                matchedInstrument = inst;
+                break;
+            }
+        }
+        
+        const inMatch = currentPrompt.match(/\bin\s+/i);
+        const playingMatch = currentPrompt.match(/\bplaying\s+/i);
+        const markerMatch = inMatch || playingMatch;
+        
+        if (matchedInstrument && markerMatch) {
+            const instEscaped = matchedInstrument.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const regex = new RegExp(`(${instEscaped}\\s+)(.*?\\s+)(in|playing\\b)`, 'i');
+            
+            if (regex.test(currentPrompt)) {
+                const newPrompt = currentPrompt.replace(regex, `$1${newStyle} $3`);
+                promptInput.value = newPrompt;
+                promptInput.focus();
+                return;
+            }
+        }
+        
+        const inst = matchedInstrument || instruments[Math.floor(Math.random() * instruments.length)];
+        const mood = moods[Math.floor(Math.random() * moods.length)];
+        if (!currentKeyOrChord) {
+            const key = keys[Math.floor(Math.random() * keys.length)];
+            currentKeyOrChord = { type: 'key', value: key };
+        }
+        
+        const transitionWord = currentKeyOrChord.type === 'key' ? 'in' : 'playing';
+        let generated = `${mood} solo ${inst} ${newStyle} ${transitionWord} ${currentKeyOrChord.value}`;
+        
+        promptInput.value = generated;
+        promptInput.focus();
+    }
+
+    function changeInstrumentOnly() {
+        const currentPrompt = promptInput.value.trim();
+        
+        const sortedInstruments = [...instruments].sort((a, b) => b.length - a.length);
+        let matchedInstrument = null;
+        for (const inst of sortedInstruments) {
+            const index = currentPrompt.toLowerCase().indexOf(inst.toLowerCase());
+            if (index !== -1) {
+                matchedInstrument = inst;
+                break;
+            }
+        }
+        
+        // Exclude the matched instrument (and its variant/misspelling if it's glockenspiel)
+        let excluded = [];
+        if (matchedInstrument) {
+            excluded.push(matchedInstrument.toLowerCase());
+            if (matchedInstrument.toLowerCase() === 'glockenspiel' || matchedInstrument.toLowerCase() === 'glockenspeil') {
+                excluded.push('glockenspiel', 'glockenspeil');
+            }
+        }
+        
+        const filteredInstruments = instruments.filter(inst => !excluded.includes(inst.toLowerCase()));
+        const newInstrument = filteredInstruments[Math.floor(Math.random() * filteredInstruments.length)];
+        
+        if (matchedInstrument) {
+            const regex = new RegExp(matchedInstrument.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i');
+            const newPrompt = currentPrompt.replace(regex, newInstrument);
+            promptInput.value = newPrompt;
+            promptInput.focus();
+            return;
+        }
+        
+        // Fallback if no known instrument is found
+        const mood = moods[Math.floor(Math.random() * moods.length)];
+        const style = styles[Math.floor(Math.random() * styles.length)];
+        if (!currentKeyOrChord) {
+            const key = keys[Math.floor(Math.random() * keys.length)];
+            currentKeyOrChord = { type: 'key', value: key };
+        }
+        const transitionWord = currentKeyOrChord.type === 'key' ? 'in' : 'playing';
+        const generated = `${mood} solo ${newInstrument} ${style} ${transitionWord} ${currentKeyOrChord.value}`;
+        
+        promptInput.value = generated;
+        promptInput.focus();
+    }
+
+    if (btnChangeChord) {
+        btnChangeChord.addEventListener('click', changeChordOnly);
+    }
+
+    if (btnChangeStyle) {
+        btnChangeStyle.addEventListener('click', changeStyleOnly);
+    }
+
+    if (btnChangeInstrument) {
+        btnChangeInstrument.addEventListener('click', changeInstrumentOnly);
     }
 
     // --- Random Drum Loop Generator ---
@@ -2353,9 +2620,15 @@
                 cfg_scale: cfgScale,
                 steps
             };
+            let parentTrackId = null;
             if (selectedInitAudio) {
+                parentTrackId = selectedInitAudio.trackId;
                 bodyPayload.init_audio_path = selectedInitAudio.filePath;
                 bodyPayload.remix_mode = remixMode;
+                const invertTimingCheckbox = document.getElementById('toggle-invert-timing');
+                if (invertTimingCheckbox) {
+                    bodyPayload.invert_timing = invertTimingCheckbox.checked;
+                }
                 if (remixMode === 'variation') {
                     const noiseSlider = document.getElementById('init-noise-slider');
                     bodyPayload.init_noise_level = noiseSlider ? parseInt(noiseSlider.value) / 100 : 0.60;
@@ -2388,7 +2661,14 @@
             if (result.status === 'error') throw new Error(result.error || 'Failed');
 
             showStatus(`Done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
-            addTrackRow(result.files, prompt, result.track_num, true);
+            const originalParams = {
+                prompt,
+                bpm,
+                seed,
+                cfgScale,
+                steps
+            };
+            addTrackRow(result.files, prompt, result.track_num, true, parentTrackId, originalParams);
             clearInitAudio();
 
         } catch (err) {
@@ -2413,15 +2693,49 @@
         throw new Error('Timed out');
     }
 
-    function addTrackRow(files, prompt, trackNum, autoPlay = false) {
+    function addTrackRow(files, prompt, trackNum, autoPlay = false, parentTrackId = null, originalParams = null) {
         tracksContainer.classList.remove('empty');
         const empty = tracksContainer.querySelector('.grid-empty-state');
         if (empty) empty.remove();
 
         const track = createTrackRow(prompt, files, trackNum);
         track._autoPlay = autoPlay;
-        tracks.push(track);
-        tracksContainer.appendChild(track.wrapper);
+        if (originalParams) {
+            track.originalParams = originalParams;
+        } else {
+            track.originalParams = {
+                prompt,
+                bpm: parseInt(bpmInput.value) || 120,
+                seed: -1,
+                cfgScale: 1.0,
+                steps: 8
+            };
+        }
+
+        let inserted = false;
+        if (parentTrackId !== null) {
+            const parentIdx = tracks.findIndex(t => t.id === parentTrackId);
+            if (parentIdx !== -1) {
+                // Insert after parent in tracks array
+                tracks.splice(parentIdx + 1, 0, track);
+                
+                // Insert after parent in DOM
+                const parentTrack = tracks[parentIdx];
+                if (parentTrack.wrapper) {
+                    if (parentTrack.wrapper.nextElementSibling) {
+                        tracksContainer.insertBefore(track.wrapper, parentTrack.wrapper.nextElementSibling);
+                    } else {
+                        tracksContainer.appendChild(track.wrapper);
+                    }
+                    inserted = true;
+                }
+            }
+        }
+
+        if (!inserted) {
+            tracks.push(track);
+            tracksContainer.appendChild(track.wrapper);
+        }
 
         // Auto-select variant 0 visually
         if (track.variants[0] && track.variants[0].el) {
@@ -2894,7 +3208,9 @@
 
                 // Create master chain on offline context
                 const offlineMasterGain = offlineCtx.createGain();
-                offlineMasterGain.gain.value = 1.0;
+                const masterVolSlider = document.getElementById('master-volume-slider');
+                const masterVolVal = masterVolSlider ? (parseInt(masterVolSlider.value) / 100) : 1.0;
+                offlineMasterGain.gain.value = masterVolVal;
 
                 const offlineLimiter = offlineCtx.createDynamicsCompressor();
                 offlineLimiter.threshold.setValueAtTime(-11.0, 0);
@@ -2912,7 +3228,7 @@
                 offlineMakeup.connect(offlineCtx.destination);
 
                 // Schedule fade-out over the tail section
-                offlineMasterGain.gain.setValueAtTime(1.0, contentDuration);
+                offlineMasterGain.gain.setValueAtTime(masterVolVal, contentDuration);
                 offlineMasterGain.gain.linearRampToValueAtTime(0.0, totalDuration);
 
                 // Connect all active tracks

@@ -130,3 +130,47 @@
   - [x] Create script scripts/localize_models.py to pull HF weights locally
   - [x] Execute localization script to copy medium and small-music checkpoints to stable-audio-3/models/
   - [x] Rebuild run_server.bat launcher with choice menu defaulting to medium
+- [x] Visual Design - Loop Icon Upgrade:
+  - [x] Replace static music note SVG icon in header and empty state container with circular loop arrows
+- [x] Remix Options: Row Ordering, Call & Response, and Invert Timing:
+  - [x] Implement backend invert_timing and Call & Response (response) mapping in app_server.py
+  - [x] Add Response mode button and Invert Timing checkbox to index.html
+  - [x] Update frontend app.js to package the invert_timing flag and handle 'response' mode
+  - [x] Update addTrackRow in app.js to insert new remix tracks directly below parent track rows in DOM and tracks array
+  - [x] Verify functionality (ordering, call & response audio, timing inversion)
+- [x] Interface Split Layout (Static Top and Scrollable Bottom Tracks):
+  - [x] Constrain body to hide global browser scrollbar
+  - [x] Fix .app-container height to 100dvh with box-sizing border-box
+  - [x] Set .tracks-container to flex-grow and enable vertical scrolling overflow
+  - [x] Add dynamic and modern dark scrollbar styles to .tracks-container
+  - [x] Add min-height: 0 to .tracks-container to allow flex container shrinking and activate scrolling
+- [x] FX Tray Layout Fixes:
+  - [x] Increase .fx-drawer height to 185px to prevent clipping Luftikus EQ sliders
+  - [x] Convert .fx-section-title to a flexbox container aligning text and bypass toggle buttons cleanly
+  - [x] Remove absolute positioning on .fx-toggle-btn to resolve layout overlapping
+  - [x] Set macros-section min-width to 420px and prevent wrapping of macro knobs
+- [x] Track Wrapper Layout & Tensor Size Mismatch Fixes:
+  - [x] Add flex-shrink: 0 to .track-wrapper to prevent rows from squishing inside the scrollable container
+  - [x] Fix PyTorch size mismatch by repeating inpaint_mask to batch_size in model.py
+- [x] Prompt Modification Buttons (Chord, Style, and Instrument):
+  - [x] Insert Chord, Style, and Inst prompt modification pill buttons next to In Key button in index.html
+  - [x] Implement changeChordOnly in app.js using regex replacements to only vary key/chord in prompt
+  - [x] Implement changeStyleOnly in app.js using regex and instrument mappings to only vary style in prompt
+  - [x] Implement changeInstrumentOnly in app.js using sorting and regex replacement to only vary instrument in prompt
+  - [x] Relocate prompt buttons (Random, In Key, Chord, Style, Inst, Drums, Bass, Lead) from inside the text input box to the prompt label header row next to the label in index.html, eliminating vertical dead space and removing absolute positioning constraints in app.css
+  - [x] Add inline vector SVG icons to all 8 prompt buttons and dynamically render icons on state changes, fully satisfying anti-emoji design constraints
+  - [x] Add spelling variation glockenspeil to instruments array and filter out matched instrument from randomized choices to guarantee change on click
+  - [x] Convert macro FX knobs to a 2x4 layout (2 rows of 4 knobs) by changing .fx-macro-knobs-row to a CSS Grid template with a min-width of 220px in app.css
+- [x] Individual Variant Locking & Regeneration:
+  - [x] Add lock button with padlock SVG on each variant card in index.html/app.js
+  - [x] Add style and visual indicator for locked cards in app.css
+  - [x] Add circular refresh icon (regen-btn) to mixer strip controls row in app.js
+  - [x] Implement click handler on regen-btn to count unlocked variants N, trigger generation for N variants
+  - [x] Wire job completion to load and replace only the unlocked card slots in the active track row
+- [x] Integrate Master Volume Control Slider:
+  - [x] Add volume slider and percentage readout to index.html next to master meter
+  - [x] Add master-volume-slider styles in app.css
+  - [x] Wire input event in app.js to update the master GainNode in Web Audio
+  - [x] Connect master volume value to OfflineAudioContext offline render mixdown
+
+

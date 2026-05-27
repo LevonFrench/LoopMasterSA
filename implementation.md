@@ -153,10 +153,37 @@ To allow tokenless offline model executions and offer user choice on startup:
 - **Model Checkpoint Localization**: Created `localize_models.py` inside `stable-audio-3/scripts/` to download and copy model configs and safe-tensor weights from the Hugging Face Hub (or local cache) directly to `stable-audio-3/models/stable-audio-3-medium/` and `stable-audio-3/models/stable-audio-3-small-music/`. Running this successfully localized both checkpoints for offline bypass.
 - **Interactive Batch Menu**: Re-wrote `run_server.bat` in the workspace root to display a CLI menu prompt. The launcher defaults to the high-fidelity `medium` model (Option 1) on Enter, but allows launching `small-music` (Option 2) or `small-sfx` (Option 3) seamlessly.
 
+## Completed Work: Visual Design - Loop Icon Upgrade
+To align the visual branding with the LoopMaster identity:
+- **Branding Icon Upgrade**: Replaced the static single-music-note SVG graphics inside the main header logo (`.app-logo`) and the initial layout empty-state placeholder screen (`.grid-empty-state`) with a vector double-arrow circular loop design.## Completed Work: Remix Options: Row Ordering, Call & Response, and Invert Timing
+To support call-and-response structures, time/progression inversions, and visual grouping of remixed loops:
+- **Direct Remix Row Placement**: Updated `addTrackRow` in `app.js` to track `parentTrackId`. Remixed track rows are spliced logically into the `tracks` array and inserted directly below their parent track row in the DOM container (`tracksContainer`) using `insertBefore`.
+- **Call & Response ("Response") Mode**: Wired the UI selector for "Response" mode. This mode maps to Stable Audio 3 inpainting with a mask start time of `duration / 2.0` and a mask end time of `duration` in `app_server.py`. This retains the first half (call) of the parent track while regenerating the second half (response).
+- **Invert Timing / Progression**: Added an "Invert Timing" checkbox. When active, it passes `invert_timing: true` to the `/api/generate` endpoint, causing the backend to reverse the seed audio waveform along the time dimension via `torch.flip(init_waveform, dims=[-1])` before generation.
 
+## Completed Work: Interface Split Layout
+To avoid full-page scrolling and keep transport controls and generation inputs continuously accessible:
+- **Viewport Layout**: Locked the main viewport scrollbar by styling the `body` with `overflow: hidden` and `height: 100dvh`.
+- **Dynamic Flex Layout**: Formatted `.app-container` to take up exactly `100dvh` with `box-sizing: border-box` and `overflow: hidden`.
+- **Scrollable Track Rows**: Set `.tracks-container` to take up the rest of the available height via `flex: 1` and enabled vertical overflow scrolling with custom Webkit scrollbars that blend cleanly with the dark theme.
 
+## Completed Work: FX Tray Layout Fixes
+To resolve clipping, squishing, and overlapping inside the expandable FX drawer:
+- **Luftikus EQ Visibility**: Added `min-height: 185px` on the `.fx-drawer` to ensure the taller 6-band analog EQ sliders are fully visible without clipping at the bottom.
+- **Title and Toggle Alignments**: Changed `.fx-section-title` to a flex layout with `justify-content: space-between` and `align-items: center`. Removed absolute positioning on `.fx-toggle-btn` to flow On/Bypass buttons in-line with the section headers, resolving text truncation.
+- **Macro Knobs Spacing**: Set `min-width: 420px` on `.fx-section.macros-section` and disabled wrapping (`flex-wrap: nowrap`) on `.fx-macro-knobs-row` to keep the 8 macro dials spaced evenly on a single line.
 
-
+## Completed Work: Track Height & Tensor Size Mismatch Fixes
+To prevent rows from being squished and correct PyTorch shape mismatch during batch remix generation:
+- **Track Layout Stability**: Configured `.track-wrapper` with `flex-shrink: 0` in `app.css`. This stops the scrollable container layout from collapsing the rows, preventing the channel strip knobs from being clipped.
+- **Inpaint Mask Tensor Batching**: Fixed `generate` in `stable_audio_3/model.py` to check the batch shape of the inpaint mask. If `batch_size > 1`, the code now repeats/expands the mask tensor (shape `[1, 1, samples]`) along the batch dimension to match the generated audio tensors, resolving PyTorch stacking shape conflicts.
+## Completed Work: Prompt Modification Buttons (Chord, Style, and Instrument)
+- **Buttons in index.html**: Added "Chord", "Style", and "Inst" buttons inline next to the "In Key" button in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html).
+- **Prompt Buttons Relocation**: Relocated all prompt variation button pills (Random, In Key, Chord, Style, Inst, Drums, Bass, Lead) from inside the text input box to the prompt label header row next to the "Prompt" text label in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html) using a flex row container (`.prompt-header-row`). This aligns buttons neatly next to the label and eliminates vertical dead space in the controls panel. Removed absolute positioning and input box padding constraints in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css).
+- **Instrument Randomizer**: Implemented `changeInstrumentOnly()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to replace the current prompt's instrument with a random alternative from the static instruments list. The function sorts instruments by descending length to correctly match multi-word instruments (e.g. "funky bass guitar" instead of "bass") and contains a fallback generation mechanism. Added the common misspelling `glockenspeil` (alongside `glockenspiel`) to the static instruments list to ensure it matches, and added an exclusion filter so that the randomized replacement is guaranteed to change to a different instrument on every click.
+- **SVG Button Icons**: Replaced emojis and text-only labels inside all 8 prompt buttons (Random, In Key, Chord, Style, Inst, Drums, Bass, Lead) in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html) and [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) with clean vector inline SVGs, ensuring strict compliance with anti-emoji visual design constraints.
+- **Macro Knobs 2x4 Grid**: Updated `.fx-macro-knobs-row` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css) to use CSS Grid (`grid-template-columns: repeat(4, 1fr)`) instead of Flexbox, collapsing the 8 macro knobs into 2 neat rows of 4 knobs and reducing the macro section `.min-width` to a compact `220px`.
+- **Event listener bindings**: Connected the button click handler to `changeInstrumentOnly()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js).
 
 
 
