@@ -193,3 +193,10 @@ We implemented and verified individual variant locking and regeneration:
 1.  **CUDA Detection**: Ran diagnostic tests in the virtual environment confirming CUDA availability and hardware mapping (`NVIDIA GeForce RTX 3080 Ti`).
 2.  **Runtime Optimizations**: Confirmed that `allow_tf32 = True` and `benchmark = True` are initialized on model instantiation in `model.py`, accelerating matrix math operations on Ampere architecture.
 3.  **torch.compile Validation**: Verified that compilation of the DiT (Diffusion Transformer) model using `torch.compile` is scheduled dynamically when a CUDA device is active, reducing graph overhead and providing accelerated inference.
+
+### 42. Verification of MP3 and OGG Export Support
+1.  **Format Selector UI**: Verified that the Format drop-down select element displays inline between the "Loops to Render" and the "Render Mix" buttons in the transport bar.
+2.  **Server conversion API**: Tested calling `/api/convert` endpoint with WAV uploads and verified it returns high-quality converted MP3 and OGG files (clean files, correct tag extensions, fast conversion times, files deleted from server disk after download completes).
+3.  **Mixdown Multi-format Bouncing**: Clicked "Render Mix" with "MP3" and "OGG" selected and verified it downloads the full mixdown correctly converted to the selected extension.
+4.  **ZIP Export Format Consistency**: Clicked "Export Loops" with "MP3" or "OGG" selected and verified that the downloaded ZIP file contains all individual track loops correctly transcoded to the selected format.
+5.  **Local Loop Transcoding Quality Calibration**: Calibrated the conversion path for local server file paths (used when zipping individual track loops) to correctly apply high-quality VBR settings (quality level `4` for OGG Vorbis, `2` for MP3) dynamically instead of hardcoding quality level `2` for both.

@@ -37,7 +37,7 @@ if os.path.exists(torch_dll_path):
 
 import torch
 import torchaudio
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file, after_this_request
 
 from stable_audio_3 import StableAudioModel
 from stable_audio_3.verbose import set_verbose
@@ -750,6 +750,92 @@ def api_delete_track(track_num):
         except Exception as e:
             return jsonify({"error": str(e)}), 500
     return jsonify({"error": "Track not found"}), 404
+
+@app.post("/api/convert")
+def api_convert():
+    try:
+        target_format = request.form.get("format", "wav").lower()
+        if target_format not in ["mp3", "ogg", "wav"]:
+            return jsonify({"error": f"Unsupported format: {target_format}"}), 400
+
+        # Case A: Local file path on the server
+        file_path = request.form.get("file_path")
+        if file_path:
+            # Prevent directory traversal attacks
+            safe_path = os.path.normpath(file_path).lstrip(os.path.sep)
+            if safe_path.startswith("..") or os.path.isabs(safe_path):
+                return jsonify({"error": "Invalid file path"}), 400
+                
+            input_path = os.path.join(OUTPUT_DIR, safe_path)
+            if not os.path.exists(input_path):
+                return jsonify({"error": "File not found"}), 404
+
+            if target_format == "wav":
+                return send_from_directory(OUTPUT_DIR, safe_path, as_attachment=True)
+                
+            out_filename = os.path.splitext(os.path.basename(input_path))[0] + f".{target_format}"
+            output_path = os.path.join(OUTPUT_DIR, f"conv_{uuid.uuid4().hex}.{target_format}")
+            
+            # Run ffmpeg
+            import subprocess
+            quality_arg = "4" if target_format == "ogg" else "2"
+            subprocess.run(["ffmpeg", "-y", "-i", input_path, "-q:a", quality_arg, output_path], check=True)
+            
+            @after_this_request
+            def remove_file(response):
+                try:
+                    os.remove(output_path)
+                except Exception as e:
+                    print(f"Error removing temp file {output_path}: {e}")
+                return response
+                
+            return send_file(output_path, as_attachment=True, download_name=out_filename)
+
+        # Case B: Uploaded file
+        if "file" not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+            
+        uploaded_file = request.files["file"]
+        if uploaded_file.filename == "":
+            return jsonify({"error": "No selected file"}), 400
+
+        # Save to temp WAV file
+        temp_in = os.path.join(OUTPUT_DIR, f"temp_{uuid.uuid4().hex}.wav")
+        uploaded_file.save(temp_in)
+
+        if target_format == "wav":
+            @after_this_request
+            def clean_temp_in(response):
+                try:
+                    os.remove(temp_in)
+                except Exception as e:
+                    print(f"Error removing temp file {temp_in}: {e}")
+                return response
+            return send_file(temp_in, as_attachment=True, download_name=uploaded_file.filename)
+
+        out_name = os.path.splitext(uploaded_file.filename)[0] + f".{target_format}"
+        temp_out = os.path.join(OUTPUT_DIR, f"temp_{uuid.uuid4().hex}.{target_format}")
+
+        import subprocess
+        # Use -q:a 2 for lame mp3, or -q:a 4 for vorbis ogg to ensure high quality
+        quality_arg = "4" if target_format == "ogg" else "2"
+        subprocess.run(["ffmpeg", "-y", "-i", temp_in, "-q:a", quality_arg, temp_out], check=True)
+
+        @after_this_request
+        def clean_all(response):
+            try:
+                os.remove(temp_in)
+                os.remove(temp_out)
+            except Exception as e:
+                print(f"Error cleaning temp files: {e}")
+            return response
+
+        return send_file(temp_out, as_attachment=True, download_name=out_name)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 # ---------------------------------------------------------------------------
 # Main

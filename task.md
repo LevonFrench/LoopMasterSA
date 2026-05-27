@@ -196,3 +196,9 @@
   - [x] Enable TensorFloat-32 (TF32) matrix multiplication and cuDNN autotuning (`benchmark = True`) on NVIDIA GPUs in model.py
   - [x] Implement dynamic model compilation via `torch.compile` on the DiT transformer block when CUDA is active
   - [x] Verify CUDA device availability and RTX 3080 Ti hardware execution status
+- [x] Implement MP3 and OGG export support:
+  - [x] Add format dropdown selector next to render button in transport bar
+  - [x] Style format select element to match theme aesthetic
+  - [x] Add `/api/convert` endpoint using local FFmpeg to convert WAV outputs to MP3/OGG (with high-quality VBR)
+  - [x] Update Render Mix click handler to convert the rendered mixdown WAV blob via convert API when MP3/OGG is selected
+  - [x] Update Export Loops click handler to convert and package individual track loop WAVs to the chosen format inside the ZIP file

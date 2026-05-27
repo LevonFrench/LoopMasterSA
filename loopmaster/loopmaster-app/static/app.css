@@ -1590,6 +1590,25 @@ body.split-mode .card-split-line {
     background: var(--text-accent);
 }
 
+/* --- Render Format Select --- */
+.render-format-select {
+    height: 26px;
+    padding: 0 8px;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    background: var(--bg-input);
+    border: 1px solid var(--border-input);
+    border-radius: var(--radius-sm);
+    outline: none;
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.render-format-select:focus {
+    border-color: var(--border-focus);
+}
+
 /* --- Render Mix Button --- */
 .btn-render-mix {
     height: 28px;

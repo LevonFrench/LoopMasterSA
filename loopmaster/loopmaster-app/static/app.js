@@ -3663,10 +3663,33 @@
                 const wavBlob = bufferToWav(renderedBuffer);
 
                 const bpm = parseInt(bpmInput.value) || 120;
-                const blobUrl = URL.createObjectURL(wavBlob);
+                const targetFormat = document.getElementById('render-format-select')?.value || 'wav';
+
+                let downloadBlob = wavBlob;
+                let downloadFilename = `loopmastersa_mix_${bpm}bpm_${loopCount}loops.wav`;
+
+                if (targetFormat !== 'wav') {
+                    btnRenderMix.innerHTML = 'Converting...';
+                    const formData = new FormData();
+                    formData.append('file', wavBlob, `mix_${bpm}bpm.wav`);
+                    formData.append('format', targetFormat);
+
+                    const convertResp = await fetch('/api/convert', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!convertResp.ok) {
+                        const errData = await convertResp.json();
+                        throw new Error(errData.error || 'Audio conversion failed');
+                    }
+                    downloadBlob = await convertResp.blob();
+                    downloadFilename = `loopmastersa_mix_${bpm}bpm_${loopCount}loops.${targetFormat}`;
+                }
+
+                const blobUrl = URL.createObjectURL(downloadBlob);
                 const link = document.createElement('a');
                 link.href = blobUrl;
-                link.download = `loopmastersa_mix_${bpm}bpm_${loopCount}loops.wav`;
+                link.download = downloadFilename;
                 link.click();
                 URL.revokeObjectURL(blobUrl);
 
@@ -3705,13 +3728,32 @@
                 const zip = new JSZip();
                 const bpm = parseInt(bpmInput.value) || 120;
 
+                const targetFormat = document.getElementById('render-format-select')?.value || 'wav';
+
                 for (const t of playing) {
                     const v = t.variants[t.selectedVariant];
                     if (!v || !v.filePath) continue;
-                    const resp = await fetch(`/outputs/${v.filePath}`);
-                    if (!resp.ok) continue;
-                    const blob = await resp.blob();
-                    const filename = v.filePath.split('/').pop();
+
+                    let blob;
+                    let filename = v.filePath.split('/').pop() || '';
+
+                    if (targetFormat === 'wav') {
+                        const resp = await fetch(`/outputs/${v.filePath}`);
+                        if (!resp.ok) continue;
+                        blob = await resp.blob();
+                    } else {
+                        const formData = new FormData();
+                        formData.append('file_path', v.filePath);
+                        formData.append('format', targetFormat);
+
+                        const convertResp = await fetch('/api/convert', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        if (!convertResp.ok) continue;
+                        blob = await convertResp.blob();
+                        filename = filename.replace(/\.wav$/i, `.${targetFormat}`);
+                    }
                     zip.file(filename, blob);
                 }
 
@@ -3719,7 +3761,7 @@
                 const url = URL.createObjectURL(content);
                 const link = document.createElement('a');
                 link.href = url;
-                link.download = `loopmastersa_loops_${bpm}bpm.zip`;
+                link.download = `loopmastersa_loops_${bpm}bpm_${targetFormat}.zip`;
                 link.click();
                 URL.revokeObjectURL(url);
             } catch (err) {

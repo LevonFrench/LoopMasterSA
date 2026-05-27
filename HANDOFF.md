@@ -34,6 +34,12 @@
 - Scheduled model compilation (`torch.compile`) targeting the core Diffusion Transformer (`DiT`) model in `model.py` when running on a CUDA device to eliminate graph execution overhead.
 - Confirmed virtual environment compatibility and hardware detection mapping to the system's `NVIDIA GeForce RTX 3080 Ti` GPU.
 
+**MP3 & OGG Export Support**:
+- Added a format selector dropdown to the transport panel (`#render-format-select`).
+- Created a server-side `/api/convert` endpoint that uses local FFmpeg to convert WAV audio outputs to high-quality MP3 (`-q:a 2`) and OGG (`-q:a 4`) files dynamically, cleaning up temporary files on completion.
+- Connected the "Render Mix" and "Export Loops" functions in `app.js` to trigger conversions automatically, downloading the mixdown or zipping individual loops in the selected format.
+- Calibrated local path transcoding in `/api/convert` to dynamically map `-q:a 4` for OGG and `-q:a 2` for MP3 to match the high-quality upload conversion settings.
+
 ---
 
 ### Key Repository Layout
@@ -62,5 +68,4 @@ sa3/
 - All sliders, knobs, inputs, and PyTorch backend execution paths are optimized and responsive.
 
 ### Next Steps
-- Start the server using `run_server.bat`. Note that the *very first* generation cycle will take 30–60 seconds longer due to `torch.compile` compiling the execution graph.
-- Every subsequent generation cycle will run significantly faster and with reduced VRAM overhead on the GPU.
+- Launch server via `run_server.bat` and select the format option (MP3 or OGG) to verify mixdown and ZIP loops downloads.
