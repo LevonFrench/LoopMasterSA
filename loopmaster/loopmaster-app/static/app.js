@@ -42,6 +42,7 @@
     let masterGain = null;
     let masterLimiter = null;
     let masterMakeup = null;
+    let masterVolumeNode = null;
     let masterAnalyser = null;
     let masterMeterState = { rms: -60, peak: -60, peakHold: -60, peakHoldTime: 0 };
     let meterLoopRunning = false;
@@ -144,18 +145,22 @@
             masterLimiter.knee.setValueAtTime(0.0, audioCtx.currentTime);
             masterLimiter.ratio.setValueAtTime(20.0, audioCtx.currentTime);
             masterLimiter.attack.setValueAtTime(0.003, audioCtx.currentTime);
-            masterLimiter.release.setValueAtTime(0.1, audioCtx.currentTime);
-
-            masterMakeup = audioCtx.createGain();
+            masterLimiter.release.setValueAtTime(0.1, audioCtx.currentTime);             masterMakeup = audioCtx.createGain();
             masterMakeup.gain.setValueAtTime(Math.pow(10, 11 / 20), audioCtx.currentTime);
+
+            masterVolumeNode = audioCtx.createGain();
+            const masterVolSlider = document.getElementById('master-volume-slider');
+            const initMasterVolVal = masterVolSlider ? (parseInt(masterVolSlider.value) / 100) : 1.0;
+            masterVolumeNode.gain.setValueAtTime(initMasterVolVal, audioCtx.currentTime);
 
             masterAnalyser = audioCtx.createAnalyser();
             masterAnalyser.fftSize = 1024;
 
-            // Connect master chain: masterGain -> masterLimiter -> masterMakeup -> masterAnalyser -> destination
+            // Connect master chain: masterGain -> masterLimiter -> masterMakeup -> masterVolumeNode -> masterAnalyser -> destination
             masterGain.connect(masterLimiter);
             masterLimiter.connect(masterMakeup);
-            masterMakeup.connect(masterAnalyser);
+            masterMakeup.connect(masterVolumeNode);
+            masterVolumeNode.connect(masterAnalyser);
             masterAnalyser.connect(audioCtx.destination);
 
             // Show master meter section
@@ -165,12 +170,11 @@
             }
 
             // Wire master volume slider
-            const masterVolSlider = document.getElementById('master-volume-slider');
             const masterVolReadout = document.getElementById('master-volume-readout');
             if (masterVolSlider) {
                 masterVolSlider.addEventListener('input', () => {
                     const val = parseInt(masterVolSlider.value) / 100;
-                    masterGain.gain.setTargetAtTime(val, audioCtx.currentTime, 0.01);
+                    masterVolumeNode.gain.setTargetAtTime(val, audioCtx.currentTime, 0.01);
                     if (masterVolReadout) masterVolReadout.textContent = masterVolSlider.value + '%';
                 });
             }
@@ -3229,7 +3233,7 @@
                 const offlineMasterGain = offlineCtx.createGain();
                 const masterVolSlider = document.getElementById('master-volume-slider');
                 const masterVolVal = masterVolSlider ? (parseInt(masterVolSlider.value) / 100) : 1.0;
-                offlineMasterGain.gain.value = masterVolVal;
+                offlineMasterGain.gain.value = 1.0;
 
                 const offlineLimiter = offlineCtx.createDynamicsCompressor();
                 offlineLimiter.threshold.setValueAtTime(-11.0, 0);
@@ -3241,14 +3245,18 @@
                 const offlineMakeup = offlineCtx.createGain();
                 offlineMakeup.gain.setValueAtTime(Math.pow(10, 11 / 20), 0);
 
+                const offlineVolumeNode = offlineCtx.createGain();
+                offlineVolumeNode.gain.value = masterVolVal;
+
                 // Connect offline master chain
                 offlineMasterGain.connect(offlineLimiter);
                 offlineLimiter.connect(offlineMakeup);
-                offlineMakeup.connect(offlineCtx.destination);
+                offlineMakeup.connect(offlineVolumeNode);
+                offlineVolumeNode.connect(offlineCtx.destination);
 
-                // Schedule fade-out over the tail section
-                offlineMasterGain.gain.setValueAtTime(masterVolVal, contentDuration);
-                offlineMasterGain.gain.linearRampToValueAtTime(0.0, totalDuration);
+                // Schedule fade-out over the tail section on the master volume stage
+                offlineVolumeNode.gain.setValueAtTime(masterVolVal, contentDuration);
+                offlineVolumeNode.gain.linearRampToValueAtTime(0.0, totalDuration);
 
                 // Connect all active tracks
                 const anySoloed = tracks.some(t => t.soloed);

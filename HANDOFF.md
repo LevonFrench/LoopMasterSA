@@ -26,6 +26,10 @@ Rewrote all three documentation files from scratch. The previous docs were dry s
 - Replaced the DFB (Delay Feedback) mixer knob with the Tone macro knob in the track mixer controls.
 - Integrated tone macro mapping inside the frontend `applyMacroKnob` function to drive Luftikus EQ band gains dynamically, centering flat at `50`.
 
+**Master Volume Fader Routing Fix**:
+- Replaced the master volume control setup so that it modifies a dedicated `masterVolumeNode` GainNode placed *after* the master limiter and makeup gain nodes. This prevents the master volume slider from driving the limiter input threshold / distortion characteristics and lets it function correctly as a clean output fader.
+- Updated the offline mixdown context to replicate this correct fader ordering and apply the fade-out on it.
+
 ---
 
 ### Key Repository Layout

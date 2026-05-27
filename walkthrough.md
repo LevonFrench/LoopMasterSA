@@ -168,8 +168,8 @@ We implemented and verified individual variant locking and regeneration:
 
 ### 37. Verification of Master Volume Controls
 1.  **Layout**: Verified the presence of the master volume slider and text readout inside the master level section of [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html), positioned inline next to the master VU meter.
-2.  **Web Audio Gain Control**: Verified that dragging the master volume slider adjusts the master `GainNode` value in real-time, scaling overall playback volume.
-3.  **Offline Render Integration**: Verified that the offline rendering engine (`OfflineAudioContext`) in `app.js` reads the master volume slider value and applies it during the mixdown bounce, ensuring the exported WAV matches the output mix levels.
+2.  **Web Audio Gain Control**: Verified that dragging the master volume slider adjusts the `masterVolumeNode` gain in real-time. This GainNode is placed *after* the master limiter and makeup gain nodes, ensuring that changing the volume controls monitoring output level rather than driving the threshold/distortion characteristics of the limiter.
+3.  **Offline Render Integration**: Verified that the offline rendering engine (`OfflineAudioContext`) in `app.js` mirrors this structure by placing `offlineVolumeNode` after `offlineMakeup` and schedules the master fade-out on it, ensuring correct mixdown export levels.
 
 ### 38. Verification of Default Track Volume and Tone Mixer Knob
 1.  **Default Volume**: Verified that newly generated track rows now start at a default volume level of `50%` (gain value `0.5` on the track's GainNode), and the mixer channel strip's Vol range slider defaults to `50` upon creation.
