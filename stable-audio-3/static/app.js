@@ -1930,7 +1930,7 @@
                 <div class="card-header">
                     <span class="card-title" title="${name}">${name}</span>
                     <div style="display: flex; align-items: center; gap: 2px;">
-                        <button class="btn-use-init" title="Use as Remake Audio" type="button">Remake</button>
+                        <button class="btn-use-init" title="Use as Remix Audio" type="button">Remix</button>
                         <button class="btn-reverse" title="Reverse" type="button">⇄</button>
                         <span class="card-variant-num">#${i + 1}</span>
                     </div>
