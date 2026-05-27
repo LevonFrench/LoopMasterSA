@@ -1356,15 +1356,15 @@ body::before {
 }
 
 .fx-section {
-    flex: 0 0 220px;
-    min-width: 220px;
+    flex: 0 0 200px;
+    min-width: 180px;
     background: rgba(255, 255, 255, 0.015);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
     padding: 8px 10px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     overflow: hidden;
     position: relative;
 }
@@ -1417,13 +1417,13 @@ body::before {
 }
 
 .fx-control-row label {
-    font-size: 0.55rem;
+    font-size: 0.5rem;
     color: var(--text-secondary);
-    width: 36px;
+    width: 48px;
     flex-shrink: 0;
     text-align: right;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.02em;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1456,10 +1456,10 @@ body::before {
 }
 
 .fx-control-row span {
-    font-size: 0.55rem;
+    font-size: 0.5rem;
     font-family: var(--font-mono);
     color: var(--text-tertiary);
-    width: 40px;
+    width: 36px;
     flex-shrink: 0;
     text-align: right;
     overflow: hidden;
@@ -1477,14 +1477,17 @@ body::before {
 .fx-section.macros-section {
     background: rgba(59, 130, 246, 0.04);
     border-color: rgba(59, 130, 246, 0.15);
+    flex: 0 0 auto;
+    min-width: 360px;
 }
 
 .fx-macro-knobs-row {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 24px;
+    gap: 12px;
     padding: 6px 0;
+    flex-wrap: wrap;
 }
 
 .fx-macro-knobs-row .macro-knob-group {

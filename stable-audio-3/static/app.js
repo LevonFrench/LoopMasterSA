@@ -1160,6 +1160,11 @@
                     <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="space" title="Space: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Space</span></div>
                     <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="drive" title="Drive: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Drive</span></div>
                     <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="tone" title="Tone: Flat"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Tone</span></div>
+                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="filter" title="Filter: Off"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Filter</span></div>
+                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="reso" title="Reso: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Reso</span></div>
+                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="delay" title="Delay: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Delay</span></div>
+                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="feedback" title="Feedback: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Feedbk</span></div>
+                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="crush" title="Crush: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Crush</span></div>
                 </div>
             </div>
             <div class="fx-section filtr-section">
@@ -1692,8 +1697,43 @@
                         slider.dispatchEvent(new Event('input'));
                     });
                 }
+            } else if (macroName === 'filter') {
+                // Filter macro is bipolar: 0=off, <50=LP sweep, >50=HP sweep
+                const bipolarVal = (value / 100) * 200 - 100; // map 0-100 → -100..+100
+                const deg = -135 + (value / 100) * 270;
+                indicator.style.transform = `rotate(${deg}deg)`;
+                const ctx = ensureAudioCtx();
+                if (value === 50) {
+                    knobEl.title = 'Filter: Off';
+                    if (track.filtrEnabled) {
+                        const toggle = fxDrawerEl.querySelector('.filtr-toggle');
+                        if (toggle) toggle.click();
+                    }
+                } else {
+                    if (!track.filtrEnabled) {
+                        const toggle = fxDrawerEl.querySelector('.filtr-toggle');
+                        if (toggle) toggle.click();
+                    }
+                    if (value < 50) {
+                        const norm = value / 50;
+                        const cutoff = 60 * Math.pow(20000 / 60, norm);
+                        track.filtrFilterNode.type = 'lowpass';
+                        track.filtrFilterNode.frequency.setTargetAtTime(cutoff, ctx.currentTime, 0.02);
+                        track.filtrDryGainNode.gain.setTargetAtTime(0, ctx.currentTime, 0.01);
+                        track.filtrWetGainNode.gain.setTargetAtTime(1, ctx.currentTime, 0.01);
+                        knobEl.title = `LP: ${cutoff >= 1000 ? (cutoff/1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
+                    } else {
+                        const norm = (value - 50) / 50;
+                        const cutoff = 20 * Math.pow(12000 / 20, norm);
+                        track.filtrFilterNode.type = 'highpass';
+                        track.filtrFilterNode.frequency.setTargetAtTime(cutoff, ctx.currentTime, 0.02);
+                        track.filtrDryGainNode.gain.setTargetAtTime(0, ctx.currentTime, 0.01);
+                        track.filtrWetGainNode.gain.setTargetAtTime(1, ctx.currentTime, 0.01);
+                        knobEl.title = `HP: ${cutoff >= 1000 ? (cutoff/1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
+                    }
+                }
             } else {
-                // Space and Drive are 0-100 unipolar
+                // Unipolar 0-100 macros
                 const deg = -135 + (value / 100) * 270;
                 indicator.style.transform = `rotate(${deg}deg)`;
                 knobEl.title = `${macroName.charAt(0).toUpperCase() + macroName.slice(1)}: ${value}%`;
@@ -1724,13 +1764,40 @@
                         const screamToggle = fxDrawerEl.querySelector('.scream-toggle');
                         if (screamToggle) screamToggle.click();
                     }
+                } else if (macroName === 'reso') {
+                    const resoSlider = fxDrawerEl.querySelector('.filtr-reso');
+                    if (resoSlider) { resoSlider.value = Math.round(1 + (249 * value / 100)); resoSlider.dispatchEvent(new Event('input')); }
+                } else if (macroName === 'delay') {
+                    const delayMixSlider = fxDrawerEl.querySelector('.aelapse-mix');
+                    if (!track.aelapseEnabled && value > 0) {
+                        const toggle = fxDrawerEl.querySelector('.aelapse-toggle');
+                        if (toggle) toggle.click();
+                    }
+                    if (delayMixSlider) { delayMixSlider.value = value; delayMixSlider.dispatchEvent(new Event('input')); }
+                } else if (macroName === 'feedback') {
+                    const fbSlider = fxDrawerEl.querySelector('.aelapse-feedback');
+                    if (fbSlider) { fbSlider.value = Math.round(value * 0.95); fbSlider.dispatchEvent(new Event('input')); }
+                } else if (macroName === 'crush') {
+                    // Crush: drives scream distortion cutoff down + amount up
+                    const screamCutoffSlider = fxDrawerEl.querySelector('.scream-cutoff');
+                    const screamAmtSlider = fxDrawerEl.querySelector('.scream-amount');
+                    if (!track.screamEnabled && value > 0) {
+                        const toggle = fxDrawerEl.querySelector('.scream-toggle');
+                        if (toggle) toggle.click();
+                    }
+                    if (screamCutoffSlider) {
+                        const cutoff = Math.round(16000 - (15800 * value / 100));
+                        screamCutoffSlider.value = cutoff;
+                        screamCutoffSlider.dispatchEvent(new Event('input'));
+                    }
+                    if (screamAmtSlider) { screamAmtSlider.value = value; screamAmtSlider.dispatchEvent(new Event('input')); }
                 }
             }
         }
 
         fxMacroKnobs.forEach(knobEl => {
             const macroName = knobEl.dataset.macro;
-            const defaultVal = macroName === 'tone' ? 50 : 0;
+            const defaultVal = (macroName === 'tone' || macroName === 'filter') ? 50 : 0;
             fxMacroState[macroName] = { value: defaultVal, dragging: false, startY: 0, startVal: 0 };
 
             // Init indicator
