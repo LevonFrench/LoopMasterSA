@@ -243,6 +243,51 @@ body::before {
     -webkit-appearance: none;
 }
 
+.control-input-sm { width: 55px !important; font-size: 0.72rem !important; }
+
+/* Toggle switch */
+.toggle-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 0.65rem;
+    color: var(--text-tertiary);
+    user-select: none;
+    white-space: nowrap;
+}
+
+.toggle-switch input { display: none; }
+
+.toggle-track {
+    width: 26px;
+    height: 14px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 7px;
+    position: relative;
+    transition: background 0.2s;
+}
+
+.toggle-track::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    background: var(--text-tertiary);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-track {
+    background: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-track::after {
+    transform: translateX(12px);
+    background: #fff;
+}
 /* --- Toggle --- */
 .toggle-wrapper {
     display: flex;
@@ -910,6 +955,17 @@ body::before {
 .audio-card.is-selected:hover {
     transform: translateY(-2px);
     box-shadow: inset 0 0 12px var(--accent-soft), 0 4px 16px rgba(59, 130, 246, 0.15);
+}
+
+.audio-card.is-queued {
+    border-color: #f59e0b;
+    border-style: dashed;
+    animation: queue-pulse 1s ease-in-out infinite;
+}
+
+@keyframes queue-pulse {
+    0%, 100% { border-color: rgba(245, 158, 11, 0.4); }
+    50% { border-color: rgba(245, 158, 11, 0.9); }
 }
 
 .audio-card.is-loading::before {

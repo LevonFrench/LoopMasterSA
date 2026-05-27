@@ -343,7 +343,7 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
         
     return final_prompt
 
-def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cfg_scale, track_num, duration_padding_sec=6.0, init_audio_path=None, init_noise_level=0.6):
+def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cfg_scale, track_num, duration_padding_sec=6.0, init_audio_path=None, init_noise_level=0.6, seed=-1):
     global model
     try:
         with jobs_lock:
@@ -384,7 +384,7 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
                     steps=steps,
                     cfg_scale=cfg_scale,
                     batch_size=num_variants,
-                    seed=-1,
+                    seed=seed,
                     duration_padding_sec=duration_padding_sec,
                     init_audio=init_audio,
                     init_noise_level=init_noise_level,
@@ -476,6 +476,7 @@ def api_generate():
     loop = bool(data.get("loop", True))
     steps = int(data.get("steps", 8))
     cfg_scale = float(data.get("cfg_scale", 1.0))
+    seed = int(data.get("seed", -1))
     duration_padding_sec = float(data.get("duration_padding_sec", 6.0))
     duration = 960.0 / bpm
 
@@ -505,7 +506,7 @@ def api_generate():
     threading.Thread(
         target=_run_generation,
         args=(job_id, prompt, bpm, duration, num_variants, loop, steps, cfg_scale, track_num, duration_padding_sec),
-        kwargs={"init_audio_path": init_audio_path, "init_noise_level": init_noise_level},
+        kwargs={"init_audio_path": init_audio_path, "init_noise_level": init_noise_level, "seed": seed},
         daemon=True,
     ).start()
 

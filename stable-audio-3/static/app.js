@@ -649,6 +649,8 @@
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
     }
 
+    let prevPlayPct = 0;
+
     function updatePlayheads() {
         let currentTime;
         if (isPlaying && audioCtx) {
@@ -659,6 +661,20 @@
 
         const pct = globalDuration > 0 ? currentTime / globalDuration : 0;
         tPosition.textContent = formatTime(currentTime);
+
+        // Detect loop boundary (pct wrapped around)
+        if (isPlaying && pct < prevPlayPct - 0.5) {
+            // Process queued variant switches
+            tracks.forEach(t => {
+                if (t._pendingVariant !== undefined && t._pendingVariant !== null) {
+                    const qi = t._pendingVariant;
+                    t._pendingVariant = null;
+                    t.variants.forEach(v => v.el.classList.remove('is-queued'));
+                    selectVariant(t, qi);
+                }
+            });
+        }
+        prevPlayPct = pct;
 
         // Update all card playheads
         tracks.forEach(t => {
@@ -1856,9 +1872,21 @@
                 const inSeekBar = e.clientX >= seekRect.left && e.clientX <= seekRect.right
                                && e.clientY >= seekRect.top  && e.clientY <= seekRect.bottom;
 
-                selectVariant(track, i);
+                const seekToggle = document.getElementById('toggle-seek');
+                const queueToggle = document.getElementById('toggle-queue');
+                const seekEnabled = seekToggle ? seekToggle.checked : true;
+                const queueEnabled = queueToggle ? queueToggle.checked : false;
 
-                if (inSeekBar) {
+                if (queueEnabled && isPlaying && i !== track.selectedVariant) {
+                    // Queue: mark this variant as pending, switch at loop boundary
+                    track._pendingVariant = i;
+                    // Visual indicator: outline the queued card
+                    track.variants.forEach((v, vi) => v.el.classList.toggle('is-queued', vi === i));
+                } else {
+                    selectVariant(track, i);
+                }
+
+                if (inSeekBar && seekEnabled) {
                     const pct = Math.max(0, Math.min(1, (e.clientX - seekRect.left) / seekRect.width));
                     seekTo(pct);
                 }
@@ -1889,10 +1917,14 @@
                     v.reversed = !v.reversed;
                     reverseBtn.classList.toggle('is-on', v.reversed);
                     drawWaveform(v.el.querySelector('.card-waveform'), v.buffer, track.selectedVariant === i);
-                    // If playing, restart to hear the change
+                    // If this is the playing variant, restart just this track source (not all playback)
                     if (isPlaying && track.selectedVariant === i) {
-                        stopAll();
-                        playAll();
+                        if (audioCtx) {
+                            const elapsed = audioCtx.currentTime - playStartCtxTime;
+                            playOffset = elapsed % globalDuration;
+                        }
+                        stopTrackSource(track);
+                        startTrackSource(track);
                     }
                 });
             }
@@ -2139,6 +2171,12 @@
         const bpm = parseInt(bpmInput.value) || 120;
         const numVariants = 4;
         const loop = true;
+        const seedInput = document.getElementById('seed-input');
+        const cfgInput = document.getElementById('cfg-input');
+        const stepsInput = document.getElementById('steps-input');
+        const seed = seedInput ? parseInt(seedInput.value) : -1;
+        const cfgScale = cfgInput ? parseFloat(cfgInput.value) : 1.0;
+        const steps = stepsInput ? parseInt(stepsInput.value) : 8;
 
         btnGenerate.disabled = true;
         btnGenerate.classList.add('is-generating');
@@ -2151,7 +2189,10 @@
                 bpm,
                 num_variants: numVariants,
                 loop,
-                duration_padding_sec: 6.0
+                duration_padding_sec: 6.0,
+                seed,
+                cfg_scale: cfgScale,
+                steps
             };
             if (selectedInitAudio) {
                 bodyPayload.init_audio_path = selectedInitAudio.filePath;
