@@ -114,15 +114,29 @@ Reverses a clip's audio data in-place. Only restarts the specific track source �
 
 ## 7. Random Prompt Generators
 
-Five preset prompt buttons for rapid creation:
+Five preset prompt buttons for rapid creation. Generators include mood, production style, and drum element modifiers per SA3 docs:
 
-| Button | Styles | Key-aware |
-|--------|--------|-----------|
-| 🎲 Random | 17 instruments × 14 styles × 14 descriptors | Sets new key |
-| 🔑 In Key | Chord progressions in current key | Uses current key |
-| 🥁 Drums | Drum loop styles | BPM only |
-| 🎸 Bass | 32 bass styles × 18 descriptors | Uses current key |
-| 🎹 Lead | 32 lead styles × 22 descriptors | Uses current key |
+| Button | Pool | Key-aware |
+|--------|------|-----------|
+| 🎲 Random | 53 instruments × 35 styles × 24 moods × 12 production tags | Sets new key |
+| 🔑 In Key | Same pool, preserves current key/chord | Uses current key |
+| 🥁 Drums | 32 genres × 24 descriptors × 10 drum elements | BPM only |
+| 🎸 Bass | 48 bass styles × 28 descriptors | Uses current key |
+| 🎹 Lead | 48 lead styles × 32 descriptors | Uses current key |
+
+### SA3 Prompt Format
+SA3 responds best to structured natural language prompts:
+```
+[Mood] + [Format] + [Instrument] + [Style/Genre] + [Key] + [Production]
+```
+*   **Mood**: euphoric, dark, dreamy, aggressive, nostalgic, etc.
+*   **Format**: solo, duo, band, orchestra
+*   **Instruments**: Be specific (alto saxophone > saxophone)
+*   **Production**: lo-fi, vintage analog, studio quality, tape saturated
+*   **Key**: Include key/scale for harmonic coherence across layers
+
+### In-App Documentation Module
+A collapsible "📖 How to Use LoopMaster SA3" panel at the bottom of the app provides step-by-step instructions covering prompt writing, parameter settings, layering, clip switching, mixing/FX, and export.
 
 ---
 

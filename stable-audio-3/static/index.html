@@ -181,6 +181,121 @@
             </div>
         </div>
 
+        <!-- Documentation Module -->
+        <div class="docs-module" id="docs-module">
+            <div class="docs-header" id="docs-toggle">
+                <span class="docs-title">📖 How to Use LoopMaster SA3</span>
+                <span class="docs-chevron">▼</span>
+            </div>
+            <div class="docs-content" id="docs-content">
+
+                <div class="docs-step">
+                    <div class="docs-step-num">1</div>
+                    <div class="docs-step-body">
+                        <h3>Write a Prompt</h3>
+                        <p>Describe the sound you want. SA3 understands natural language — be specific about <strong>instrument</strong>, <strong>genre</strong>, <strong>mood</strong>, and <strong>key</strong>.</p>
+                        <div class="docs-example">
+                            <code>dreamy synth lead ambient soundscapes in D minor, lush reverb</code>
+                        </div>
+                        <div class="docs-tip">
+                            <strong>Prompt formula:</strong> [Mood] + [Instrument] + [Style] + [Key] + [Production]
+                        </div>
+                        <div class="docs-tip">
+                            <strong>Or use the dice buttons:</strong> 🎲 Random · 🔑 In Key · 🥁 Drums · 🎸 Bass · 🎹 Lead
+                        </div>
+                    </div>
+                </div>
+
+                <div class="docs-step">
+                    <div class="docs-step-num">2</div>
+                    <div class="docs-step-body">
+                        <h3>Set Parameters</h3>
+                        <p>Click any number to type, or drag ↕ to scrub.</p>
+                        <div class="docs-params">
+                            <div class="docs-param"><strong>BPM</strong><span>Tempo. Sets loop length (4 bars).</span></div>
+                            <div class="docs-param"><strong>Seed</strong><span>-1 = random. Set a number to reproduce exact results.</span></div>
+                            <div class="docs-param"><strong>CFG</strong><span>Prompt adherence. 1 = creative, 5 = balanced, 10+ = strict.</span></div>
+                            <div class="docs-param"><strong>Steps</strong><span>Quality passes. 8 = fast draft, 20-30 = high quality, 50+ = diminishing returns.</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="docs-step">
+                    <div class="docs-step-num">3</div>
+                    <div class="docs-step-body">
+                        <h3>Generate &amp; Layer</h3>
+                        <p>Hit <strong>Generate</strong> or press Enter. Each generation creates a new track row with variant clips. Build your mix by generating multiple layers — drums, bass, leads, pads.</p>
+                        <div class="docs-tip">
+                            <strong>Remake:</strong> Click "Remake" on any clip to use it as seed audio for variations. Adjust the noise slider — lower = closer to original, higher = more deviation.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="docs-step">
+                    <div class="docs-step-num">4</div>
+                    <div class="docs-step-body">
+                        <h3>Switch Clips</h3>
+                        <p>Click any variant to instantly switch to it. All tracks stay in sync.</p>
+                        <div class="docs-tip">
+                            <strong>Split mode:</strong> Enable the Split toggle to split each card into two zones — click the left half to queue the switch at the next loop start, or the right half for instant. A dotted yellow line shows the split.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="docs-step">
+                    <div class="docs-step-num">5</div>
+                    <div class="docs-step-body">
+                        <h3>Mix &amp; Process</h3>
+                        <p>Each track has a full channel strip:</p>
+                        <div class="docs-params">
+                            <div class="docs-param"><strong>Vol / Pan</strong><span>Level and stereo position.</span></div>
+                            <div class="docs-param"><strong>S / M</strong><span>Solo (hear only this track) and Mute.</span></div>
+                            <div class="docs-param"><strong>FX</strong><span>Opens the FX drawer: EQ, compressor, delay, reverb, saturation.</span></div>
+                            <div class="docs-param"><strong>Macros</strong><span>8 quick-access knobs: Flt, Res, DFb, DMx, RSz, RMx, S/C + pan knob.</span></div>
+                            <div class="docs-param"><strong>⇄</strong><span>Reverse the clip audio.</span></div>
+                            <div class="docs-param"><strong>🔒</strong><span>Lock track to prevent accidental changes.</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="docs-step">
+                    <div class="docs-step-num">6</div>
+                    <div class="docs-step-body">
+                        <h3>Export</h3>
+                        <p><strong>Render Mix</strong> bounces all playing tracks to a single WAV. <strong>Export Loops</strong> zips every playing clip as individual WAV files.</p>
+                    </div>
+                </div>
+
+                <div class="docs-section-title">Prompt Tips for SA3</div>
+                <div class="docs-tips-grid">
+                    <div class="docs-tip-card">
+                        <strong>Be Specific</strong>
+                        <p>"alto saxophone jazz improvisation in Bb major" beats "saxophone music"</p>
+                    </div>
+                    <div class="docs-tip-card">
+                        <strong>Add Mood</strong>
+                        <p>Words like "dreamy", "aggressive", "nostalgic" steer the generation</p>
+                    </div>
+                    <div class="docs-tip-card">
+                        <strong>Specify Key</strong>
+                        <p>Always include key/scale for layers that need to harmonize</p>
+                    </div>
+                    <div class="docs-tip-card">
+                        <strong>Production Tags</strong>
+                        <p>"lo-fi", "vintage analog", "studio quality", "tape saturated"</p>
+                    </div>
+                    <div class="docs-tip-card">
+                        <strong>Use Formats</strong>
+                        <p>"solo", "duo", "band", "orchestra" control arrangement density</p>
+                    </div>
+                    <div class="docs-tip-card">
+                        <strong>Genre Blending</strong>
+                        <p>Mix two genres: "jazz funk fusion" or "ambient techno" for unique results</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script src="/static/app.js"></script>

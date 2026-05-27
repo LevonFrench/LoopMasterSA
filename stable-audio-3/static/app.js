@@ -2062,33 +2062,69 @@
 
     // --- Random Prompt Generator ---
     const instruments = [
-        'acoustic guitar', 'electric guitar', 'grand piano', 'synth lead', 
-        'funky bass guitar', 'saxophone', 'trumpet', 'flute', 'violin', 
-        'cello', 'drum kit', 'hammond organ', 'fender rhodes piano', 
-        'analog synthesizer', 'marimba', 'acoustic double bass', 'classical harp'
+        'acoustic guitar', 'electric guitar', 'classical guitar', 'nylon string guitar',
+        'grand piano', 'upright piano', 'fender rhodes piano', 'wurlitzer piano',
+        'synth lead', 'analog synthesizer', 'modular synthesizer', 'moog synthesizer',
+        'funky bass guitar', 'fretless bass', 'acoustic double bass', 'slap bass',
+        'saxophone', 'alto saxophone', 'tenor saxophone', 'trumpet', 'trombone',
+        'flute', 'clarinet', 'oboe', 'violin', 'viola', 'cello', 'string ensemble',
+        'drum kit', 'percussion', 'congas', 'bongos',
+        'hammond organ', 'church organ', 'accordion',
+        'marimba', 'vibraphone', 'xylophone', 'kalimba', 'steel drums',
+        'classical harp', 'sitar', 'erhu', 'koto', 'tabla',
+        'music box', 'celesta', 'glockenspiel', 'harmonica', 'banjo', 'mandolin',
+        'theremin', 'mellotron', 'vocoder'
     ];
     
     const styles = [
-        'bluesy licks', 'funky riffs', 'jazz improvisation', 'ambient soundscapes', 
-        'classical melody runs', 'chillhop beat elements', 'hyperpop sequence loops', 
-        'lofi chords', 'synthwave arpeggios', 'psychedelic rock runs', 
-        'soulful themes', 'melancholic motifs', 'groovy patterns', 'moody hooks'
+        'bluesy licks', 'funky riffs', 'jazz improvisation', 'ambient soundscapes',
+        'classical melody runs', 'chillhop beat elements', 'hyperpop sequence loops',
+        'lofi chords', 'synthwave arpeggios', 'psychedelic rock runs',
+        'soulful themes', 'melancholic motifs', 'groovy patterns', 'moody hooks',
+        'cinematic phrases', 'epic crescendo', 'minimal techno patterns',
+        'afrobeat rhythms', 'bossa nova groove', 'reggae skank',
+        'country licks', 'folk fingerpicking', 'R&B progressions',
+        'trap melodies', 'drill patterns', 'vaporwave textures',
+        'IDM glitch sequences', 'breakbeat chops', 'dub delays',
+        'new age atmospheres', 'world music fusion', 'tribal rhythms',
+        'neo-soul harmonies', 'gospel chords', 'progressive rock phrases'
+    ];
+
+    const moods = [
+        'euphoric', 'melancholic', 'dreamy', 'dark', 'uplifting', 'peaceful',
+        'aggressive', 'mysterious', 'nostalgic', 'ethereal', 'energetic', 'hypnotic',
+        'spacious', 'intimate', 'epic', 'playful', 'haunting', 'cinematic',
+        'warm', 'cold', 'bright', 'lush', 'gritty', 'smooth'
+    ];
+
+    const productionStyles = [
+        'studio quality', 'lo-fi', 'vintage analog', 'pristine digital',
+        'lush reverb', 'dry close-mic', 'tape saturated', 'modern polished',
+        'textured', '1980s production', 'ambient washed', 'crisp'
     ];
     
     const keys = [
-        'C major', 'A minor', 'G major', 'E minor', 'F major', 'D minor', 
-        'D major', 'B minor', 'A major', 'F# minor', 'Bb major', 'G minor'
+        'C major', 'C minor', 'C# minor', 'D major', 'D minor', 'Eb major',
+        'E major', 'E minor', 'F major', 'F minor', 'F# minor', 'G major',
+        'G minor', 'Ab major', 'A major', 'A minor', 'Bb major', 'Bb minor',
+        'B major', 'B minor', 'D dorian', 'A phrygian', 'F lydian', 'G mixolydian'
     ];
     
     const chords = [
-        'Cmaj7 to Fmaj7 chord progression', 'Am9 to Dm9 chord sequence', 
-        'G7 to Cmaj7 jazz turnaround', 'Fmaj7 chord changes', 'Emin7 to A7 pattern', 
-        'Bbmaj7 to Ebmaj7 progression', 'minor 7th arpeggios', 'major 7th voicings'
+        'Cmaj7 to Fmaj7 chord progression', 'Am9 to Dm9 chord sequence',
+        'G7 to Cmaj7 jazz turnaround', 'Fmaj7 chord changes',
+        'Emin7 to A7 pattern', 'Bbmaj7 to Ebmaj7 progression',
+        'minor 7th arpeggios', 'major 7th voicings',
+        'ii-V-I jazz progression', 'I-vi-IV-V pop progression',
+        'I-V-vi-IV anthem progression', 'vi-IV-I-V emotional progression',
+        'dim7 chromatic passing chords', 'sus4 resolution patterns',
+        'minor 9th chord stabs', 'major 6/9 voicings'
     ];
 
     function generateRandomPrompt(keepKey = false) {
         const inst = instruments[Math.floor(Math.random() * instruments.length)];
         const style = styles[Math.floor(Math.random() * styles.length)];
+        const mood = moods[Math.floor(Math.random() * moods.length)];
         
         if (!keepKey || !currentKeyOrChord) {
             if (Math.random() < 0.5) {
@@ -2102,9 +2138,15 @@
         
         let generated = "";
         if (currentKeyOrChord.type === 'key') {
-            generated = `solo ${inst} ${style} in ${currentKeyOrChord.value}`;
+            generated = `${mood} solo ${inst} ${style} in ${currentKeyOrChord.value}`;
         } else {
-            generated = `solo ${inst} ${style} playing ${currentKeyOrChord.value}`;
+            generated = `${mood} solo ${inst} ${style} playing ${currentKeyOrChord.value}`;
+        }
+        
+        // Occasionally add production style
+        if (Math.random() < 0.3) {
+            const prod = productionStyles[Math.floor(Math.random() * productionStyles.length)];
+            generated += `, ${prod}`;
         }
         
         if (btnRandomInKey) {
@@ -2130,21 +2172,33 @@
     // --- Random Drum Loop Generator ---
     const drumGenres = [
         'trap', 'boom bap', 'lo-fi hip hop', 'drill', 'jungle', 'breakbeat',
-        'house', 'techno', 'drum and bass', 'UK garage', 'afrobeat', 'reggaeton',
-        'jazz', 'funk', 'rock', 'metal', 'pop', 'R&B', 'disco', 'footwork'
+        'house', 'deep house', 'tech house', 'techno', 'minimal techno',
+        'drum and bass', 'liquid drum and bass', 'UK garage', 'afrobeat',
+        'reggaeton', 'jazz', 'funk', 'rock', 'metal', 'pop', 'R&B', 'disco',
+        'footwork', 'juke', 'dancehall', 'amapiano', 'baile funk',
+        'industrial', 'electro', 'IDM', 'grime'
     ];
 
     const drumDescriptors = [
         'hard-hitting', 'crispy', 'punchy', 'tight', 'bouncy', 'swinging',
         'aggressive', 'laid-back', 'groovy', 'minimal', 'complex', 'syncopated',
-        'live acoustic', 'processed 808', 'vintage drum machine', 'sampled breaks'
+        'live acoustic', 'processed 808', 'vintage drum machine', 'sampled breaks',
+        'shuffled', 'polyrhythmic', 'rolling', 'glitchy',
+        'lo-fi dusty', 'compressed', 'thundering', 'hypnotic'
+    ];
+
+    const drumElements = [
+        '', ', heavy kick', ', crispy snare', ', shaker groove',
+        ', hi-hat rolls', ', open hat patterns', ', tom fills',
+        ', clap layers', ', rim shots', ', cowbell accents'
     ];
 
     function generateRandomDrumPrompt() {
         const genre = drumGenres[Math.floor(Math.random() * drumGenres.length)];
         const desc = drumDescriptors[Math.floor(Math.random() * drumDescriptors.length)];
+        const elem = drumElements[Math.floor(Math.random() * drumElements.length)];
         const bpm = parseInt(bpmInput.value) || 120;
-        promptInput.value = `${desc} ${genre} drum loop at ${bpm} bpm`;
+        promptInput.value = `${desc} ${genre} drum loop at ${bpm} bpm${elem}`;
         promptInput.focus();
     }
 
@@ -2163,13 +2217,19 @@
         'distorted bass', '808 bass', 'deep house bass', 'walking bass',
         'funk bass riff', 'dub bass', 'neuro bass', 'rubber bass',
         'thumping bass', 'groovy bass', 'minimal bass', 'pulsing bass',
-        'staccato bass', 'legato bass', 'gliding bass', 'portamento bass'
+        'staccato bass', 'legato bass', 'gliding bass', 'portamento bass',
+        'FM bass', 'wavetable bass', 'detuned bass', 'growling bass',
+        'garage bass', 'liquid bass', 'electro bass', 'trance bass',
+        'midrange bass', 'rolling bass', 'square bass', 'filtered bass',
+        'sidechain bass', 'tape bass', 'analog bass', 'digital bass'
     ];
 
     const bassDescriptors = [
         'deep', 'punchy', 'warm', 'aggressive', 'smooth', 'gritty',
         'fat', 'tight', 'bouncy', 'heavy', 'mellow', 'driving',
-        'hypnotic', 'rolling', 'dirty', 'clean', 'saturated', 'crispy'
+        'hypnotic', 'rolling', 'dirty', 'clean', 'saturated', 'crispy',
+        'dark', 'rumbling', 'throbbing', 'squelchy', 'wobbly', 'massive',
+        'round', 'buzzing', 'distorted', 'compressed'
     ];
 
     function generateRandomBassPrompt() {
@@ -2210,14 +2270,20 @@
         'whistle melody', 'flute lead', 'electric guitar lead',
         'organ lead', 'marimba lead', 'kalimba melody', 'steel drum lead',
         'sitar lead', 'erhu melody', 'pizzicato lead', 'harp arpeggio',
-        'music box melody', 'glass lead', 'crystal lead', 'ethereal lead'
+        'music box melody', 'glass lead', 'crystal lead', 'ethereal lead',
+        'acid lead', 'hoover lead', 'trance lead', 'progressive lead',
+        'formant lead', 'vocoder melody', 'granular lead', 'wavetable lead',
+        'PWM lead', 'unison lead', 'portamento lead', 'stab lead',
+        'ambient lead', 'tape loop melody', 'processed piano melody', 'delay-soaked lead'
     ];
 
     const leadDescriptors = [
         'soaring', 'bright', 'dreamy', 'euphoric', 'melancholic', 'energetic',
         'ambient', 'sharp', 'shimmering', 'lush', 'epic', 'catchy',
         'hypnotic', 'playful', 'dark', 'ethereal', 'punchy', 'airy',
-        'nostalgic', 'cinematic', 'pulsing', 'gliding'
+        'nostalgic', 'cinematic', 'pulsing', 'gliding',
+        'haunting', 'mystical', 'crystalline', 'warm', 'icy', 'psychedelic',
+        'distorted', 'clean', 'reverb-drenched', 'intimate'
     ];
 
     function generateRandomLeadPrompt() {
@@ -2996,6 +3062,15 @@
                 btnExportLoops.innerHTML = originalHTML;
                 btnExportLoops.disabled = false;
             }
+        });
+    }
+
+    // --- Docs Module Toggle ---
+    const docsToggle = document.getElementById('docs-toggle');
+    const docsModule = document.getElementById('docs-module');
+    if (docsToggle && docsModule) {
+        docsToggle.addEventListener('click', () => {
+            docsModule.classList.toggle('is-open');
         });
     }
 
