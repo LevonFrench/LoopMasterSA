@@ -132,7 +132,7 @@ body::before {
     background: var(--bg-card);
     border: 1px solid var(--border-card);
     border-radius: var(--radius-lg);
-    padding: 18px 22px;
+    padding: 12px 22px;
     backdrop-filter: blur(20px);
 }
 
