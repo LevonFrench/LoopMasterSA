@@ -296,3 +296,11 @@ We implemented and verified individual variant locking and regeneration:
 2.  **Implementation**: Restored the missing closing curly brace `}` right before `else if (paramName === 'aelapse-delay-mix')`.
 3.  **Verification**: Executed `node -c` to compile/verify [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js), which resolved the parser `SyntaxError` and restored client-side button and audio generation functionality.
 
+### 59. Relocate Modulator Toggler to Track Mixer Strip
+1.  **Layout Adjustment**: Removed the global modulators panel toggle button (`#btn-toggle-modulators`) from [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html) transport panel.
+2.  **Mixer Strip Buttons**: Re-arranged track row mixer buttons inside [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to form a neat $2 \times 4$ layout:
+    - **Row 1**: Solo (`S`), Mute (`M`), FX Drawer (`FX`), and Modulation Panel (`MOD`).
+    - **Row 2**: Copy Settings, Paste Settings, Regenerate Unlocked, and Delete Track.
+3.  **Real-time Synchronization**: Added click listeners to `.mod-btn` calling a new `toggleGlobalModulators` function. This function toggles `#modulators-panel` display and updates the active class highlight (`is-on`) on all track rows dynamically to match. Freshly loaded/created track rows query `#modulators-panel` to sync the state on build.
+4.  **Styling**: Added custom CSS styling rules in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css) for `.mixer-btn.mod-btn.is-on` and its `:hover` state, utilizing the emerald green theme (`#10b981`).
+

@@ -816,10 +816,16 @@ body::before {
     border-color: var(--mute-color);
 }
 
-.mixer-btn.loop-btn.is-on {
-    background: var(--accent);
+.mixer-btn.mod-btn.is-on {
+    background: #10b981;
     color: #fff;
-    border-color: var(--accent);
+    border-color: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+.mixer-btn.mod-btn.is-on:hover {
+    background: #059669;
+    border-color: #059669;
 }
 
 .mixer-btn.delete-btn:hover {

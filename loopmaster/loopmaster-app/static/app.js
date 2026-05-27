@@ -134,6 +134,20 @@
         return buffer;
     }
 
+    function toggleGlobalModulators() {
+        const modulatorsPanel = document.getElementById('modulators-panel');
+        if (!modulatorsPanel) return;
+        const isHidden = modulatorsPanel.style.display === 'none';
+        const nextState = isHidden ? 'block' : 'none';
+        modulatorsPanel.style.display = nextState;
+        
+        // Update all MOD buttons to match the drawer open state
+        const isOpen = nextState === 'block';
+        document.querySelectorAll('.mod-btn').forEach(btn => {
+            btn.classList.toggle('is-on', isOpen);
+        });
+    }
+
     function calcDuration(bpm) { return 960 / bpm; }
 
     function formatTime(s) {
@@ -1420,9 +1434,10 @@
                 <button class="mixer-btn solo-btn" title="Solo">S</button>
                 <button class="mixer-btn mute-btn" title="Mute">M</button>
                 <button class="mixer-btn fx-btn" title="Toggle FX Drawer">FX</button>
-                <button class="mixer-btn regen-btn" title="Regenerate Unlocked"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
+                <button class="mixer-btn mod-btn" title="Toggle Global Modulators">MOD</button>
                 <button class="mixer-btn copy-track-btn" title="Copy Track Settings"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
                 <button class="mixer-btn paste-track-btn" title="Paste Track Settings"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></button>
+                <button class="mixer-btn regen-btn" title="Regenerate Unlocked"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></button>
                 <button class="mixer-btn delete-btn" title="Delete Track"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
             </div>
             <div class="mixer-vol-pan">
@@ -1534,6 +1549,7 @@
         const soloBtn = mixerEl.querySelector('.solo-btn');
         const muteBtn = mixerEl.querySelector('.mute-btn');
         const fxBtn = mixerEl.querySelector('.fx-btn');
+        const modBtn = mixerEl.querySelector('.mod-btn');
         const copyTrackBtn = mixerEl.querySelector('.copy-track-btn');
         const pasteTrackBtn = mixerEl.querySelector('.paste-track-btn');
         const deleteBtn = mixerEl.querySelector('.delete-btn');
@@ -1564,6 +1580,17 @@
             fxDrawerEl.style.display = isOpen ? 'none' : 'flex';
             fxBtn.classList.toggle('is-on', !isOpen);
         });
+
+        if (modBtn) {
+            const modulatorsPanel = document.getElementById('modulators-panel');
+            const modIsOpen = modulatorsPanel ? modulatorsPanel.style.display !== 'none' : false;
+            modBtn.classList.toggle('is-on', modIsOpen);
+
+            modBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleGlobalModulators();
+            });
+        }
 
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -4605,16 +4632,6 @@
     function setupGlobalModulatorsListeners() {
         const modulatorsPanel = document.getElementById('modulators-panel');
         if (!modulatorsPanel) return;
-
-        // Toggle Modulators drawer panel visibility
-        const btnToggleModulators = document.getElementById('btn-toggle-modulators');
-        if (btnToggleModulators && modulatorsPanel) {
-            btnToggleModulators.addEventListener('click', () => {
-                const isHidden = modulatorsPanel.style.display === 'none';
-                modulatorsPanel.style.display = isHidden ? 'block' : 'none';
-                btnToggleModulators.classList.toggle('active', !isHidden);
-            });
-        }
 
         // Toggle Song Mode and Arranger visibility
         const toggleArranger = document.getElementById('toggle-arranger');

@@ -316,3 +316,11 @@ To support dynamic song transitions and fills for rhythm tracks:
 - **Copy/Paste and Modulation**: Removed all Valentine settings from copy/paste settings routines and LFO/MIDI control mappings.
 - **Export Loops Dialog Format Prompt**: Hid the Format dropdown in the export settings modal when zipping loops, defaulting to WAV format.
 - **Syntax Error Fix**: Restored the missing closing curly brace in `applyControlValue` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) that was accidentally deleted when removing Valentine parameters. Verified with `node -c` to fix browser button and generation failures.
+
+## Completed Work: Relocate Modulator Toggler to Track Mixer Strip
+- **Transport Bar Clean-up**: Removed `#btn-toggle-modulators` from the transport bar in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html) to keep the central transport controls focused.
+- **Track Mixer 2x4 Layout**: Rebuilt the track row `.mixer-buttons` container in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to show:
+  - Row 1: Solo (`S`), Mute (`M`), FX (`FX`), Modulation (`MOD`)
+  - Row 2: Copy Settings, Paste Settings, Regenerate Unlocked, Delete Track
+  - This utilizes all 8 grid slots in the existing CSS Grid `repeat(4, 1fr)` layout, providing a clean balanced look.
+- **Global Modulation Drawer Control**: Bound track row MOD buttons to toggle `#modulators-panel`. Active highlights (`is-on` class) sync globally across all tracks in real-time. Styled `.mixer-btn.mod-btn.is-on` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css) using emerald green accents.

@@ -283,4 +283,11 @@
   - [x] Locate the unclosed `if (slider)` block under the `filtr-cutoff` parameter.
   - [x] Restore the missing closing curly brace `}`.
   - [x] Verify syntax using `node -c` to ensure there are no parser errors.
+- [x] Relocate modulator drawer button to track mixer strips:
+  - [x] Remove the modulator drawer button from the transport panel in `index.html`.
+  - [x] Put the MOD button next to FX on each track's mixer strip.
+  - [x] Configure rows as: SOLO MUTE FX MODULATION for first row, COPY PASTE REGENERATE DELETE for second row.
+  - [x] Wire MOD button click handlers to toggle the global modulators panel.
+  - [x] Synchronize MOD buttons active highlight state (`is-on`) with the drawer open state.
+  - [x] Add hover and active styling in `app.css` for `.mixer-btn.mod-btn.is-on`.
 

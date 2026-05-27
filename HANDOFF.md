@@ -14,6 +14,13 @@
 - **Syntax Bug Identification**: Located a JavaScript syntax parser error in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) resulting from an unclosed curly brace under the `filtr-cutoff` slider check block within the `applyControlValue` helper. This unclosed block was accidentally left when removing the Valentine parameters.
 - **Brace Restoration**: Restored the missing closing curly brace `}`. Checked the file using `node -c`, verifying that the parser error is completely resolved, restoring all front-end functionality (buttons, visualizers, and track generation).
 
+**Track Modulator Toggle Button Relocation**:
+- **UI Relocation**: Removed the global modulators panel toggle button `#btn-toggle-modulators` from the transport bar in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html).
+- **Track Row Mixer Layout**: Integrated a `.mod-btn` (MOD) button directly next to the `.fx-btn` (FX) button on each track strip inside [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js). Reordered buttons into a symmetrical $2 \times 4$ CSS Grid container:
+  - First Row: Solo (`S`), Mute (`M`), FX Drawer (`FX`), Modulation Panel (`MOD`)
+  - Second Row: Copy Settings, Paste Settings, Regenerate Unlocked, Delete Track
+- **Real-Time Dynamic Synchronization**: Configured all MOD buttons to toggle `#modulators-panel` visibility. The active green highlight state (`is-on` class) is kept fully synchronized across all track rows in real-time. Styled `.mixer-btn.mod-btn.is-on` inside [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css) with an emerald green layout scheme.
+
 **Mixer Button Grid Layout Alignment**:
 - **HTML Element Reordering**: Relocated `copy-track-btn` and `paste-track-btn` elements inside the HTML template in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to follow the `regen-btn`. Under the CSS grid layout, this cleanly wraps the buttons such that Copy and Paste sit as the first two icons on the second row of the mixer strip controls.
 
