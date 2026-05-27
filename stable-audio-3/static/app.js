@@ -20,6 +20,7 @@
     const btnRandomPrompt = document.getElementById('btn-random-prompt');
     const btnRandomInKey = document.getElementById('btn-random-in-key');
     const btnRandomDrums = document.getElementById('btn-random-drums');
+    const btnRandomBass = document.getElementById('btn-random-bass');
     const btnRenderMix = document.getElementById('btn-render-mix');
 
     // --- State ---
@@ -178,15 +179,16 @@
     });
     updateDurationLabel();
 
-    // BPM click-and-drag
+    // BPM click-and-drag (always drags; double-click to type)
     let bpmDragging = false;
     let bpmStartY = 0;
     let bpmStartVal = 0;
+    let bpmTyping = false;
 
     bpmInput.addEventListener('mousedown', (e) => {
-        // Only drag if not focused (typing). If focused, let normal input work.
-        if (document.activeElement === bpmInput) return;
+        if (bpmTyping) return; // already in type mode
         e.preventDefault();
+        bpmInput.blur();
         bpmDragging = true;
         bpmStartY = e.clientY;
         bpmStartVal = parseInt(bpmInput.value) || 120;
@@ -206,6 +208,20 @@
             bpmDragging = false;
             document.body.style.cursor = '';
         }
+    });
+
+    bpmInput.addEventListener('dblclick', () => {
+        bpmTyping = true;
+        bpmInput.focus();
+        bpmInput.select();
+    });
+
+    bpmInput.addEventListener('blur', () => {
+        bpmTyping = false;
+    });
+
+    bpmInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { bpmInput.blur(); }
     });
 
     // --- Solo/Mute logic ---
@@ -273,20 +289,59 @@
         updatePlayheads();
     }
 
+    // --- Undo system ---
+    let undoStack = [];
+    const btnUndo = document.getElementById('btn-undo');
+
+    function pushUndo(action, data) {
+        undoStack.push({ action, data });
+        if (btnUndo) btnUndo.style.display = 'inline-flex';
+    }
+
+    function performUndo() {
+        if (undoStack.length === 0) return;
+        const entry = undoStack.pop();
+        if (entry.action === 'deleteTrack') {
+            const { wrapperEl, track: t, index } = entry.data;
+            // Re-insert into DOM and tracks array
+            tracks.splice(index, 0, t);
+            const children = tracksContainer.children;
+            if (index < children.length) {
+                tracksContainer.insertBefore(wrapperEl, children[index]);
+            } else {
+                tracksContainer.appendChild(wrapperEl);
+            }
+            tracksContainer.classList.remove('empty');
+            const emptyEl = tracksContainer.querySelector('.grid-empty-state');
+            if (emptyEl) emptyEl.remove();
+            btnPlayPause.disabled = false;
+            if (btnRenderMix) btnRenderMix.disabled = false;
+            // Restore gain level
+            t.gainNode.gain.value = t.level;
+            updateMixerState();
+            // If playing, start the restored track in sync
+            if (isPlaying && audioCtx) {
+                const elapsed = audioCtx.currentTime - playStartCtxTime;
+                playOffset = elapsed % globalDuration;
+                startTrackSource(t);
+            }
+        }
+        if (undoStack.length === 0 && btnUndo) btnUndo.style.display = 'none';
+    }
+
+    if (btnUndo) {
+        btnUndo.addEventListener('click', performUndo);
+        btnUndo.style.display = 'none';
+    }
+
     function deleteTrackRow(track) {
         // Stop playback of this track immediately
         stopTrackSource(track);
 
-        // Disconnect Web Audio nodes to free resources
-        try {
-            track.panNode.disconnect();
-            track.gainNode.disconnect();
-            if (track.analyserNode) {
-                track.analyserNode.disconnect();
-            }
-        } catch (_) {}
+        // Mute but DON'T disconnect nodes (allows undo)
+        track.gainNode.gain.value = 0;
 
-        // Remove from DOM
+        // Remove from DOM (but keep the element for undo)
         track.wrapper.remove();
 
         // Remove from tracks array
@@ -294,13 +349,6 @@
 
         // Update Mixer Mute/Solo state (in case this track was soloed)
         updateMixerState();
-
-        // Call backend API to delete files from disk
-        fetch(`/api/delete_track/${track.id}`, { method: 'POST' })
-            .then(res => {
-                if (!res.ok) console.error(`Failed to delete track ${track.id} from disk`);
-            })
-            .catch(err => console.error(err));
 
         // If no tracks left, show empty state
         if (tracks.length === 0) {
@@ -593,9 +641,18 @@
         panNode.pan.value = 0;
         panNode.connect(gainNode);
 
+        // Track-level compressor (Comprez-style: -6dB threshold, 5:1, 10ms attack)
+        const trackCompressor = ctx.createDynamicsCompressor();
+        trackCompressor.threshold.value = -6;
+        trackCompressor.ratio.value = 5;
+        trackCompressor.attack.value = 0.01; // 10ms
+        trackCompressor.release.value = 0.15;
+        trackCompressor.knee.value = 6;
+        gainNode.connect(trackCompressor);
+
         const analyserNode = ctx.createAnalyser();
         analyserNode.fftSize = 1024;
-        gainNode.connect(analyserNode);
+        trackCompressor.connect(analyserNode);
         analyserNode.connect(masterGain);
 
         // 2. DSP Chain Stage A0: Filtr (Multi-type filter)
@@ -1014,9 +1071,9 @@
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (track.locked) return;
-            if (confirm(`Are you sure you want to delete this track ("${prompt}")?`)) {
-                deleteTrackRow(track);
-            }
+            const idx = tracks.indexOf(track);
+            pushUndo('deleteTrack', { wrapperEl: track.wrapper, track, index: idx });
+            deleteTrackRow(track);
         });
 
         levelSlider.addEventListener('input', () => {
@@ -1780,6 +1837,53 @@
         });
     }
 
+    // --- Random Bass Prompt Generator ---
+    const bassStyles = [
+        'bass line', 'bass sequence', 'live bass', 'slap bass', 'synth bass',
+        'funky bass', 'choppy bass', 'dubstep wobble bass', 'wobble bass',
+        'sub bass', 'acid bass', 'fingerstyle bass', 'picked bass',
+        'fretless bass', 'moog bass', 'reese bass', 'plucky bass',
+        'distorted bass', '808 bass', 'deep house bass', 'walking bass',
+        'funk bass riff', 'dub bass', 'neuro bass', 'rubber bass',
+        'thumping bass', 'groovy bass', 'minimal bass', 'pulsing bass',
+        'staccato bass', 'legato bass', 'gliding bass', 'portamento bass'
+    ];
+
+    const bassDescriptors = [
+        'deep', 'punchy', 'warm', 'aggressive', 'smooth', 'gritty',
+        'fat', 'tight', 'bouncy', 'heavy', 'mellow', 'driving',
+        'hypnotic', 'rolling', 'dirty', 'clean', 'saturated', 'crispy'
+    ];
+
+    function generateRandomBassPrompt() {
+        const style = bassStyles[Math.floor(Math.random() * bassStyles.length)];
+        const desc = bassDescriptors[Math.floor(Math.random() * bassDescriptors.length)];
+        const bpm = parseInt(bpmInput.value) || 120;
+
+        // Use current key if available
+        let keyPart = '';
+        if (currentKeyOrChord) {
+            if (currentKeyOrChord.type === 'key') {
+                keyPart = ` in ${currentKeyOrChord.value}`;
+            } else {
+                keyPart = ` playing ${currentKeyOrChord.value}`;
+            }
+        } else {
+            const key = keys[Math.floor(Math.random() * keys.length)];
+            currentKeyOrChord = { type: 'key', value: key };
+            keyPart = ` in ${key}`;
+        }
+
+        promptInput.value = `${desc} ${style}${keyPart} at ${bpm} bpm`;
+        promptInput.focus();
+    }
+
+    if (btnRandomBass) {
+        btnRandomBass.addEventListener('click', () => {
+            generateRandomBassPrompt();
+        });
+    }
+
     // --- Generation ---
     btnGenerate.addEventListener('click', () => {
         const prompt = promptInput.value.trim();
@@ -1870,9 +1974,21 @@
         tracks.push(track);
         tracksContainer.appendChild(track.wrapper);
 
+        // Auto-select variant 0 visually
+        if (track.variants[0] && track.variants[0].el) {
+            track.variants[0].el.classList.add('is-selected');
+        }
+
         btnPlayPause.disabled = false;
         if (btnRenderMix) btnRenderMix.disabled = false;
         updateDurationLabel();
+
+        // If already playing, start this track's source in sync with current playhead
+        if (isPlaying && audioCtx) {
+            const elapsed = audioCtx.currentTime - playStartCtxTime;
+            playOffset = elapsed % globalDuration;
+            startTrackSource(track);
+        }
     }
 
     // --- Status ---
