@@ -377,10 +377,12 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
 
         with model_lock:
             with torch.inference_mode():
+                # Generate slightly longer than needed so content fills the entire loop
+                gen_duration = duration + 2.0
                 audio = model.generate(
                     prompt=final_prompt,
                     negative_prompt="poor quality, bad quality, low quality, noise, distortion, artifact",
-                    duration=duration,
+                    duration=gen_duration,
                     steps=steps,
                     cfg_scale=cfg_scale,
                     batch_size=num_variants,
@@ -392,6 +394,11 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
 
         elapsed = time.time() - start_gen
 
+        # Trim to exact loop duration (model generated extra headroom)
+        sample_rate = model.model.sample_rate
+        exact_samples = int(duration * sample_rate)
+        audio = audio[:, :, :exact_samples]
+
         # Save to track_X folder inside the session directory
         track_dir_name = f"track_{track_num}"
         out_dir = os.path.join(SESSION_DIR, track_dir_name)
@@ -399,7 +406,6 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
 
         prompt_slug = slugify_prompt(prompt, 16)
         timestamp = time.strftime("%Y%m%d_%H%M%S")
-        sample_rate = model.model.sample_rate
         files = []
         for i in range(num_variants):
             if prompt_slug:
