@@ -3903,8 +3903,19 @@
                         body: formData
                     });
                     if (!convertResp.ok) {
-                        const errData = await convertResp.json();
-                        throw new Error(errData.error || 'Audio conversion failed');
+                        let errMsg = 'Audio conversion failed';
+                        try {
+                            const errData = await convertResp.json();
+                            errMsg = errData.error || errMsg;
+                        } catch (_) {
+                            try {
+                                const errText = await convertResp.text();
+                                errMsg = errText ? errText.substring(0, 150) : `Server returned status ${convertResp.status}`;
+                            } catch (__) {
+                                errMsg = `Server returned status ${convertResp.status}`;
+                            }
+                        }
+                        throw new Error(errMsg);
                     }
                     downloadBlob = await convertResp.blob();
                     downloadFilename = `loopmastersa_mix_${bpm}bpm_${loopCount}loops.${targetFormat}`;

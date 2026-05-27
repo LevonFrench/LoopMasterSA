@@ -208,3 +208,8 @@ We implemented and verified individual variant locking and regeneration:
 4.  **Paste and Synchronization**: Wired the paste handler to restore mute states, volume slider values, pan knobs, the 7 front-facing knobs, and all detailed FX configurations on the target track, firing events to immediately synchronize underlying Web Audio API nodes.
 5.  **Lock State Compatibility**: Updated `updateTrackLockState` to visually disable the paste settings button when the track row is locked, and confirmed that pasting settings is blocked on locked rows.
 
+### 44. Graceful Error Fallback for API Failures
+1.  **Plain Text and Status Code Fallback**: Updated the `/api/convert` fetch handler in `app.js` to catch JSON parsing failures. If the server returns HTML (e.g. 404 or 500 error pages) rather than valid JSON, the frontend reads it as raw text, truncates it to 150 characters, and displays it in the error alert.
+2.  **Stale Server Detection**: Verified that when hitting a stale server lacking the newly added `/api/convert` endpoint, the browser correctly displays the actual `404 Not Found` message instead of throwing an unhandled `Unexpected token '<'` JSON parse exception.
+
+

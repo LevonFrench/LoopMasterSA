@@ -210,3 +210,4 @@
   - [x] Implement copy click handler to serialize volume, pan, mute, all 7 front-facing macro knobs, and all detailed FX drawer settings
   - [x] Implement paste click handler to restore volume, pan, mute, front-facing knobs, and detailed FX settings with dynamic event propagation
   - [x] Update `updateTrackLockState` to disable the paste track button when a track is locked
+- [x] Handle non-JSON conversion error payloads gracefully in `app.js`

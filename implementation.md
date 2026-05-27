@@ -222,3 +222,7 @@ To prevent rows from being squished and correct PyTorch shape mismatch during ba
     -   Paste: Restores settings on target tracks, updates visual controls, and triggers AudioNode update events immediately.
 -  **Lock State Compatibility**: Updated `updateTrackLockState` to disable the paste button on locked track rows, and configured the paste handler to ignore locked tracks.
 
+## Completed Work: Graceful API Error Fallback
+-  **Browser Alert Quality Improvements**: Modified the `/api/convert` endpoint request error handler inside `app.js` to catch JSON parsing failures. If the server response cannot be decoded as JSON (for instance, when a 500 or 404 HTML document is returned), the script falls back to reading the payload as plain text. It extracts up to 150 characters of the response text to show the exact status code and server-side route error, preventing generic parsing exceptions.
+
+

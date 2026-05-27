@@ -46,6 +46,10 @@
 - Wired the paste routine to apply all parameters to target tracks, visually update the controls, and fire all node update events immediately.
 - Updated `updateTrackLockState` to disable the paste button on locked track rows, and configured the paste handler to ignore locked tracks.
 
+**Graceful API Error Fallback**:
+- Modified `app.js` conversion fetch handler to catch JSON parsing failures. If the server returns HTML (e.g. 404 or 500 pages), the client reads the response as plain text and shows the first 150 characters to the user instead of throwing an unhandled JSON parse error.
+
+
 
 ---
 
