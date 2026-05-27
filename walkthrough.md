@@ -82,3 +82,12 @@ We successfully integrated the design guidelines of `taste-skill`:
     - **Drive**: Verified it drives Valentine saturator input gain, Valentine compressor threshold, and compressor Dry/Wet mix slider values.
     - **Tone**: Verified it shifts the 6 Luftikus EQ band gains to construct a dark-boost or bright-airy response curve.
 4.  **Offline Mixdown Verification**: Bounced a WAV file and verified that the offline rendering accurately incorporates the track's configured reverb size.
+
+### 25. Verification of FX Bypass, Send Routing, and Track Lock
+We implemented and verified the FX bypass buttons, send effect routing for delay/reverb, track locking, and credited external packages:
+1.  **FX Bypass Toggles**: Added On/Bypass buttons inside the EQ, Valentine, and Ælapse titles in the FX drawer. Toggling to Bypass dims the control sliders (`opacity: 0.4` and `pointer-events: none`) and routes the audio click-free by fading parallel wet/dry gain nodes to dry `1.0` and wet `0.0`.
+2.  **Send Effect Routing**: Treat delay and reverb as parallel Aux Send effects, where the main dry signal path gain is fixed at `1.0` and send return levels are summed in parallel without attenuating the dry signal.
+3.  **Compressor at End of FX Chain**: Placed the Valentine dynamics compressor at the very end of the channel strip FX chain, compressing the combined dry + saturated + delay + reverb return sum.
+4.  **Track Lock Toggle**: Added a Lock button next to the Delete button. When active, it disables volume and pan sliders, disables all FX sliders, disables bypass toggles, prevents variant card selection, and blocks track deletion. The locked track row is visually dimmed and styled with an amber border.
+5.  **Offline Render Sync**: Updated the `OfflineAudioContext` WAV mixdown bounce to match this compressor-last send routing, bypass state mapping, and default looping behaviors.
+6.  **Package Credits**: Added clear attribution for Stability AI's Stable Audio 3, lkjbdsp's Luftikus EQ, tote-bag-labs' Valentine saturator, smiarx's Ælapse delay/reverb, and custom MCP applications in the README and project wiki.

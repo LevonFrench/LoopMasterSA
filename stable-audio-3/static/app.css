@@ -154,26 +154,52 @@ body::before {
     min-width: 200px;
 }
 
-.btn-random-prompt {
-    font-family: var(--font-sans);
-    font-size: 0.7rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 0 4px;
-    margin-bottom: 2px;
+.prompt-input-wrapper {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 4px;
-    transition: color var(--transition-fast);
 }
 
-.btn-random-prompt:hover {
-    color: var(--text-accent);
+.prompt-input-wrapper .control-input {
+    flex: 1;
+    padding-right: 230px; /* room for inline buttons */
+}
+
+.prompt-inline-btns {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.prompt-pill-btn {
+    font-family: var(--font-sans);
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    cursor: pointer;
+    padding: 3px 9px;
+    white-space: nowrap;
+    line-height: 1.4;
+    transition: all var(--transition-fast);
+    letter-spacing: 0.02em;
+}
+
+.prompt-pill-btn:hover {
+    color: var(--text-primary);
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.15);
+}
+
+.prompt-pill-btn:active {
+    transform: scale(0.95);
 }
 
 .control-label {
@@ -384,6 +410,70 @@ body::before {
 }
 
 .transport-spacer { flex: 1; }
+
+.render-loops-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.render-loops-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+}
+
+.render-loops-input {
+    width: 48px;
+    height: 26px;
+    padding: 0 4px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    background: var(--bg-input);
+    border: 1px solid var(--border-input);
+    border-radius: var(--radius-sm);
+    text-align: center;
+    outline: none;
+    -moz-appearance: textfield;
+    transition: border-color var(--transition-fast);
+}
+
+.render-loops-input:focus {
+    border-color: var(--border-focus);
+}
+
+.render-loops-input::-webkit-outer-spin-button,
+.render-loops-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+}
+
+.btn-render-mix {
+    height: 28px;
+    padding: 0 12px;
+    font-family: var(--font-sans);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn-render-mix:hover:not(:disabled) {
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.btn-render-mix:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .btn-stop-all {
     height: 28px;
@@ -626,6 +716,7 @@ body::before {
     gap: 6px;
     padding: 6px;
     min-width: 0;
+    align-items: stretch;
 }
 
 /* --- Audio Card --- */
@@ -682,6 +773,8 @@ body::before {
     justify-content: space-between;
     gap: 4px;
     z-index: 2;
+    height: 18px;
+    flex-shrink: 0;
 }
 
 .card-title {
@@ -1131,6 +1224,81 @@ body::before {
     border-color: rgba(59, 130, 246, 0.15);
 }
 
+/* FX toggle buttons (On/Bypass) */
+.fx-toggle-btn {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs, 3px);
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 2.5px 8px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    transition: all var(--transition-fast);
+}
+
+.fx-toggle-btn:hover {
+    background: var(--accent-soft);
+    color: var(--text-accent);
+    border-color: var(--border-selected);
+}
+
+.fx-toggle-btn.is-off {
+    background: rgba(239, 68, 68, 0.1);
+    color: rgb(239, 68, 68);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.fx-toggle-btn.is-off:hover {
+    background: rgb(239, 68, 68);
+    color: #fff;
+    border-color: rgb(239, 68, 68);
+}
+
+/* Bypassed FX section styles */
+.fx-section.is-bypassed .fx-controls-grid {
+    opacity: 0.4;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+/* Lock track button states */
+.mixer-btn.lock-btn {
+    transition: all var(--transition-fast);
+}
+
+.mixer-btn.lock-btn:hover {
+    background: rgba(245, 158, 11, 0.1);
+    color: rgb(245, 158, 11);
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+.mixer-btn.lock-btn.is-on {
+    background: rgba(245, 158, 11, 0.2);
+    color: rgb(245, 158, 11);
+    border-color: rgb(245, 158, 11);
+}
+
+/* Locked track visual styling */
+.track-wrapper.track-locked {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: rgba(10, 10, 14, 0.2);
+}
+
+.track-wrapper.track-locked .mixer-strip {
+    opacity: 0.75;
+}
+
+.track-wrapper.track-locked .variants-container {
+    opacity: 0.75;
+}
+
+.track-wrapper.track-locked .fx-drawer {
+    opacity: 0.55;
+}
+
 
 /* --- Tactile Active Press Feedback --- */
 .btn-generate:active,
@@ -1140,7 +1308,8 @@ body::before {
 .btn-stop-all:active,
 .btn-render-mix:active,
 .btn-use-init:active,
-.btn-clear-init:active {
+.btn-clear-init:active,
+.fx-toggle-btn:active {
     transform: scale(0.96) !important;
 }
 

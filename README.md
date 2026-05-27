@@ -68,3 +68,18 @@ To keep the repository lightweight and clean for distribution:
 2.  **Generated Assets Excluded**: Generated loops (`*.wav`, `*.mp3`) and intermediate directories (`outputs/`, `optimized/`) are kept off Git.
 3.  **Local Environments Excluded**: Virtual environments (`.venv/`) and package manager lockfiles/node modules are excluded.
 4.  **No Hardcoded Paths**: All script execution and asset paths are fully relative.
+
+---
+
+## Credits & Acknowledgements
+
+*   **Generative Music Model**: Stable Audio 3 (SA3) by Stability AI, providing high-fidelity stereo generation.
+*   **DSP Effects Integration**:
+    *   **Luftikus Analog EQ**: Inspired by the lkjbdsp [Luftikus EQ](https://github.com/lkjbdsp/lkjb-plugins/tree/master/Luftikus) hardware modeling.
+    *   **Valentine Distortion & Compressor**: Adapted from the tote-bag-labs [Valentine](https://github.com/tote-bag-labs/valentine) saturator/compressor style.
+    *   **Ælapse Delay & Reverb**: Modeled after the smiarx [Ælapse](https://github.com/smiarx/aelapse) wow delay and spring convolver.
+    *   **Scream Distortion Filter**: Inspired by the Cure-Audio [Scream](https://github.com/Cure-Audio/Scream) resonant distortion effect.
+    *   **Filtr Filter Modulator**: Based on the tiagolr [Filtr](https://github.com/tiagolr/filtr) multi-type filter plugin.
+*   **MCP Applications**:
+    *   **audio-file-mcp-app**: Model-compatible microservice for parsing audio metadata and track directories.
+    *   **audio-grid-mcp-app**: Helper server coordinating sequence loops and multi-track session assets.

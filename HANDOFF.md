@@ -46,10 +46,35 @@ We have finalized the repository packaging, consolidated the git structure, fixe
     - Repurposed delay time slider into a Reverb Size control that regenerates spring convolver buffers dynamically (`0.5s` to `5.0s`).
     - Added Space, Drive, and Tone macro sliders in the FX drawer, morphing multiple parameters at once in the client and in the offline WAV mixdown.
     - Highlighted the Macro Control panel in the UI with custom CSS.
-
-
-
+12. **FX Bypass, Send Routing, and Track Lock**:
+    - Added independent "On/Bypass" toggle switches inside EQ, Valentine, and Ælapse titles. Bypass dims controls (opacity 0.4, pointer-events: none) and routes audio click-free via dry/wet gain fades.
+    - Re-wired Delay/Reverb as parallel Aux Send effects (dry path gain remains fixed at 1.0).
+    - Placed Valentine compressor at the end of the channel DSP chain, compressing the combined dry + saturated + send outputs return sum.
+    - Removed redundant Loop (`L`) toggle button. All tracks loop natively by default.
+    - Added Lock button next to Delete. Locking disables level/pan sliders, FX drawer sliders, bypass switches, variant selection, and track deletion. Locked tracks are styled with amber borders and a subtle visual fade.
+    - Replicated send routing, bypass checks, and default looping in the `OfflineAudioContext` WAV exporter.
+    - Credited Stability AI's Stable Audio 3, lkjbdsp's Luftikus EQ, tote-bag-labs' Valentine saturator, smiarx's Ælapse delay/reverb, and custom MCP applications in the README and project wiki.
+13. **Critical Bug Fixes (Debug Pass)**:
+    - **`bufferToWav` sample skip**: The WAV encoder reused `pos` for both the header byte offset and the PCM sample loop counter. After writing the 44-byte header, `pos` was 44, so the sample loop started at index 44 — skipping the first 44 samples and truncating the last 44. Fixed with a separate `sampleIdx` counter.
+    - **Offline Aelapse dry gain mismatch**: Live chain keeps dry gain fixed at `1.0` (send effect architecture), but the offline renderer used `1 - Math.max(delayMix, reverbMix)`, attenuating dry signal. Fixed to `1.0`.
+    - **Offline compressor placement**: Live chain routes `EQ → Saturator → Sends → Compressor`. Offline had compressor inside the Valentine stage before sends. Fixed to match live routing order.
+14. **Inline Prompt Buttons & Drum Loop Generator**:
+    - Moved Random, In Key, and new Drums buttons inside the text input as compact pill buttons with emoji labels (🎲 🔑 🥁).
+    - Added genre-aware drum loop random generator (20 genres × 16 descriptors) that auto-fills BPM from the current BPM input.
+    - Styled as glassmorphic pills with hover glow and press-scale micro-animations.
+15. **Render Loops & Fade-Out Tail**:
+    - Added a `Loops` number input in the transport bar next to Render Mix. Offline render creates a buffer of `singleLoopDuration × loopCount` plus a 5-second tail.
+    - Sources stop at the content boundary; delay/reverb tails ring out naturally through the FX chain.
+    - Master gain fades linearly to 0 over the 5-second tail for smooth endings.
+16. **Waveform Card Alignment**:
+    - Fixed grid alignment with `align-items: stretch` and fixed header height so waveform seek bars line up across all variant cards.
+17. **Scream & Filtr FX Modules**:
+    - Added **Filtr Filter** (Cure-Audio/Scream-style pre-EQ filter): LP/BP/HP/Notch with cutoff, resonance, and mix controls. Placed first in the DSP chain.
+    - Added **Scream Distortion Filter** (resonant LP + waveshaper): Cutoff, Scream (maps 0-100% to Q 0.707-25 and drive 5-80), and mix controls. Placed after EQ.
+    - Both modules have independent On/Off bypass toggles and are fully replicated in the offline WAV renderer.
+    - Drive macro auto-enables Scream at 60% of macro value when pushed.
+    - Credits added to README for [Cure-Audio/Scream](https://github.com/Cure-Audio/Scream) and [tiagolr/Filtr](https://github.com/tiagolr/filtr).
 
 ## Launcher & Server Info
 *   **Launcher**: [run_server.bat](file:///j:/projects/sa3/run_server.bat) in the project root folder.
-*   **Server Task**: The Flask server is running in the background as task `task-1423` on `http://127.0.0.1:7861` serving the UI.
+*   **Server Task**: The Flask server is running in the background as task `task-2235` on `http://127.0.0.1:7861` serving the UI.

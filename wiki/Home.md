@@ -83,3 +83,16 @@ A time and space processor combining delay time modulation and programmatic conv
 *   **Spring Reverb**: A `ConvolverNode` loaded with a programmatically generated stereo impulse response. The impulse simulates spring dispersion and metallic reflections using decayed white noise combined with chirp waveforms.
 *   **Mix Nodes**: Independent dry/wet gain controls for the delay and reverb paths.
 
+---
+
+## 5. Technology & Model Credits
+
+LoopMasterSA relies on a combination of generative AI, customized Web Audio DSP modeling, and model-context infrastructure:
+
+*   **Stable Audio 3 (SA3)**: Stability AI's generative stereo music foundation model, which outputs 44.1kHz loopable variations.
+*   **smiarx/aelapse (Ælapse)**: The tape delay (wow/flutter modulation) and synthetic convolution model is adapted from the [Ælapse](https://github.com/smiarx/aelapse) processor.
+*   **tote-bag-labs/valentine (Valentine)**: The parallel saturation and justice-style pumping compressor is modeled after the [Valentine](https://github.com/tote-bag-labs/valentine) design.
+*   **lkjbdsp/Luftikus (Luftikus)**: The 6-band analog-modeled hardware equalization curves are built on top of the [Luftikus EQ](https://github.com/lkjbdsp/lkjb-plugins/tree/master/Luftikus) layout.
+*   **audio-file-mcp-app**: Custom Model Context Protocol server that handles filesystem operations, session structures, and WAV metadata tagging.
+*   **audio-grid-mcp-app**: Custom Model Context Protocol server that handles arrange grids, tempo BPM synchronization calculations, and sequence exports.
+

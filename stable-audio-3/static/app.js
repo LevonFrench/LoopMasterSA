@@ -22,6 +22,7 @@
     const tracksContainer = document.getElementById('tracks-container');
     const btnRandomPrompt = document.getElementById('btn-random-prompt');
     const btnRandomInKey = document.getElementById('btn-random-in-key');
+    const btnRandomDrums = document.getElementById('btn-random-drums');
     const btnRenderMix = document.getElementById('btn-render-mix');
 
     // --- State ---
@@ -467,6 +468,97 @@
         }
     }
 
+    function updateEqBypass(track) {
+        const ctx = ensureAudioCtx();
+        if (track.eqEnabled) {
+            track.eqDryGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+            track.eqWetGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+        } else {
+            track.eqDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+            track.eqWetGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+        }
+    }
+
+    function updateValentineBypass(track) {
+        const ctx = ensureAudioCtx();
+        if (track.valentineEnabled) {
+            const mix = track.valentineMix;
+            track.valentineDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
+            track.valentineWetGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+            track.valentineCompDryGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+            track.valentineCompWetGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+        } else {
+            track.valentineDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+            track.valentineWetGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+            track.valentineCompDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+            track.valentineCompWetGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+        }
+    }
+
+    function updateAelapseBypass(track) {
+        const ctx = ensureAudioCtx();
+        if (track.aelapseEnabled) {
+            const delayMix = track.aelapseDelayMix;
+            const reverbMix = track.aelapseReverbMix;
+            track.aelapseDelayGainNode.gain.setTargetAtTime(delayMix, ctx.currentTime, 0.01);
+            track.aelapseReverbGainNode.gain.setTargetAtTime(reverbMix, ctx.currentTime, 0.01);
+            track.aelapseDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+        } else {
+            track.aelapseDelayGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+            track.aelapseReverbGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+            track.aelapseDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+        }
+    }
+
+    function updateFiltrBypass(track) {
+        const ctx = ensureAudioCtx();
+        if (track.filtrEnabled) {
+            const mix = track.filtrMix;
+            track.filtrDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
+            track.filtrWetGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+        } else {
+            track.filtrDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+            track.filtrWetGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+        }
+    }
+
+    function updateScreamBypass(track) {
+        const ctx = ensureAudioCtx();
+        if (track.screamEnabled) {
+            const mix = track.screamMix;
+            track.screamDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
+            track.screamWetGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+        } else {
+            track.screamDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+            track.screamWetGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+        }
+    }
+
+    function updateTrackLockState(track) {
+        const isLocked = !!track.locked;
+        
+        // Disable/enable mixer sliders
+        const levelSlider = track.el.querySelector('.level-slider');
+        const panSlider = track.el.querySelector('.pan-slider');
+        if (levelSlider) levelSlider.disabled = isLocked;
+        if (panSlider) panSlider.disabled = isLocked;
+
+        // Disable/enable FX drawer inputs
+        const inputs = track.wrapper.querySelectorAll('.fx-drawer input');
+        inputs.forEach(input => {
+            input.disabled = isLocked;
+        });
+
+        // Disable/enable FX bypass buttons
+        const bypassBtns = track.wrapper.querySelectorAll('.fx-toggle-btn');
+        bypassBtns.forEach(btn => {
+            btn.disabled = isLocked;
+        });
+
+        // Add visual styling to show it's locked
+        track.wrapper.classList.toggle('track-locked', isLocked);
+    }
+
     // --- Create a track row ---
     function createTrackRow(prompt, batchFiles, trackNum) {
         const ctx = ensureAudioCtx();
@@ -484,6 +576,29 @@
         analyserNode.fftSize = 1024;
         gainNode.connect(analyserNode);
         analyserNode.connect(masterGain);
+
+        // 2. DSP Chain Stage A0: Filtr (Multi-type filter)
+        const filtrFilter = ctx.createBiquadFilter();
+        filtrFilter.type = 'lowpass';
+        filtrFilter.frequency.value = 20000;
+        filtrFilter.Q.value = 0.707;
+
+        const filtrDryGain = ctx.createGain();
+        filtrDryGain.gain.value = 1.0;
+        const filtrWetGain = ctx.createGain();
+        filtrWetGain.gain.value = 0.0; // dry by default
+        const filtrSum = ctx.createGain();
+        const filtrInputNode = ctx.createGain();
+        filtrInputNode.gain.value = 1.0;
+
+        filtrInputNode.connect(filtrDryGain);
+        filtrDryGain.connect(filtrSum);
+
+        filtrInputNode.connect(filtrFilter);
+        filtrFilter.connect(filtrWetGain);
+        filtrWetGain.connect(filtrSum);
+
+        const fxInputNode = filtrInputNode;
 
         // 2. DSP Chain Stage A: Luftikus EQ (6 bands)
         const eqFilters = [];
@@ -503,10 +618,51 @@
             eqFilters.push(filter);
             lastNode = filter;
         }
-        const fxInputNode = eqFilters[0];
-        const eqOutputNode = eqFilters[5];
 
-        // 3. DSP Chain Stage B: Valentine Compressor & Saturator (Split dry/wet)
+        const eqInput = ctx.createGain();
+        eqInput.gain.value = 1.0;
+        const eqOutput = ctx.createGain();
+        eqOutput.gain.value = 1.0;
+        const eqDry = ctx.createGain();
+        eqDry.gain.value = 0.0;
+        const eqWet = ctx.createGain();
+        eqWet.gain.value = 1.0;
+
+        // Filtr -> EQ
+        filtrSum.connect(eqInput);
+
+        eqInput.connect(eqFilters[0]);
+        eqFilters[5].connect(eqWet);
+        eqWet.connect(eqOutput);
+        eqInput.connect(eqDry);
+        eqDry.connect(eqOutput);
+
+        const eqOutputNode = eqOutput;
+
+        // 2.5. DSP Chain Stage A1: Scream (Resonant Distortion Filter)
+        const screamFilter = ctx.createBiquadFilter();
+        screamFilter.type = 'lowpass';
+        screamFilter.frequency.value = 8000;
+        screamFilter.Q.value = 0.707;
+
+        const screamShaper = ctx.createWaveShaper();
+        screamShaper.curve = makeDistortionCurve(5);
+
+        const screamDryGain = ctx.createGain();
+        screamDryGain.gain.value = 1.0;
+        const screamWetGain = ctx.createGain();
+        screamWetGain.gain.value = 0.0; // dry by default
+        const screamSum = ctx.createGain();
+
+        eqOutputNode.connect(screamDryGain);
+        screamDryGain.connect(screamSum);
+
+        eqOutputNode.connect(screamFilter);
+        screamFilter.connect(screamShaper);
+        screamShaper.connect(screamWetGain);
+        screamWetGain.connect(screamSum);
+
+        // 3. DSP Chain Stage B: Valentine Saturator
         const valentineDryGain = ctx.createGain();
         valentineDryGain.gain.value = 1.0;
         
@@ -516,30 +672,22 @@
         const valentineShaper = ctx.createWaveShaper();
         valentineShaper.curve = makeDistortionCurve(15);
         
-        const valentineCompressor = ctx.createDynamicsCompressor();
-        valentineCompressor.threshold.value = 0.0; // off by default
-        valentineCompressor.knee.value = 0.0;
-        valentineCompressor.ratio.value = 4.0;
-        valentineCompressor.attack.value = 0.003;
-        valentineCompressor.release.value = 0.1;
-        
         const valentineWetGain = ctx.createGain();
         valentineWetGain.gain.value = 0.0; // dry by default
         
-        const valentineSumGain = ctx.createGain();
+        const valentineSatSum = ctx.createGain();
         
-        eqOutputNode.connect(valentineDryGain);
-        valentineDryGain.connect(valentineSumGain);
+        screamSum.connect(valentineDryGain);
+        valentineDryGain.connect(valentineSatSum);
         
-        eqOutputNode.connect(valentineDrive);
+        screamSum.connect(valentineDrive);
         valentineDrive.connect(valentineShaper);
-        valentineShaper.connect(valentineCompressor);
-        valentineCompressor.connect(valentineWetGain);
-        valentineWetGain.connect(valentineSumGain);
+        valentineShaper.connect(valentineWetGain);
+        valentineWetGain.connect(valentineSatSum);
 
-        // 4. DSP Chain Stage C: Aelapse Delay & Spring Reverb (Parallel dry, delay, reverb)
+        // 4. DSP Chain Stage C: Aelapse Delay & Spring Reverb (SEND EFFECT setup)
         const aelapseDryGain = ctx.createGain();
-        aelapseDryGain.gain.value = 1.0;
+        aelapseDryGain.gain.value = 1.0; // Dry path always 1.0
         
         const aelapseDelay = ctx.createDelay(5.0);
         aelapseDelay.delayTime.value = 0.3;
@@ -566,20 +714,42 @@
         const aelapseReverbGain = ctx.createGain();
         aelapseReverbGain.gain.value = 0.0; // mix 0%
         
-        const fxOutputNode = ctx.createGain();
+        const sendSumGain = ctx.createGain();
         
-        valentineSumGain.connect(aelapseDryGain);
-        aelapseDryGain.connect(fxOutputNode);
+        valentineSatSum.connect(aelapseDryGain);
+        aelapseDryGain.connect(sendSumGain);
         
-        valentineSumGain.connect(aelapseDelay);
+        valentineSatSum.connect(aelapseDelay);
         aelapseDelay.connect(aelapseFeedbackNode);
         aelapseFeedbackNode.connect(aelapseDelay);
         aelapseDelay.connect(aelapseDelayGain);
-        aelapseDelayGain.connect(fxOutputNode);
+        aelapseDelayGain.connect(sendSumGain);
         
-        valentineSumGain.connect(aelapseReverb);
+        valentineSatSum.connect(aelapseReverb);
         aelapseReverb.connect(aelapseReverbGain);
-        aelapseReverbGain.connect(fxOutputNode);
+        aelapseReverbGain.connect(sendSumGain);
+
+        // 4.5. DSP Chain Stage D: Valentine Compressor (at the end of the chain)
+        const valentineCompressor = ctx.createDynamicsCompressor();
+        valentineCompressor.threshold.value = 0.0; // off by default
+        valentineCompressor.knee.value = 0.0;
+        valentineCompressor.ratio.value = 4.0;
+        valentineCompressor.attack.value = 0.003;
+        valentineCompressor.release.value = 0.1;
+
+        const valentineCompDryGain = ctx.createGain();
+        valentineCompDryGain.gain.value = 0.0; // default: active (not bypassed)
+        const valentineCompWetGain = ctx.createGain();
+        valentineCompWetGain.gain.value = 1.0; // default: active (not bypassed)
+
+        const fxOutputNode = ctx.createGain();
+
+        sendSumGain.connect(valentineCompDryGain);
+        valentineCompDryGain.connect(fxOutputNode);
+
+        sendSumGain.connect(valentineCompressor);
+        valentineCompressor.connect(valentineCompWetGain);
+        valentineCompWetGain.connect(fxOutputNode);
 
         // Connect final DSP output to pan node
         fxOutputNode.connect(panNode);
@@ -611,7 +781,38 @@
             selectedVariant: 0,
             variants: [],
             
+            locked: false,
+            filtrEnabled: false,
+            screamEnabled: false,
+            eqEnabled: true,
+            valentineEnabled: true,
+            aelapseEnabled: true,
+            filtrDryGainNode: filtrDryGain,
+            filtrWetGainNode: filtrWetGain,
+            filtrFilterNode: filtrFilter,
+            screamDryGainNode: screamDryGain,
+            screamWetGainNode: screamWetGain,
+            screamFilterNode: screamFilter,
+            screamShaperNode: screamShaper,
+            eqDryGainNode: eqDry,
+            eqWetGainNode: eqWet,
+            valentineDryGainNode: valentineDryGain,
+            valentineWetGainNode: valentineWetGain,
+            valentineCompDryGainNode: valentineCompDryGain,
+            valentineCompWetGainNode: valentineCompWetGain,
+            aelapseDryGainNode: aelapseDryGain,
+            aelapseDelayGainNode: aelapseDelayGain,
+            aelapseReverbGainNode: aelapseReverbGain,
+            
             // FX state values for offline rendering
+            filtrType: 'lowpass',
+            filtrCutoff: 20000,
+            filtrResonance: 0.707,
+            filtrMix: 0.0,
+            screamCutoff: 8000,
+            screamAmount: 0.707,
+            screamDriveAmount: 5,
+            screamMix: 0.0,
             eqGains: [0, 0, 0, 0, 0, 0],
             valentineDriveVal: 1.0,
             valentineThresh: 0,
@@ -639,8 +840,8 @@
             <div class="mixer-buttons">
                 <button class="mixer-btn solo-btn" title="Solo">S</button>
                 <button class="mixer-btn mute-btn" title="Mute">M</button>
-                <button class="mixer-btn loop-btn is-on" title="Loop">L</button>
                 <button class="mixer-btn fx-btn" title="Toggle FX Drawer">FX</button>
+                <button class="mixer-btn lock-btn" title="Lock Track"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></button>
                 <button class="mixer-btn delete-btn" title="Delete Track">×</button>
             </div>
             <div class="mixer-level">
@@ -673,8 +874,23 @@
                     <div class="fx-control-row"><label>Tone</label><input type="range" class="macro-tone-slider" min="0" max="100" value="50" step="1"><span class="macro-tone-val">Flat</span></div>
                 </div>
             </div>
+            <div class="fx-section filtr-section">
+                <div class="fx-section-title">
+                    <span>Filtr Filter</span>
+                    <button class="fx-toggle-btn filtr-toggle" type="button">Off</button>
+                </div>
+                <div class="fx-controls-grid">
+                    <div class="fx-control-row"><label>Type</label><select class="filtr-type" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;"><option value="lowpass">LP</option><option value="bandpass">BP</option><option value="highpass">HP</option><option value="notch">Notch</option></select></div>
+                    <div class="fx-control-row"><label>Cutoff</label><input type="range" class="filtr-cutoff" min="20" max="20000" value="20000" step="1"><span class="filtr-cutoff-val">20kHz</span></div>
+                    <div class="fx-control-row"><label>Reso</label><input type="range" class="filtr-reso" min="1" max="250" value="7" step="1"><span class="filtr-reso-val">0.7</span></div>
+                    <div class="fx-control-row"><label>Mix</label><input type="range" class="filtr-mix" min="0" max="100" value="0" step="1"><span class="filtr-mix-val">0%</span></div>
+                </div>
+            </div>
             <div class="fx-section eq-section">
-                <div class="fx-section-title">Luftikus Analog EQ</div>
+                <div class="fx-section-title">
+                    <span>Luftikus Analog EQ</span>
+                    <button class="fx-toggle-btn eq-toggle" type="button">On</button>
+                </div>
                 <div class="fx-controls-grid eq-sliders-grid">
                     <div class="fx-control-row"><label>10 Hz</label><input type="range" class="eq-slider" data-band="0" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
                     <div class="fx-control-row"><label>40 Hz</label><input type="range" class="eq-slider" data-band="1" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
@@ -684,8 +900,22 @@
                     <div class="fx-control-row"><label>Air Band</label><input type="range" class="eq-slider" data-band="5" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
                 </div>
             </div>
+            <div class="fx-section scream-section">
+                <div class="fx-section-title">
+                    <span>Scream Distortion Filter</span>
+                    <button class="fx-toggle-btn scream-toggle" type="button">Off</button>
+                </div>
+                <div class="fx-controls-grid">
+                    <div class="fx-control-row"><label>Cutoff</label><input type="range" class="scream-cutoff" min="200" max="16000" value="8000" step="1"><span class="scream-cutoff-val">8.0kHz</span></div>
+                    <div class="fx-control-row"><label>Scream</label><input type="range" class="scream-amount" min="0" max="100" value="0" step="1"><span class="scream-amount-val">0%</span></div>
+                    <div class="fx-control-row"><label>Mix</label><input type="range" class="scream-mix" min="0" max="100" value="0" step="1"><span class="scream-mix-val">0%</span></div>
+                </div>
+            </div>
             <div class="fx-section valentine-section">
-                <div class="fx-section-title">Valentine Distortion & Compressor</div>
+                <div class="fx-section-title">
+                    <span>Valentine Distortion & Compressor</span>
+                    <button class="fx-toggle-btn valentine-toggle" type="button">On</button>
+                </div>
                 <div class="fx-controls-grid">
                     <div class="fx-control-row"><label>Drive</label><input type="range" class="valentine-drive" min="1" max="10" value="1" step="0.1"><span class="val-drive-val">1.0x</span></div>
                     <div class="fx-control-row"><label>Thresh</label><input type="range" class="valentine-thresh" min="-40" max="0" value="0" step="1"><span class="val-thresh-val">0dB (off)</span></div>
@@ -694,7 +924,10 @@
                 </div>
             </div>
             <div class="fx-section aelapse-section">
-                <div class="fx-section-title">Ælapse Tape Delay & Spring Reverb</div>
+                <div class="fx-section-title">
+                    <span>Ælapse Tape Delay & Spring Reverb</span>
+                    <button class="fx-toggle-btn aelapse-toggle" type="button">On</button>
+                </div>
                 <div class="fx-controls-grid">
                     <div class="fx-control-row"><label>Sync Delay</label><span class="aelapse-sync-time" style="width: auto; flex: 1; text-align: left; padding-left: 6px;">${initialDelayTime.toFixed(2)}s (Dotted 8th)</span></div>
                     <div class="fx-control-row"><label>Feedback</label><input type="range" class="aelapse-feedback" min="0" max="95" value="30" step="5"><span class="aelapse-fb-val">30%</span></div>
@@ -708,8 +941,8 @@
         // 9. Wire mixer control event listeners
         const soloBtn = mixerEl.querySelector('.solo-btn');
         const muteBtn = mixerEl.querySelector('.mute-btn');
-        const loopBtn = mixerEl.querySelector('.loop-btn');
         const fxBtn = mixerEl.querySelector('.fx-btn');
+        const lockBtn = mixerEl.querySelector('.lock-btn');
         const deleteBtn = mixerEl.querySelector('.delete-btn');
         const levelSlider = mixerEl.querySelector('.level-slider');
         const levelValue = mixerEl.querySelector('.level-value');
@@ -730,11 +963,11 @@
             updateMixerState();
         });
 
-        loopBtn.addEventListener('click', (e) => {
+        lockBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            track.looping = !track.looping;
-            loopBtn.classList.toggle('is-on', track.looping);
-            updateTrackLoopState(track);
+            track.locked = !track.locked;
+            lockBtn.classList.toggle('is-on', track.locked);
+            updateTrackLockState(track);
         });
 
         fxBtn.addEventListener('click', (e) => {
@@ -746,6 +979,7 @@
 
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (track.locked) return;
             if (confirm(`Are you sure you want to delete this track ("${prompt}")?`)) {
                 deleteTrackRow(track);
             }
@@ -774,6 +1008,73 @@
                 track.eqGains[b] = val;
                 eqFilters[b].gain.value = val;
             });
+        });
+
+        // Wire Filtr controls
+        const filtrTypeSelect = fxDrawerEl.querySelector('.filtr-type');
+        filtrTypeSelect.addEventListener('change', () => {
+            track.filtrType = filtrTypeSelect.value;
+            filtrFilter.type = filtrTypeSelect.value;
+        });
+
+        const filtrCutoffSlider = fxDrawerEl.querySelector('.filtr-cutoff');
+        const filtrCutoffVal = fxDrawerEl.querySelector('.filtr-cutoff-val');
+        filtrCutoffSlider.addEventListener('input', () => {
+            const val = parseFloat(filtrCutoffSlider.value);
+            filtrCutoffVal.textContent = val >= 1000 ? (val / 1000).toFixed(1) + 'kHz' : val + 'Hz';
+            track.filtrCutoff = val;
+            filtrFilter.frequency.value = val;
+        });
+
+        const filtrResoSlider = fxDrawerEl.querySelector('.filtr-reso');
+        const filtrResoVal = fxDrawerEl.querySelector('.filtr-reso-val');
+        filtrResoSlider.addEventListener('input', () => {
+            const val = parseFloat(filtrResoSlider.value) / 10;
+            filtrResoVal.textContent = val.toFixed(1);
+            track.filtrResonance = val;
+            filtrFilter.Q.value = val;
+        });
+
+        const filtrMixSlider = fxDrawerEl.querySelector('.filtr-mix');
+        const filtrMixVal = fxDrawerEl.querySelector('.filtr-mix-val');
+        filtrMixSlider.addEventListener('input', () => {
+            const pct = parseFloat(filtrMixSlider.value) / 100;
+            filtrMixVal.textContent = filtrMixSlider.value + '%';
+            track.filtrMix = pct;
+            updateFiltrBypass(track);
+        });
+
+        // Wire Scream controls
+        const screamCutoffSlider = fxDrawerEl.querySelector('.scream-cutoff');
+        const screamCutoffVal = fxDrawerEl.querySelector('.scream-cutoff-val');
+        screamCutoffSlider.addEventListener('input', () => {
+            const val = parseFloat(screamCutoffSlider.value);
+            screamCutoffVal.textContent = val >= 1000 ? (val / 1000).toFixed(1) + 'kHz' : val + 'Hz';
+            track.screamCutoff = val;
+            screamFilter.frequency.value = val;
+        });
+
+        const screamAmountSlider = fxDrawerEl.querySelector('.scream-amount');
+        const screamAmountVal = fxDrawerEl.querySelector('.scream-amount-val');
+        screamAmountSlider.addEventListener('input', () => {
+            const pct = parseFloat(screamAmountSlider.value);
+            screamAmountVal.textContent = pct + '%';
+            // Map 0-100% to Q 0.707-25 and drive 5-80
+            const q = 0.707 + (24.293 * pct / 100);
+            const drive = 5 + (75 * pct / 100);
+            track.screamAmount = q;
+            track.screamDriveAmount = drive;
+            screamFilter.Q.value = q;
+            screamShaper.curve = makeDistortionCurve(drive);
+        });
+
+        const screamMixSlider = fxDrawerEl.querySelector('.scream-mix');
+        const screamMixVal = fxDrawerEl.querySelector('.scream-mix-val');
+        screamMixSlider.addEventListener('input', () => {
+            const pct = parseFloat(screamMixSlider.value) / 100;
+            screamMixVal.textContent = screamMixSlider.value + '%';
+            track.screamMix = pct;
+            updateScreamBypass(track);
         });
 
         const valDrive = fxDrawerEl.querySelector('.valentine-drive');
@@ -810,8 +1111,7 @@
             const pct = parseFloat(valMix.value) / 100;
             valMixVal.textContent = valMix.value + '%';
             track.valentineMix = pct;
-            valentineDryGain.gain.value = 1 - pct;
-            valentineWetGain.gain.value = pct;
+            updateValentineBypass(track);
         });
 
         const aeFeedback = fxDrawerEl.querySelector('.aelapse-feedback');
@@ -829,8 +1129,7 @@
             const pct = parseFloat(aeMix.value) / 100;
             aeMixVal.textContent = aeMix.value + '%';
             track.aelapseDelayMix = pct;
-            aelapseDelayGain.gain.value = pct;
-            aelapseDryGain.gain.value = 1 - Math.max(track.aelapseDelayMix, track.aelapseReverbMix);
+            updateAelapseBypass(track);
         });
 
         const aeSize = fxDrawerEl.querySelector('.aelapse-size');
@@ -852,8 +1151,7 @@
             const pct = parseFloat(aeReverbMix.value) / 100;
             aeReverbVal.textContent = aeReverbMix.value + '%';
             track.aelapseReverbMix = pct;
-            aelapseReverbGain.gain.value = pct;
-            aelapseDryGain.gain.value = 1 - Math.max(track.aelapseDelayMix, track.aelapseReverbMix);
+            updateAelapseBypass(track);
         });
 
         // 12. Wire Macro Controls
@@ -897,10 +1195,13 @@
             const driveMultiplier = 1.0 + (9.0 * val / 100); // 1.0x to 10.0x
             const thresholdVal = Math.round(-40 * val / 100); // 0dB to -40dB
             const compressorMixVal = val; // 0% to 100%
+            const screamVal = Math.round(val * 0.6); // Scream at 60% of drive macro
             
             const driveSlider = fxDrawerEl.querySelector('.valentine-drive');
             const threshSlider = fxDrawerEl.querySelector('.valentine-thresh');
             const mixSlider = fxDrawerEl.querySelector('.valentine-mix');
+            const screamAmtSlider = fxDrawerEl.querySelector('.scream-amount');
+            const screamMxSlider = fxDrawerEl.querySelector('.scream-mix');
             
             if (driveSlider) {
                 driveSlider.value = driveMultiplier;
@@ -913,6 +1214,19 @@
             if (mixSlider) {
                 mixSlider.value = compressorMixVal;
                 mixSlider.dispatchEvent(new Event('input'));
+            }
+            if (screamAmtSlider) {
+                screamAmtSlider.value = screamVal;
+                screamAmtSlider.dispatchEvent(new Event('input'));
+            }
+            if (screamMxSlider) {
+                screamMxSlider.value = screamVal;
+                screamMxSlider.dispatchEvent(new Event('input'));
+            }
+            // Auto-enable Scream when Drive macro is active
+            if (val > 0 && !track.screamEnabled) {
+                const screamToggle = fxDrawerEl.querySelector('.scream-toggle');
+                if (screamToggle) screamToggle.click();
             }
         });
 
@@ -942,6 +1256,62 @@
                     slider.dispatchEvent(new Event('input'));
                 });
             }
+        });
+
+        // 13. Wire Bypass Switches
+        const filtrToggleBtn = fxDrawerEl.querySelector('.filtr-toggle');
+        const filtrSection = fxDrawerEl.querySelector('.filtr-section');
+        filtrToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            track.filtrEnabled = !track.filtrEnabled;
+            filtrToggleBtn.textContent = track.filtrEnabled ? 'On' : 'Off';
+            filtrToggleBtn.classList.toggle('is-off', !track.filtrEnabled);
+            filtrSection.classList.toggle('is-bypassed', !track.filtrEnabled);
+            updateFiltrBypass(track);
+        });
+
+        const eqToggleBtn = fxDrawerEl.querySelector('.eq-toggle');
+        const eqSection = fxDrawerEl.querySelector('.eq-section');
+        eqToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            track.eqEnabled = !track.eqEnabled;
+            eqToggleBtn.textContent = track.eqEnabled ? 'On' : 'Bypass';
+            eqToggleBtn.classList.toggle('is-off', !track.eqEnabled);
+            eqSection.classList.toggle('is-bypassed', !track.eqEnabled);
+            updateEqBypass(track);
+        });
+
+        const screamToggleBtn = fxDrawerEl.querySelector('.scream-toggle');
+        const screamSection = fxDrawerEl.querySelector('.scream-section');
+        screamToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            track.screamEnabled = !track.screamEnabled;
+            screamToggleBtn.textContent = track.screamEnabled ? 'On' : 'Off';
+            screamToggleBtn.classList.toggle('is-off', !track.screamEnabled);
+            screamSection.classList.toggle('is-bypassed', !track.screamEnabled);
+            updateScreamBypass(track);
+        });
+
+        const valToggleBtn = fxDrawerEl.querySelector('.valentine-toggle');
+        const valSection = fxDrawerEl.querySelector('.valentine-section');
+        valToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            track.valentineEnabled = !track.valentineEnabled;
+            valToggleBtn.textContent = track.valentineEnabled ? 'On' : 'Bypass';
+            valToggleBtn.classList.toggle('is-off', !track.valentineEnabled);
+            valSection.classList.toggle('is-bypassed', !track.valentineEnabled);
+            updateValentineBypass(track);
+        });
+
+        const aeToggleBtn = fxDrawerEl.querySelector('.aelapse-toggle');
+        const aeSection = fxDrawerEl.querySelector('.aelapse-section');
+        aeToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            track.aelapseEnabled = !track.aelapseEnabled;
+            aeToggleBtn.textContent = track.aelapseEnabled ? 'On' : 'Bypass';
+            aeToggleBtn.classList.toggle('is-off', !track.aelapseEnabled);
+            aeSection.classList.toggle('is-bypassed', !track.aelapseEnabled);
+            updateAelapseBypass(track);
         });
 
         // 11. Build variants card selection UI
@@ -979,6 +1349,7 @@
             variantsEl.appendChild(cardEl);
 
             cardEl.addEventListener('click', (e) => {
+                if (track.locked) return;
                 const seekBar = cardEl.querySelector('.card-seek-bar');
                 const seekRect = seekBar.getBoundingClientRect();
                 const inSeekBar = e.clientX >= seekRect.left && e.clientX <= seekRect.right
@@ -998,6 +1369,7 @@
             if (useInitBtn) {
                 useInitBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
+                    if (track.locked) return;
                     setInitAudio(track, i, filePath, name);
                 });
             }
@@ -1078,10 +1450,6 @@
         }
         
         if (btnRandomInKey) {
-            const displayVal = currentKeyOrChord.value.length > 15 
-                ? currentKeyOrChord.value.substring(0, 12) + '...'
-                : currentKeyOrChord.value;
-            btnRandomInKey.innerHTML = `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg> ${displayVal}`;
             btnRandomInKey.title = `Generate Random Prompt in ${currentKeyOrChord.value}`;
         }
         
@@ -1098,6 +1466,33 @@
     if (btnRandomInKey) {
         btnRandomInKey.addEventListener('click', () => {
             generateRandomPrompt(true);
+        });
+    }
+
+    // --- Random Drum Loop Generator ---
+    const drumGenres = [
+        'trap', 'boom bap', 'lo-fi hip hop', 'drill', 'jungle', 'breakbeat',
+        'house', 'techno', 'drum and bass', 'UK garage', 'afrobeat', 'reggaeton',
+        'jazz', 'funk', 'rock', 'metal', 'pop', 'R&B', 'disco', 'footwork'
+    ];
+
+    const drumDescriptors = [
+        'hard-hitting', 'crispy', 'punchy', 'tight', 'bouncy', 'swinging',
+        'aggressive', 'laid-back', 'groovy', 'minimal', 'complex', 'syncopated',
+        'live acoustic', 'processed 808', 'vintage drum machine', 'sampled breaks'
+    ];
+
+    function generateRandomDrumPrompt() {
+        const genre = drumGenres[Math.floor(Math.random() * drumGenres.length)];
+        const desc = drumDescriptors[Math.floor(Math.random() * drumDescriptors.length)];
+        const bpm = parseInt(bpmInput.value) || 120;
+        promptInput.value = `${desc} ${genre} drum loop at ${bpm} bpm`;
+        promptInput.focus();
+    }
+
+    if (btnRandomDrums) {
+        btnRandomDrums.addEventListener('click', () => {
+            generateRandomDrumPrompt();
         });
     }
 
@@ -1503,15 +1898,16 @@
             channels.push(buffer.getChannelData(i));
         }
 
-        // Write PCM audio samples
-        while (pos < buffer.length) {
+        // Write PCM audio samples (use separate sampleIdx — pos is byte offset from header)
+        let sampleIdx = 0;
+        while (sampleIdx < buffer.length) {
             for (i = 0; i < numOfChan; i++) {
-                sample = Math.max(-1, Math.min(1, channels[i][pos]));
+                sample = Math.max(-1, Math.min(1, channels[i][sampleIdx]));
                 sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
                 view.setInt16(44 + offset, sample, true);
                 offset += 2;
             }
-            pos++;
+            sampleIdx++;
         }
 
         return new Blob([bufferArr], { type: 'audio/wav' });
@@ -1527,8 +1923,12 @@
             try {
                 const currentCtx = ensureAudioCtx();
                 const sampleRate = currentCtx.sampleRate;
-                const duration = globalDuration;
-                const offlineCtx = new OfflineAudioContext(2, sampleRate * duration, sampleRate);
+                const loopCount = Math.max(1, parseInt(document.getElementById('render-loops-input')?.value) || 1);
+                const singleLoopDuration = globalDuration;
+                const contentDuration = singleLoopDuration * loopCount;
+                const tailDuration = 5.0; // seconds of fade-out for delay/reverb tails
+                const totalDuration = contentDuration + tailDuration;
+                const offlineCtx = new OfflineAudioContext(2, sampleRate * totalDuration, sampleRate);
 
                 // Create master chain on offline context
                 const offlineMasterGain = offlineCtx.createGain();
@@ -1549,6 +1949,10 @@
                 offlineLimiter.connect(offlineMakeup);
                 offlineMakeup.connect(offlineCtx.destination);
 
+                // Schedule fade-out over the tail section
+                offlineMasterGain.gain.setValueAtTime(1.0, contentDuration);
+                offlineMasterGain.gain.linearRampToValueAtTime(0.0, totalDuration);
+
                 // Connect all active tracks
                 const anySoloed = tracks.some(t => t.soloed);
 
@@ -1565,95 +1969,169 @@
                     source.loop = t.looping;
                     if (t.looping) {
                         source.loopStart = 0;
-                        source.loopEnd = duration;
+                        source.loopEnd = singleLoopDuration;
                     }
 
                     // --- REPLICATE DSP EFFECTS ---
-                    // 1. Luftikus EQ (6-band)
+                    // 0. Filtr Filter
                     let lastNode = source;
-                    const freqs = [10, 40, 160, 640, 2500, 12000];
-                    const types = ['peaking', 'peaking', 'peaking', 'peaking', 'peaking', 'highshelf'];
-                    
-                    for (let b = 0; b < 6; b++) {
-                        const filter = offlineCtx.createBiquadFilter();
-                        filter.type = types[b];
-                        filter.frequency.value = freqs[b];
-                        filter.Q.value = 1;
-                        filter.gain.value = t.eqGains[b];
-                        lastNode.connect(filter);
-                        lastNode = filter;
+                    if (t.filtrEnabled && t.filtrMix > 0) {
+                        const filtrBiquad = offlineCtx.createBiquadFilter();
+                        filtrBiquad.type = t.filtrType;
+                        filtrBiquad.frequency.value = t.filtrCutoff;
+                        filtrBiquad.Q.value = t.filtrResonance;
+
+                        const filtrDry = offlineCtx.createGain();
+                        filtrDry.gain.value = 1.0 - t.filtrMix;
+                        const filtrWet = offlineCtx.createGain();
+                        filtrWet.gain.value = t.filtrMix;
+                        const filtrSumNode = offlineCtx.createGain();
+
+                        lastNode.connect(filtrDry);
+                        filtrDry.connect(filtrSumNode);
+
+                        lastNode.connect(filtrBiquad);
+                        filtrBiquad.connect(filtrWet);
+                        filtrWet.connect(filtrSumNode);
+
+                        lastNode = filtrSumNode;
                     }
 
-                    // 2. Valentine Compressor & Saturator (Split dry/wet)
-                    const valentineDry = offlineCtx.createGain();
-                    valentineDry.gain.value = 1 - t.valentineMix;
-                    
-                    const valentineDrive = offlineCtx.createGain();
-                    valentineDrive.gain.value = t.valentineDriveVal;
-                    
-                    const valentineShaper = offlineCtx.createWaveShaper();
-                    valentineShaper.curve = makeDistortionCurve(t.valentineDriveVal * 15);
-                    
-                    const valentineComp = offlineCtx.createDynamicsCompressor();
-                    valentineComp.threshold.setValueAtTime(t.valentineThresh, 0);
-                    valentineComp.knee.setValueAtTime(0.0, 0);
-                    valentineComp.ratio.setValueAtTime(t.valentineRatio, 0);
-                    valentineComp.attack.setValueAtTime(0.003, 0);
-                    valentineComp.release.setValueAtTime(0.1, 0);
-                    
-                    const valentineWet = offlineCtx.createGain();
-                    valentineWet.gain.value = t.valentineMix;
-                    
-                    const valentineSum = offlineCtx.createGain();
-                    
-                    lastNode.connect(valentineDry);
-                    valentineDry.connect(valentineSum);
-                    
-                    lastNode.connect(valentineDrive);
-                    valentineDrive.connect(valentineShaper);
-                    valentineShaper.connect(valentineComp);
-                    valentineComp.connect(valentineWet);
-                    valentineWet.connect(valentineSum);
-                    
-                    lastNode = valentineSum;
+                    // 1. Luftikus EQ (6-band)
+                    if (t.eqEnabled) {
+                        const freqs = [10, 40, 160, 640, 2500, 12000];
+                        const types = ['peaking', 'peaking', 'peaking', 'peaking', 'peaking', 'highshelf'];
+                        
+                        for (let b = 0; b < 6; b++) {
+                            const filter = offlineCtx.createBiquadFilter();
+                            filter.type = types[b];
+                            filter.frequency.value = freqs[b];
+                            filter.Q.value = 1;
+                            filter.gain.value = t.eqGains[b];
+                            lastNode.connect(filter);
+                            lastNode = filter;
+                        }
+                    }
 
-                    // 3. Aelapse Delay & Reverb
-                    const aelapseSum = offlineCtx.createGain();
-                    
-                    // Dry path
-                    const aelapseDry = offlineCtx.createGain();
-                    aelapseDry.gain.value = 1 - Math.max(t.aelapseDelayMix, t.aelapseReverbMix);
-                    lastNode.connect(aelapseDry);
-                    aelapseDry.connect(aelapseSum);
-                    
-                    // Delay path
-                    const aelapseDelay = offlineCtx.createDelay(5.0);
-                    aelapseDelay.delayTime.setValueAtTime(t.aelapseDelayTime, 0);
-                    
-                    const aelapseFb = offlineCtx.createGain();
-                    aelapseFb.gain.value = t.aelapseFeedback;
-                    
-                    const aelapseDelayGain = offlineCtx.createGain();
-                    aelapseDelayGain.gain.value = t.aelapseDelayMix;
-                    
-                    lastNode.connect(aelapseDelay);
-                    aelapseDelay.connect(aelapseFb);
-                    aelapseFb.connect(aelapseDelay); // feedback loop
-                    aelapseDelay.connect(aelapseDelayGain);
-                    aelapseDelayGain.connect(aelapseSum);
-                    
-                    // Reverb path
-                    const aelapseReverb = offlineCtx.createConvolver();
-                    aelapseReverb.buffer = createSpringImpulseResponse(offlineCtx, t.aelapseReverbSize || 2.0, 2.5);
-                    
-                    const aelapseReverbGain = offlineCtx.createGain();
-                    aelapseReverbGain.gain.value = t.aelapseReverbMix;
-                    
-                    lastNode.connect(aelapseReverb);
-                    aelapseReverb.connect(aelapseReverbGain);
-                    aelapseReverbGain.connect(aelapseSum);
-                    
-                    lastNode = aelapseSum;
+                    // 1.5. Scream Distortion Filter
+                    if (t.screamEnabled && t.screamMix > 0) {
+                        const screamBiquad = offlineCtx.createBiquadFilter();
+                        screamBiquad.type = 'lowpass';
+                        screamBiquad.frequency.value = t.screamCutoff;
+                        screamBiquad.Q.value = t.screamAmount;
+
+                        const screamShaperNode = offlineCtx.createWaveShaper();
+                        screamShaperNode.curve = makeDistortionCurve(t.screamDriveAmount);
+
+                        const screamDry = offlineCtx.createGain();
+                        screamDry.gain.value = 1.0 - t.screamMix;
+                        const screamWet = offlineCtx.createGain();
+                        screamWet.gain.value = t.screamMix;
+                        const screamSumNode = offlineCtx.createGain();
+
+                        lastNode.connect(screamDry);
+                        screamDry.connect(screamSumNode);
+
+                        lastNode.connect(screamBiquad);
+                        screamBiquad.connect(screamShaperNode);
+                        screamShaperNode.connect(screamWet);
+                        screamWet.connect(screamSumNode);
+
+                        lastNode = screamSumNode;
+                    }
+
+                    // 2. Valentine Saturator (dry/wet split — compressor is AFTER sends)
+                    if (t.valentineEnabled) {
+                        const valentineDry = offlineCtx.createGain();
+                        valentineDry.gain.value = 1 - t.valentineMix;
+                        
+                        const valentineDrive = offlineCtx.createGain();
+                        valentineDrive.gain.value = t.valentineDriveVal;
+                        
+                        const valentineShaper = offlineCtx.createWaveShaper();
+                        valentineShaper.curve = makeDistortionCurve(t.valentineDriveVal * 15);
+                        
+                        const valentineWet = offlineCtx.createGain();
+                        valentineWet.gain.value = t.valentineMix;
+                        
+                        const valentineSum = offlineCtx.createGain();
+                        
+                        lastNode.connect(valentineDry);
+                        valentineDry.connect(valentineSum);
+                        
+                        lastNode.connect(valentineDrive);
+                        valentineDrive.connect(valentineShaper);
+                        valentineShaper.connect(valentineWet);
+                        valentineWet.connect(valentineSum);
+                        
+                        lastNode = valentineSum;
+                    }
+
+                    // 3. Aelapse Delay & Reverb (SEND EFFECT — dry stays at 1.0)
+                    if (t.aelapseEnabled) {
+                        const aelapseSum = offlineCtx.createGain();
+                        
+                        // Dry path — always 1.0 (send effect, not insert)
+                        const aelapseDry = offlineCtx.createGain();
+                        aelapseDry.gain.value = 1.0;
+                        lastNode.connect(aelapseDry);
+                        aelapseDry.connect(aelapseSum);
+                        
+                        // Delay send path
+                        const aelapseDelay = offlineCtx.createDelay(5.0);
+                        aelapseDelay.delayTime.setValueAtTime(t.aelapseDelayTime, 0);
+                        
+                        const aelapseFb = offlineCtx.createGain();
+                        aelapseFb.gain.value = t.aelapseFeedback;
+                        
+                        const aelapseDelayGain = offlineCtx.createGain();
+                        aelapseDelayGain.gain.value = t.aelapseDelayMix;
+                        
+                        lastNode.connect(aelapseDelay);
+                        aelapseDelay.connect(aelapseFb);
+                        aelapseFb.connect(aelapseDelay); // feedback loop
+                        aelapseDelay.connect(aelapseDelayGain);
+                        aelapseDelayGain.connect(aelapseSum);
+                        
+                        // Reverb send path
+                        const aelapseReverb = offlineCtx.createConvolver();
+                        aelapseReverb.buffer = createSpringImpulseResponse(offlineCtx, t.aelapseReverbSize || 2.0, 2.5);
+                        
+                        const aelapseReverbGain = offlineCtx.createGain();
+                        aelapseReverbGain.gain.value = t.aelapseReverbMix;
+                        
+                        lastNode.connect(aelapseReverb);
+                        aelapseReverb.connect(aelapseReverbGain);
+                        aelapseReverbGain.connect(aelapseSum);
+                        
+                        lastNode = aelapseSum;
+                    }
+
+                    // 4. Valentine Compressor (end of chain, after sends)
+                    if (t.valentineEnabled) {
+                        const valentineComp = offlineCtx.createDynamicsCompressor();
+                        valentineComp.threshold.setValueAtTime(t.valentineThresh, 0);
+                        valentineComp.knee.setValueAtTime(0.0, 0);
+                        valentineComp.ratio.setValueAtTime(t.valentineRatio, 0);
+                        valentineComp.attack.setValueAtTime(0.003, 0);
+                        valentineComp.release.setValueAtTime(0.1, 0);
+                        
+                        const valentineCompDry = offlineCtx.createGain();
+                        valentineCompDry.gain.value = 0.0;
+                        const valentineCompWet = offlineCtx.createGain();
+                        valentineCompWet.gain.value = 1.0;
+                        
+                        const compSum = offlineCtx.createGain();
+                        
+                        lastNode.connect(valentineCompDry);
+                        valentineCompDry.connect(compSum);
+                        
+                        lastNode.connect(valentineComp);
+                        valentineComp.connect(valentineCompWet);
+                        valentineCompWet.connect(compSum);
+                        
+                        lastNode = compSum;
+                    }
 
                     // --- PAN & LEVEL ---
                     const panner = offlineCtx.createStereoPanner();
@@ -1667,6 +2145,10 @@
                     gain.connect(offlineMasterGain);
 
                     source.start(0);
+                    // Stop sources at the content boundary so FX tails can ring out
+                    if (t.looping) {
+                        source.stop(contentDuration);
+                    }
                 });
 
                 const renderedBuffer = await offlineCtx.startRendering();
@@ -1676,7 +2158,7 @@
                 const blobUrl = URL.createObjectURL(wavBlob);
                 const link = document.createElement('a');
                 link.href = blobUrl;
-                link.download = `loopmastersa_mix_${bpm}bpm.wav`;
+                link.download = `loopmastersa_mix_${bpm}bpm_${loopCount}loops.wav`;
                 link.click();
                 URL.revokeObjectURL(blobUrl);
 

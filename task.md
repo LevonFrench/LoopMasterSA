@@ -81,8 +81,11 @@
   - [x] Implement Space, Drive, and Tone macro sliders that morph multiple FX parameters
   - [x] Apply highlight visual styles to macro panel in app.css
   - [x] Replicate reverb size parameters in OfflineAudioContext WAV mixdown
-
-
-
-
-
+- [x] Implement independent FX bypass toggles for each block:
+  - [x] Update track model and DSP connection in app.js with dry/wet gain routing for EQ, Valentine, and Ælapse
+  - [x] Add On/Bypass HTML buttons to the EQ, Valentine, and Ælapse titles in the FX drawer
+  - [x] Implement click event listeners for the bypass buttons to toggle status and call bypass update helpers
+  - [x] Update individual mix slider listeners to update through the bypass helpers
+  - [x] Add CSS styling in app.css for the bypass buttons, section titles, and visual dimming (.is-bypassed)
+  - [x] Update OfflineAudioContext WAV renderer to respect and replicate active bypass states
+  - [x] Verify audio rendering and UI states

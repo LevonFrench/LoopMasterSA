@@ -111,6 +111,17 @@ We updated the FX drawer and Web Audio DSP connections:
 - **Macro Highlight Styling**: Styled `.fx-section.macros-section` in `app.css` with a highlighted background and border to draw focus in the UI.
 - **Offline Bounce Replication**: Replicated Reverb Size configuration in `OfflineAudioContext` for exact WAV bouncing.
 
+## Completed Tweak: FX Bypass, Send Routing, and Track Lock
+
+We implemented independent bypass, parallel send routing for delay/reverb, track locking, and credited external packages:
+- **Bypass Toggles**: Added On/Bypass buttons in the EQ, Valentine, and Ælapse titles. Toggling them dims the controls (opacity 0.4, pointer-events: none) and routes the audio click-free through parallel dry/wet gain nodes.
+- **Send Effect Routing**: Treat delay and reverb as Send effects where the main dry signal path gain is fixed at 1.0 (uncut by wet send level changes).
+- **Compressor at End of Chain**: Placed the Valentine dynamics compressor at the end of the channel FX chain, compressing the combined dry + distortion + delay + reverb returns.
+- **Redundant Loop Toggle Removal**: Removed the Loop button (`L`) from the mixer strip. All tracks loop natively by default.
+- **Track Lock Toggle**: Added a Lock button next to the Delete button. Toggling Lock disables volume, panning, all FX sliders, variant selection, and track deletion. Highlighted locked track rows with an amber border and a subtle visual fade.
+- **Offline Rendering Sync**: Replicated the new compressor-last send routing, bypass states, and looping defaults in the `OfflineAudioContext` WAV mixdown bounce.
+- **Tech Credits**: Credited Stability AI's Stable Audio 3, lkjbdsp's Luftikus EQ, tote-bag-labs' Valentine saturator, smiarx's Ælapse delay/reverb, and custom MCP applications in the README and project wiki.
+
 
 
 
