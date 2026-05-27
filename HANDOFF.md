@@ -21,6 +21,11 @@ Rewrote all three documentation files from scratch. The previous docs were dry s
 - README links to both instead of duplicating either
 - Every section is scannable (tables > paragraphs, consistent formatting)
 
+**Default Track Volume & Tone Macro Knob Swap**:
+- Modified default track playback volume to start at `50%` (`0.5` gain) on track initialization, with the mixer strip Vol input slider defaulting to `50` upon row creation.
+- Replaced the DFB (Delay Feedback) mixer knob with the Tone macro knob in the track mixer controls.
+- Integrated tone macro mapping inside the frontend `applyMacroKnob` function to drive Luftikus EQ band gains dynamically, centering flat at `50`.
+
 ---
 
 ### Key Repository Layout

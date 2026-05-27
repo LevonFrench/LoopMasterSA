@@ -867,7 +867,7 @@
 
         // 1. Core Web Audio Nodes
         const gainNode = ctx.createGain();
-        gainNode.gain.value = 1.0;
+        gainNode.gain.value = 0.5;
 
         const panNode = ctx.createStereoPanner();
         panNode.pan.value = 0;
@@ -1086,7 +1086,7 @@
             muted: false,
             soloed: false,
             looping: true,
-            level: 1.0,
+            level: 0.5,
             pan: 0,
             selectedVariant: 0,
             variants: [],
@@ -1159,8 +1159,8 @@
             <div class="mixer-vol-pan">
                 <div class="mixer-level">
                     <label>Vol</label>
-                    <input type="range" class="level-slider" min="0" max="100" value="100" step="1">
-                    <span class="level-value">100</span>
+                    <input type="range" class="level-slider" min="0" max="100" value="50" step="1">
+                    <span class="level-value">50</span>
                 </div>
                 <div class="mixer-pan">
                     <div class="pan-knob" title="Pan: C">
@@ -1172,7 +1172,7 @@
             <div class="mixer-macros-row">
                 <div class="macro-knob-group"><div class="macro-knob" data-param="filter" title="Filter: Off"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Flt</span></div>
                 <div class="macro-knob-group"><div class="macro-knob" data-param="reso" title="Reso: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Res</span></div>
-                <div class="macro-knob-group"><div class="macro-knob" data-param="dlyFb" title="Delay FB: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">DFb</span></div>
+                <div class="macro-knob-group"><div class="macro-knob" data-param="tone" title="Tone: Flat"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Tone</span></div>
                 <div class="macro-knob-group"><div class="macro-knob" data-param="dlyMix" title="Delay Mix: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">DMx</span></div>
                 <div class="macro-knob-group"><div class="macro-knob" data-param="revSize" title="Reverb Size: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">RSz</span></div>
                 <div class="macro-knob-group"><div class="macro-knob" data-param="revMix" title="Reverb Mix: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">RMx</span></div>
@@ -1520,13 +1520,30 @@
                     track.filtrResonance = q;
                     track.filtrFilterNode.Q.setTargetAtTime(q, ctx.currentTime, 0.02);
                     knobEl.title = `Reso: ${value}%`;
-                } else if (param === 'dlyFb') {
-                    const fb = value / 100 * 0.95;
-                    track.aelapseFeedback = fb;
-                    track.aelapseDelayNode.delayTime; // ensure node exists
-                    const fbNode = track.__aelapseFbNode;
-                    if (fbNode) fbNode.gain.setTargetAtTime(fb, ctx.currentTime, 0.01);
-                    knobEl.title = `Delay FB: ${value}%`;
+                } else if (param === 'tone') {
+                    if (value === 50) {
+                        knobEl.title = 'Tone: Flat';
+                    } else if (value < 50) {
+                        knobEl.title = 'Tone: Dark';
+                    } else {
+                        knobEl.title = 'Tone: Bright';
+                    }
+                    // Push to EQ sliders
+                    const eqSlidersList = track.wrapper.querySelectorAll('.eq-slider');
+                    if (eqSlidersList.length === 6) {
+                        let bandGains = [0, 0, 0, 0, 0, 0];
+                        if (value < 50) {
+                            const factor = (50 - value) / 50;
+                            bandGains = [6.0 * factor, 6.0 * factor, 4.0 * factor, 0, -6.0 * factor, -6.0 * factor];
+                        } else if (value > 50) {
+                            const factor = (value - 50) / 50;
+                            bandGains = [-6.0 * factor, -6.0 * factor, -3.0 * factor, 0, 6.0 * factor, 8.0 * factor];
+                        }
+                        eqSlidersList.forEach((slider, b) => {
+                            slider.value = bandGains[b];
+                            slider.dispatchEvent(new Event('input'));
+                        });
+                    }
                 } else if (param === 'dlyMix') {
                     const mix = value / 100;
                     track.aelapseDelayMix = mix;
@@ -1573,7 +1590,8 @@
         macroKnobs.forEach(knobEl => {
             const param = knobEl.dataset.param;
             const isBipolar = param === 'filter';
-            macroKnobState[param] = { value: 0, dragging: false, startY: 0, startVal: 0 };
+            const defaultVal = param === 'tone' ? 50 : 0;
+            macroKnobState[param] = { value: defaultVal, dragging: false, startY: 0, startVal: 0 };
 
             knobEl.addEventListener('mousedown', (e) => {
                 if (track.locked) return;
@@ -1608,15 +1626,16 @@
             knobEl.addEventListener('dblclick', (e) => {
                 e.stopPropagation();
                 if (track.locked) return;
-                macroKnobState[param].value = 0;
-                applyMacroKnob(param, 0);
+                macroKnobState[param].value = defaultVal;
+                applyMacroKnob(param, defaultVal);
             });
 
             // Init indicator position
             if (isBipolar) {
                 knobEl.querySelector('.macro-knob-indicator').style.transform = 'rotate(0deg)';
             } else {
-                knobEl.querySelector('.macro-knob-indicator').style.transform = 'rotate(-135deg)';
+                const initDeg = -135 + (defaultVal / 100) * 270;
+                knobEl.querySelector('.macro-knob-indicator').style.transform = `rotate(${initDeg}deg)`;
             }
         });
 

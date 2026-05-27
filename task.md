@@ -172,5 +172,11 @@
   - [x] Add master-volume-slider styles in app.css
   - [x] Wire input event in app.js to update the master GainNode in Web Audio
   - [x] Connect master volume value to OfflineAudioContext offline render mixdown
+- [x] Set Default Track Volume to 50 & Swap DFB with Tone Macro:
+  - [x] Set default level parameter and gain node values to 0.5 in app.js
+  - [x] Set default Vol input range slider value to 50 in index.html creation
+  - [x] Swap dlyFb data-param with tone in mixer HTML template
+  - [x] Implement tone mapping and default value logic inside applyMacroKnob
+
 
 

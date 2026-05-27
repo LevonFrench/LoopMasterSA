@@ -170,3 +170,8 @@ We implemented and verified individual variant locking and regeneration:
 1.  **Layout**: Verified the presence of the master volume slider and text readout inside the master level section of [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html), positioned inline next to the master VU meter.
 2.  **Web Audio Gain Control**: Verified that dragging the master volume slider adjusts the master `GainNode` value in real-time, scaling overall playback volume.
 3.  **Offline Render Integration**: Verified that the offline rendering engine (`OfflineAudioContext`) in `app.js` reads the master volume slider value and applies it during the mixdown bounce, ensuring the exported WAV matches the output mix levels.
+
+### 38. Verification of Default Track Volume and Tone Mixer Knob
+1.  **Default Volume**: Verified that newly generated track rows now start at a default volume level of `50%` (gain value `0.5` on the track's GainNode), and the mixer channel strip's Vol range slider defaults to `50` upon creation.
+2.  **Knob Replacement**: Verified that the DFB (Delay Feedback) knob in the channel strip mixer row has been replaced with the Tone macro knob.
+3.  **Tone Integration**: Verified that dragging the Tone mixer knob updates the Luftikus EQ band gains dynamically (centering flat at `50`, dark below `50`, and bright above `50`) identical to the Tone macro in the FX drawer, and double-clicking the Tone knob resets it back to `50`.
