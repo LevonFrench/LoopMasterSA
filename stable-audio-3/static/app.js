@@ -241,6 +241,14 @@
     makeDraggableInput(document.getElementById('cfg-input'), { min: 0.5, max: 15, step: 0.5, sensitivity: 0.1 });
     makeDraggableInput(document.getElementById('steps-input'), { min: 1, max: 100, step: 1, sensitivity: 1 });
 
+    // --- Split toggle: show/hide card center lines ---
+    const splitToggle = document.getElementById('toggle-split');
+    if (splitToggle) {
+        splitToggle.addEventListener('change', () => {
+            document.body.classList.toggle('split-mode', splitToggle.checked);
+        });
+    }
+
     // --- Solo/Mute logic ---
     function updateMixerState() {
         const anySoloed = tracks.some(t => t.soloed);
@@ -1931,6 +1939,7 @@
                     <canvas class="card-waveform"></canvas>
                     <div class="card-progress-fill"></div>
                     <div class="card-playhead"></div>
+                    <div class="card-split-line"></div>
                 </div>
             `;
 
@@ -1956,14 +1965,16 @@
                                && e.clientY >= seekRect.top  && e.clientY <= seekRect.bottom;
 
                 const seekToggle = document.getElementById('toggle-seek');
-                const seekEnabled = seekToggle ? seekToggle.checked : true;
+                const splitToggle = document.getElementById('toggle-split');
+                const seekEnabled = seekToggle ? seekToggle.checked : false;
+                const splitEnabled = splitToggle ? splitToggle.checked : false;
 
-                if (isLeftHalf && isPlaying && i !== track.selectedVariant) {
-                    // Left half = queue at next loop boundary
+                if (splitEnabled && isLeftHalf && isPlaying && i !== track.selectedVariant) {
+                    // Split ON + left half = queue at next loop boundary
                     track._pendingVariant = i;
                     track.variants.forEach((v, vi) => v.el.classList.toggle('is-queued', vi === i));
                 } else {
-                    // Right half = instant switch
+                    // Default or right half = instant switch
                     selectVariant(track, i);
                 }
 

@@ -125,6 +125,10 @@
                     <input type="checkbox" id="toggle-seek">
                     <span class="toggle-track"></span>Seek
                 </label>
+                <label class="toggle-switch" title="Split cards: left = queue at loop start, right = instant switch">
+                    <input type="checkbox" id="toggle-split">
+                    <span class="toggle-track"></span>Split
+                </label>
             </div>
 
             <!-- Visualizer Tray -->
@@ -143,7 +147,11 @@
 
                 <div class="guide-visual">
                     <div class="guide-section">
-                        <div class="guide-heading">Clip Switching</div>
+                        <div class="guide-heading">Click any clip to switch instantly</div>
+                    </div>
+
+                    <div class="guide-section">
+                        <div class="guide-heading">Split mode (toggle above)</div>
                         <div class="guide-card-demo">
                             <div class="guide-card-zone zone-queue">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg>
