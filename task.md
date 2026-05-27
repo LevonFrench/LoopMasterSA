@@ -279,4 +279,8 @@
   - [x] Hide format selector dropdown when zipping individual loops.
   - [x] Default loop export format to WAV.
   - [x] Keep format selector dropdown visible for render mixdown.
+- [x] Fix syntax error in `applyControlValue` in `app.js`:
+  - [x] Locate the unclosed `if (slider)` block under the `filtr-cutoff` parameter.
+  - [x] Restore the missing closing curly brace `}`.
+  - [x] Verify syntax using `node -c` to ensure there are no parser errors.
 

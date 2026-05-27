@@ -310,8 +310,9 @@ To support dynamic song transitions and fills for rhythm tracks:
 4. **Regeneration Compatibility**: Applied the same mapping to the `/api/regenerate` endpoint so that selectively regenerating the 4th card slot (index 3) preserves the fill steering and One-Shot metadata characteristics, while other slots receive their standard looping prompts.
 5. **Console Transparency**: Print original and enhanced prompts per variant in the server logs for clear debug tracking.
 
-## Proposed Tweak: Remove Valentine FX & Simplify Export Loops Dialog
-- **Web Audio Chain Cleanup**: Remove Valentine distortion and compressor Web Audio nodes and connections, linking previous nodes directly to subsequent stages.
-- **UI and Macros**: Remove references to satComp, update the drive macro to only control Scream distortion, and remove the Valentine bypass controls/bypasses.
-- **Copy/Paste and Modulation**: Remove all Valentine settings from copy/paste settings routines and LFO/MIDI control mappings.
-- **Export Loops Dialog Format Prompt**: Hide the Format dropdown in the export settings modal when zipping loops, defaulting to WAV format.
+## Completed Work: Remove Valentine FX & Simplify Export Loops Dialog
+- **Web Audio Chain Cleanup**: Removed Valentine distortion and compressor Web Audio nodes and connections, routing Scream distortion directly to Aelapse Delay & Reverb.
+- **UI and Macros**: Removed references to satComp, updated the drive macro to only control Scream distortion, and removed the Valentine bypass controls.
+- **Copy/Paste and Modulation**: Removed all Valentine settings from copy/paste settings routines and LFO/MIDI control mappings.
+- **Export Loops Dialog Format Prompt**: Hid the Format dropdown in the export settings modal when zipping loops, defaulting to WAV format.
+- **Syntax Error Fix**: Restored the missing closing curly brace in `applyControlValue` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) that was accidentally deleted when removing Valentine parameters. Verified with `node -c` to fix browser button and generation failures.

@@ -4490,6 +4490,7 @@
                 slider.value = Math.round(normVal * 100);
                 const valDisplay = slider.nextElementSibling;
                 if (valDisplay) valDisplay.textContent = cutoff >= 1000 ? (cutoff / 1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz';
+            }
         } else if (paramName === 'aelapse-delay-mix') {
             track.aelapseDelayMix = normVal;
             if (track.aelapseDelayGainNode) {

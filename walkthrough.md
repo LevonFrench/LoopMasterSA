@@ -291,3 +291,8 @@ We implemented and verified individual variant locking and regeneration:
 2.  **Default Lossless Export**: Confirmed that individual track loops are zipped directly in their raw, high-quality WAV format.
 3.  **Mixdown Formats Options**: Verified that zipping the master "Render Mix" still displays the Format selector, allowing users to render/convert mixdown files to MP3 or OGG cleanly.
 
+### 58. Fix Syntax Error in applyControlValue
+1.  **Root Cause Analysis**: An unclosed curly brace was introduced when removing the Valentine saturator/compressor parameters from the MIDI mapping helper `applyControlValue` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js). The brace for the preceding `filtr-cutoff` slider check block (`if (slider)`) was accidentally removed.
+2.  **Implementation**: Restored the missing closing curly brace `}` right before `else if (paramName === 'aelapse-delay-mix')`.
+3.  **Verification**: Executed `node -c` to compile/verify [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js), which resolved the parser `SyntaxError` and restored client-side button and audio generation functionality.
+
