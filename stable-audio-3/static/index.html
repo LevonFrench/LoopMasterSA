@@ -45,6 +45,27 @@
                 </div>
 
                 <div class="control-group">
+                    <label class="control-label" for="seed-input" title="Seed (-1 = random)">Seed</label>
+                    <input class="control-input control-input-sm" id="seed-input" type="number"
+                           min="-1" max="999999" value="-1" step="1"
+                           title="Random seed (-1 for random)">
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label" for="cfg-input" title="Classifier-Free Guidance scale. Higher = more adherence to prompt. Lower = more creative/varied.">CFG</label>
+                    <input class="control-input control-input-sm" id="cfg-input" type="number"
+                           min="0.5" max="15" value="1.0" step="0.5"
+                           title="Higher = stricter prompt adherence, Lower = more creative">
+                </div>
+
+                <div class="control-group">
+                    <label class="control-label" for="steps-input" title="Diffusion steps. More steps = higher quality but slower generation.">Steps</label>
+                    <input class="control-input control-input-sm" id="steps-input" type="number"
+                           min="1" max="100" value="8" step="1"
+                           title="More steps = higher quality, slower generation">
+                </div>
+
+                <div class="control-group">
                     <button class="btn-generate" id="btn-generate" type="button">Generate</button>
                 </div>
             </div>
@@ -66,47 +87,48 @@
             </div>
         </section>
 
-        <!-- Transport -->
-        <div class="transport-bar" id="transport-bar">
-            <button class="btn-transport" id="btn-play-pause" type="button" disabled aria-label="Play">
-                <svg class="ic ic-play" viewBox="0 0 16 16"><path d="M4 2.5l9 5.5-9 5.5z"/></svg>
-                <svg class="ic ic-pause" viewBox="0 0 16 16"><rect x="3.5" y="2" width="3" height="12" rx="0.5"/><rect x="9.5" y="2" width="3" height="12" rx="0.5"/></svg>
-            </button>
-            <span class="transport-time">
-                <span id="t-position">0:00.0</span> / <span id="t-duration">0:00.0</span>
-            </span>
-            
-            <!-- Master Meter & Limiter Section -->
-            <div class="master-meter-section" id="master-meter-section" style="display: none;">
-                <span class="master-meter-label">MASTER</span>
-                <div class="master-meter-container">
-                    <canvas id="master-meter-canvas" width="140" height="8"></canvas>
+        <!-- Transport Panel -->
+        <div class="transport-panel">
+            <div class="transport-bar" id="transport-bar">
+                <button class="btn-transport" id="btn-play-pause" type="button" disabled aria-label="Play">
+                    <svg class="ic ic-play" viewBox="0 0 16 16"><path d="M4 2.5l9 5.5-9 5.5z"/></svg>
+                    <svg class="ic ic-pause" viewBox="0 0 16 16"><rect x="3.5" y="2" width="3" height="12" rx="0.5"/><rect x="9.5" y="2" width="3" height="12" rx="0.5"/></svg>
+                </button>
+                <span class="transport-time">
+                    <span id="t-position">0:00.0</span> / <span id="t-duration">0:00.0</span>
+                </span>
+                
+                <!-- Master Meter & Limiter Section -->
+                <div class="master-meter-section" id="master-meter-section" style="display: none;">
+                    <span class="master-meter-label">MASTER</span>
+                    <div class="master-meter-container">
+                        <canvas id="master-meter-canvas" width="140" height="8"></canvas>
+                    </div>
+                    <span class="limiter-label">LIMITER -11dB</span>
                 </div>
-                <span class="limiter-label">LIMITER -11dB</span>
+
+                <div class="transport-spacer"></div>
+                <div class="render-loops-group">
+                    <label class="render-loops-label" for="render-loops-input">Loops to Render</label>
+                    <input class="render-loops-input" id="render-loops-input" type="number" min="1" max="999" value="1" step="1">
+                </div>
+                <button class="btn-render-mix" id="btn-render-mix" type="button" disabled title="Render Mix to WAV">
+                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Render Mix
+                </button>
+                <button class="btn-export-loops" id="btn-export-loops" type="button" disabled title="Export all playing loops as ZIP">
+                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Export Loops
+                </button>
+                <button class="btn-undo" id="btn-undo" type="button" title="Undo last action" style="display:none;">
+                    <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Undo
+                </button>
             </div>
 
-            <div class="transport-spacer"></div>
-            <div class="render-loops-group">
-                <label class="render-loops-label" for="render-loops-input">Loops</label>
-                <input class="render-loops-input" id="render-loops-input" type="number" min="1" max="999" value="1" step="1">
+            <!-- Visualizer Tray -->
+            <div class="visualizer-tray" id="visualizer-tray">
+                <canvas class="viz-canvas" id="viz-spectrum" title="Spectrum Analyzer"></canvas>
+                <canvas class="viz-canvas" id="viz-oscilloscope" title="Oscilloscope"></canvas>
+                <canvas class="viz-canvas viz-meters" id="viz-meters" title="Peak Meters"></canvas>
             </div>
-            <button class="btn-render-mix" id="btn-render-mix" type="button" disabled title="Render Mix to WAV">
-                <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Render Mix
-            </button>
-            <button class="btn-export-loops" id="btn-export-loops" type="button" disabled title="Export all playing loops as ZIP">
-                <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Export Loops
-            </button>
-            <button class="btn-undo" id="btn-undo" type="button" title="Undo last action" style="display:none;">
-                <svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>Undo
-            </button>
-            <button class="btn-stop-all" id="btn-stop-all" type="button">Stop All</button>
-        </div>
-
-        <!-- Visualizer Tray -->
-        <div class="visualizer-tray" id="visualizer-tray">
-            <canvas class="viz-canvas" id="viz-spectrum" title="Spectrum Analyzer"></canvas>
-            <canvas class="viz-canvas" id="viz-oscilloscope" title="Oscilloscope"></canvas>
-            <canvas class="viz-canvas viz-meters" id="viz-meters" title="Peak Meters"></canvas>
         </div>
 
         <!-- Track Rows -->

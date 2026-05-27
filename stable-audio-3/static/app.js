@@ -248,7 +248,7 @@
         else playAll();
     });
 
-    btnStopAll.addEventListener('click', () => {
+    if (btnStopAll) btnStopAll.addEventListener('click', () => {
         stopAll();
     });
 
