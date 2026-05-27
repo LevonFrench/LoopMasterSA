@@ -9,9 +9,6 @@
     // --- DOM ---
     const promptInput   = document.getElementById('prompt-input');
     const bpmInput      = document.getElementById('bpm-input');
-    const durationLabel = document.getElementById('duration-label');
-    const variantsInput = document.getElementById('variants-input');
-    const loopToggle    = document.getElementById('loop-toggle');
     const btnGenerate   = document.getElementById('btn-generate');
     const statusBar     = document.getElementById('status-bar');
     const statusText    = document.getElementById('status-text');
@@ -112,21 +109,17 @@
     function updateDurationLabel() {
         const bpm = parseInt(bpmInput.value) || 120;
         globalDuration = calcDuration(bpm);
-        durationLabel.textContent = `4 bars = ${globalDuration.toFixed(2)}s`;
+        bpmInput.title = `4 bars = ${globalDuration.toFixed(2)}s`;
         tDuration.textContent = formatTime(globalDuration);
         
         // Update delay times for all tracks to keep them tempo-synced!
-        const delayTimeSec = 45.0 / bpm; // Dotted eighth note
         tracks.forEach(t => {
+            const syncBeats = [0.25, 0.333, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0];
+            const beats = syncBeats[t.delaySyncIndex || 3];
+            const delayTimeSec = (60.0 / bpm) * beats;
             t.aelapseDelayTime = delayTimeSec;
             if (t.aelapseDelayNode) {
                 t.aelapseDelayNode.delayTime.setValueAtTime(delayTimeSec, audioCtx.currentTime);
-            }
-            if (t.wrapper) {
-                const syncDisplay = t.wrapper.querySelector('.aelapse-sync-time');
-                if (syncDisplay) {
-                    syncDisplay.textContent = `${delayTimeSec.toFixed(2)}s (Dotted 8th)`;
-                }
             }
         });
     }
@@ -174,17 +167,45 @@
     }
 
     // --- BPM ---
-    bpmInput.addEventListener('input', updateDurationLabel);
+    bpmInput.addEventListener('input', () => {
+        updateDurationLabel();
+        // Sync BPM into the prompt text if it contains a BPM reference
+        const newBpm = bpmInput.value;
+        const current = promptInput.value;
+        if (/\b\d+\s*bpm\b/i.test(current)) {
+            promptInput.value = current.replace(/\b\d+\s*bpm\b/i, newBpm + ' bpm');
+        }
+    });
     updateDurationLabel();
 
-    // --- Loop toggle ---
-    loopToggle.addEventListener('click', () => {
-        generateLoop = !generateLoop;
-        loopToggle.classList.toggle('is-on', generateLoop);
-        loopToggle.querySelector('.toggle-label').textContent = generateLoop ? 'On' : 'Off';
+    // BPM click-and-drag
+    let bpmDragging = false;
+    let bpmStartY = 0;
+    let bpmStartVal = 0;
+
+    bpmInput.addEventListener('mousedown', (e) => {
+        // Only drag if not focused (typing). If focused, let normal input work.
+        if (document.activeElement === bpmInput) return;
+        e.preventDefault();
+        bpmDragging = true;
+        bpmStartY = e.clientY;
+        bpmStartVal = parseInt(bpmInput.value) || 120;
+        document.body.style.cursor = 'ns-resize';
     });
-    loopToggle.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loopToggle.click(); }
+
+    document.addEventListener('mousemove', (e) => {
+        if (!bpmDragging) return;
+        const delta = bpmStartY - e.clientY;
+        const newVal = Math.max(40, Math.min(300, bpmStartVal + delta));
+        bpmInput.value = newVal;
+        bpmInput.dispatchEvent(new Event('input'));
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (bpmDragging) {
+            bpmDragging = false;
+            document.body.style.cursor = '';
+        }
     });
 
     // --- Solo/Mute logic ---
@@ -539,9 +560,9 @@
         
         // Disable/enable mixer sliders
         const levelSlider = track.el.querySelector('.level-slider');
-        const panSlider = track.el.querySelector('.pan-slider');
+        const panKnobEl = track.el.querySelector('.pan-knob');
         if (levelSlider) levelSlider.disabled = isLocked;
-        if (panSlider) panSlider.disabled = isLocked;
+        if (panKnobEl) panKnobEl.style.pointerEvents = isLocked ? 'none' : '';
 
         // Disable/enable FX drawer inputs
         const inputs = track.wrapper.querySelectorAll('.fx-drawer input');
@@ -808,11 +829,11 @@
             filtrType: 'lowpass',
             filtrCutoff: 20000,
             filtrResonance: 0.707,
-            filtrMix: 0.0,
+            filtrMix: 1.0,
             screamCutoff: 8000,
             screamAmount: 0.707,
             screamDriveAmount: 5,
-            screamMix: 0.0,
+            screamMix: 1.0,
             eqGains: [0, 0, 0, 0, 0, 0],
             valentineDriveVal: 1.0,
             valentineThresh: 0,
@@ -822,7 +843,8 @@
             aelapseFeedback: 0.3,
             aelapseDelayMix: 0.0,
             aelapseReverbMix: 0.0,
-            aelapseReverbSize: 2.0
+            aelapseReverbSize: 2.0,
+            delaySyncIndex: 3
         };
 
         // 6. Build wrapper container
@@ -842,17 +864,29 @@
                 <button class="mixer-btn mute-btn" title="Mute">M</button>
                 <button class="mixer-btn fx-btn" title="Toggle FX Drawer">FX</button>
                 <button class="mixer-btn lock-btn" title="Lock Track"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></button>
-                <button class="mixer-btn delete-btn" title="Delete Track">×</button>
+                <button class="mixer-btn delete-btn" title="Delete Track"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
             </div>
-            <div class="mixer-level">
-                <label>Vol</label>
-                <input type="range" class="level-slider" min="0" max="100" value="100" step="1">
-                <span class="level-value">100</span>
+            <div class="mixer-vol-pan">
+                <div class="mixer-level">
+                    <label>Vol</label>
+                    <input type="range" class="level-slider" min="0" max="100" value="100" step="1">
+                    <span class="level-value">100</span>
+                </div>
+                <div class="mixer-pan">
+                    <div class="pan-knob" title="Pan: C">
+                        <div class="pan-knob-indicator"></div>
+                    </div>
+                    <span class="pan-value">C</span>
+                </div>
             </div>
-            <div class="mixer-pan">
-                <label>Pan</label>
-                <input type="range" class="pan-slider" min="-100" max="100" value="0" step="1">
-                <span class="pan-value">C</span>
+            <div class="mixer-macros-row">
+                <div class="macro-knob-group"><div class="macro-knob" data-param="filter" title="Filter: Off"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Flt</span></div>
+                <div class="macro-knob-group"><div class="macro-knob" data-param="reso" title="Reso: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Res</span></div>
+                <div class="macro-knob-group"><div class="macro-knob" data-param="dlyFb" title="Delay FB: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">DFb</span></div>
+                <div class="macro-knob-group"><div class="macro-knob" data-param="dlyMix" title="Delay Mix: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">DMx</span></div>
+                <div class="macro-knob-group"><div class="macro-knob" data-param="revSize" title="Reverb Size: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">RSz</span></div>
+                <div class="macro-knob-group"><div class="macro-knob" data-param="revMix" title="Reverb Mix: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">RMx</span></div>
+                <div class="macro-knob-group"><div class="macro-knob" data-param="satComp" title="Sat/Comp: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">S/C</span></div>
             </div>
             <div class="mixer-meter">
                 <canvas class="meter-canvas" height="6"></canvas>
@@ -868,10 +902,10 @@
         fxDrawerEl.innerHTML = `
             <div class="fx-section macros-section">
                 <div class="fx-section-title">Macro Controls</div>
-                <div class="fx-controls-grid">
-                    <div class="fx-control-row"><label>Space</label><input type="range" class="macro-space-slider" min="0" max="100" value="0" step="1"><span class="macro-space-val">0%</span></div>
-                    <div class="fx-control-row"><label>Drive</label><input type="range" class="macro-drive-slider" min="0" max="100" value="0" step="1"><span class="macro-drive-val">0%</span></div>
-                    <div class="fx-control-row"><label>Tone</label><input type="range" class="macro-tone-slider" min="0" max="100" value="50" step="1"><span class="macro-tone-val">Flat</span></div>
+                <div class="fx-macro-knobs-row">
+                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="space" title="Space: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Space</span></div>
+                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="drive" title="Drive: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Drive</span></div>
+                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="tone" title="Tone: Flat"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Tone</span></div>
                 </div>
             </div>
             <div class="fx-section filtr-section">
@@ -883,7 +917,18 @@
                     <div class="fx-control-row"><label>Type</label><select class="filtr-type" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;"><option value="lowpass">LP</option><option value="bandpass">BP</option><option value="highpass">HP</option><option value="notch">Notch</option></select></div>
                     <div class="fx-control-row"><label>Cutoff</label><input type="range" class="filtr-cutoff" min="20" max="20000" value="20000" step="1"><span class="filtr-cutoff-val">20kHz</span></div>
                     <div class="fx-control-row"><label>Reso</label><input type="range" class="filtr-reso" min="1" max="250" value="7" step="1"><span class="filtr-reso-val">0.7</span></div>
-                    <div class="fx-control-row"><label>Mix</label><input type="range" class="filtr-mix" min="0" max="100" value="0" step="1"><span class="filtr-mix-val">0%</span></div>
+                    <div class="fx-control-row"><label>Mix</label><input type="range" class="filtr-mix" min="0" max="100" value="100" step="1"><span class="filtr-mix-val">100%</span></div>
+                </div>
+            </div>
+            <div class="fx-section scream-section">
+                <div class="fx-section-title">
+                    <span>Scream Distortion</span>
+                    <button class="fx-toggle-btn scream-toggle" type="button">Off</button>
+                </div>
+                <div class="fx-controls-grid">
+                    <div class="fx-control-row"><label>Cutoff</label><input type="range" class="scream-cutoff" min="200" max="16000" value="8000" step="1"><span class="scream-cutoff-val">8.0kHz</span></div>
+                    <div class="fx-control-row"><label>Scream</label><input type="range" class="scream-amount" min="0" max="100" value="0" step="1"><span class="scream-amount-val">0%</span></div>
+                    <div class="fx-control-row"><label>Mix</label><input type="range" class="scream-mix" min="0" max="100" value="100" step="1"><span class="scream-mix-val">100%</span></div>
                 </div>
             </div>
             <div class="fx-section eq-section">
@@ -898,17 +943,6 @@
                     <div class="fx-control-row"><label>640 Hz</label><input type="range" class="eq-slider" data-band="3" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
                     <div class="fx-control-row"><label>2.5 kHz</label><input type="range" class="eq-slider" data-band="4" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
                     <div class="fx-control-row"><label>Air Band</label><input type="range" class="eq-slider" data-band="5" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
-                </div>
-            </div>
-            <div class="fx-section scream-section">
-                <div class="fx-section-title">
-                    <span>Scream Distortion Filter</span>
-                    <button class="fx-toggle-btn scream-toggle" type="button">Off</button>
-                </div>
-                <div class="fx-controls-grid">
-                    <div class="fx-control-row"><label>Cutoff</label><input type="range" class="scream-cutoff" min="200" max="16000" value="8000" step="1"><span class="scream-cutoff-val">8.0kHz</span></div>
-                    <div class="fx-control-row"><label>Scream</label><input type="range" class="scream-amount" min="0" max="100" value="0" step="1"><span class="scream-amount-val">0%</span></div>
-                    <div class="fx-control-row"><label>Mix</label><input type="range" class="scream-mix" min="0" max="100" value="0" step="1"><span class="scream-mix-val">0%</span></div>
                 </div>
             </div>
             <div class="fx-section valentine-section">
@@ -929,7 +963,7 @@
                     <button class="fx-toggle-btn aelapse-toggle" type="button">On</button>
                 </div>
                 <div class="fx-controls-grid">
-                    <div class="fx-control-row"><label>Sync Delay</label><span class="aelapse-sync-time" style="width: auto; flex: 1; text-align: left; padding-left: 6px;">${initialDelayTime.toFixed(2)}s (Dotted 8th)</span></div>
+                    <div class="fx-control-row"><label>Sync</label><input type="range" class="aelapse-sync" min="0" max="8" value="3" step="1"><span class="aelapse-sync-val">d8th</span></div>
                     <div class="fx-control-row"><label>Feedback</label><input type="range" class="aelapse-feedback" min="0" max="95" value="30" step="5"><span class="aelapse-fb-val">30%</span></div>
                     <div class="fx-control-row"><label>Delay Mix</label><input type="range" class="aelapse-mix" min="0" max="100" value="0" step="5"><span class="aelapse-mix-val">0%</span></div>
                     <div class="fx-control-row"><label>Reverb Size</label><input type="range" class="aelapse-size" min="5" max="50" value="20" step="1"><span class="aelapse-size-val">2.0s</span></div>
@@ -946,7 +980,7 @@
         const deleteBtn = mixerEl.querySelector('.delete-btn');
         const levelSlider = mixerEl.querySelector('.level-slider');
         const levelValue = mixerEl.querySelector('.level-value');
-        const panSlider = mixerEl.querySelector('.pan-slider');
+        const panKnob = mixerEl.querySelector('.pan-knob');
         const panValue = mixerEl.querySelector('.pan-value');
 
         soloBtn.addEventListener('click', (e) => {
@@ -991,12 +1025,213 @@
             updateMixerState();
         });
 
-        panSlider.addEventListener('input', () => {
-            const v = parseInt(panSlider.value);
-            track.pan = v / 100;
+        // Pan knob drag interaction
+        function updatePanKnob(panVal) {
+            track.pan = panVal / 100;
             track.panNode.pan.value = track.pan;
-            panValue.textContent = v === 0 ? 'C' : v < 0 ? `L${Math.abs(v)}` : `R${v}`;
+            const deg = (panVal / 100) * 135; // -135 to +135
+            panKnob.querySelector('.pan-knob-indicator').style.transform = `rotate(${deg}deg)`;
+            panKnob.title = `Pan: ${panVal === 0 ? 'C' : panVal < 0 ? 'L' + Math.abs(panVal) : 'R' + panVal}`;
+            panValue.textContent = panVal === 0 ? 'C' : panVal < 0 ? `L${Math.abs(panVal)}` : `R${panVal}`;
+        }
+
+        let panDragging = false;
+        let panStartY = 0;
+        let panStartVal = 0;
+
+        panKnob.addEventListener('mousedown', (e) => {
+            if (track.locked) return;
+            e.preventDefault();
+            panDragging = true;
+            panStartY = e.clientY;
+            panStartVal = Math.round(track.pan * 100);
+            document.body.style.cursor = 'ns-resize';
         });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!panDragging) return;
+            const delta = panStartY - e.clientY; // up = right
+            const newVal = Math.max(-100, Math.min(100, panStartVal + delta));
+            updatePanKnob(newVal);
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (panDragging) {
+                panDragging = false;
+                document.body.style.cursor = '';
+            }
+        });
+
+        panKnob.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            if (track.locked) return;
+            updatePanKnob(0);
+        });
+
+        // 9.5. Wire mixer macro knobs
+        const macroKnobs = mixerEl.querySelectorAll('.macro-knob');
+        const macroKnobState = {}; // { param: { value: 0, dragging: false, startY, startVal } }
+
+        function applyMacroKnob(param, value) {
+            const knobEl = mixerEl.querySelector(`.macro-knob[data-param="${param}"]`);
+            const indicator = knobEl.querySelector('.macro-knob-indicator');
+            const ctx = ensureAudioCtx();
+
+            if (param === 'filter') {
+                // Bipolar: -100 to +100. Left = LP (cutoff sweeps down), Right = HP (cutoff sweeps up)
+                const deg = (value / 100) * 135;
+                indicator.style.transform = `rotate(${deg}deg)`;
+                if (value === 0) {
+                    knobEl.title = 'Filter: Off';
+                    // Disable filtr
+                    if (track.filtrEnabled) {
+                        const toggle = track.wrapper.querySelector('.filtr-toggle');
+                        if (toggle) toggle.click();
+                    }
+                } else {
+                    // Enable filtr if off
+                    if (!track.filtrEnabled) {
+                        const toggle = track.wrapper.querySelector('.filtr-toggle');
+                        if (toggle) toggle.click();
+                    }
+                    if (value < 0) {
+                        // LP: map -100..-1 → cutoff 20000..60 (log scale)
+                        const norm = (100 + value) / 100; // 0..1 (0 = fully closed, 1 = wide open)
+                        const cutoff = 60 * Math.pow(20000 / 60, norm); // exponential sweep
+                        track.filtrType = 'lowpass';
+                        track.filtrFilterNode.type = 'lowpass';
+                        track.filtrFilterNode.frequency.setTargetAtTime(cutoff, ctx.currentTime, 0.02);
+                        track.filtrCutoff = cutoff;
+                        track.filtrMix = 1.0;
+                        track.filtrDryGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+                        track.filtrWetGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+                        knobEl.title = `LP: ${cutoff >= 1000 ? (cutoff/1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
+                    } else {
+                        // HP: map 1..100 → cutoff 20..12000 (log scale)
+                        const norm = value / 100; // 0..1
+                        const cutoff = 20 * Math.pow(12000 / 20, norm); // exponential sweep
+                        track.filtrType = 'highpass';
+                        track.filtrFilterNode.type = 'highpass';
+                        track.filtrFilterNode.frequency.setTargetAtTime(cutoff, ctx.currentTime, 0.02);
+                        track.filtrCutoff = cutoff;
+                        track.filtrMix = 1.0;
+                        track.filtrDryGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
+                        track.filtrWetGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+                        knobEl.title = `HP: ${cutoff >= 1000 ? (cutoff/1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
+                    }
+                }
+            } else {
+                // Unipolar 0-100
+                const deg = -135 + (value / 100) * 270;
+                indicator.style.transform = `rotate(${deg}deg)`;
+
+                if (param === 'reso') {
+                    const q = 0.707 + (value / 100) * 24.293;
+                    track.filtrResonance = q;
+                    track.filtrFilterNode.Q.setTargetAtTime(q, ctx.currentTime, 0.02);
+                    knobEl.title = `Reso: ${value}%`;
+                } else if (param === 'dlyFb') {
+                    const fb = value / 100 * 0.95;
+                    track.aelapseFeedback = fb;
+                    track.aelapseDelayNode.delayTime; // ensure node exists
+                    const fbNode = track.__aelapseFbNode;
+                    if (fbNode) fbNode.gain.setTargetAtTime(fb, ctx.currentTime, 0.01);
+                    knobEl.title = `Delay FB: ${value}%`;
+                } else if (param === 'dlyMix') {
+                    const mix = value / 100;
+                    track.aelapseDelayMix = mix;
+                    if (!track.aelapseEnabled && value > 0) {
+                        const toggle = track.wrapper.querySelector('.aelapse-toggle');
+                        if (toggle) toggle.click();
+                    }
+                    track.aelapseDelayGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+                    knobEl.title = `Delay Mix: ${value}%`;
+                } else if (param === 'revSize') {
+                    const size = 0.5 + (value / 100) * 4.5; // 0.5s to 5.0s
+                    track.aelapseReverbSize = size;
+                    try {
+                        track.aelapseReverbNode.buffer = createSpringImpulseResponse(ctx, size, 2.5);
+                    } catch(e) {}
+                    knobEl.title = `Rev Size: ${size.toFixed(1)}s`;
+                } else if (param === 'revMix') {
+                    const mix = value / 100;
+                    track.aelapseReverbMix = mix;
+                    if (!track.aelapseEnabled && value > 0) {
+                        const toggle = track.wrapper.querySelector('.aelapse-toggle');
+                        if (toggle) toggle.click();
+                    }
+                    track.aelapseReverbGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+                    knobEl.title = `Rev Mix: ${value}%`;
+                } else if (param === 'satComp') {
+                    const drive = 1.0 + (value / 100) * 9.0;
+                    const thresh = Math.round(-40 * value / 100);
+                    const mix = value / 100;
+                    track.valentineDriveVal = drive;
+                    track.valentineThresh = thresh;
+                    track.valentineMix = mix;
+                    if (!track.valentineEnabled && value > 0) {
+                        const toggle = track.wrapper.querySelector('.valentine-toggle');
+                        if (toggle) toggle.click();
+                    }
+                    track.valentineDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
+                    track.valentineWetGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+                    knobEl.title = `Sat/Comp: ${value}%`;
+                }
+            }
+        }
+
+        macroKnobs.forEach(knobEl => {
+            const param = knobEl.dataset.param;
+            const isBipolar = param === 'filter';
+            macroKnobState[param] = { value: 0, dragging: false, startY: 0, startVal: 0 };
+
+            knobEl.addEventListener('mousedown', (e) => {
+                if (track.locked) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const st = macroKnobState[param];
+                st.dragging = true;
+                st.startY = e.clientY;
+                st.startVal = st.value;
+                document.body.style.cursor = 'ns-resize';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                const st = macroKnobState[param];
+                if (!st.dragging) return;
+                const delta = st.startY - e.clientY;
+                const min = isBipolar ? -100 : 0;
+                const max = 100;
+                const newVal = Math.max(min, Math.min(max, st.startVal + delta));
+                st.value = newVal;
+                applyMacroKnob(param, newVal);
+            });
+
+            document.addEventListener('mouseup', () => {
+                const st = macroKnobState[param];
+                if (st.dragging) {
+                    st.dragging = false;
+                    document.body.style.cursor = '';
+                }
+            });
+
+            knobEl.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                if (track.locked) return;
+                macroKnobState[param].value = 0;
+                applyMacroKnob(param, 0);
+            });
+
+            // Init indicator position
+            if (isBipolar) {
+                knobEl.querySelector('.macro-knob-indicator').style.transform = 'rotate(0deg)';
+            } else {
+                knobEl.querySelector('.macro-knob-indicator').style.transform = 'rotate(-135deg)';
+            }
+        });
+
+        // Stash feedback node ref for macro knob access
+        track.__aelapseFbNode = aelapseFeedbackNode;
 
         // 10. Wire FX drawer slider event listeners
         const eqSliders = fxDrawerEl.querySelectorAll('.eq-slider');
@@ -1154,108 +1389,134 @@
             updateAelapseBypass(track);
         });
 
-        // 12. Wire Macro Controls
-        const macroSpace = fxDrawerEl.querySelector('.macro-space-slider');
-        const macroSpaceVal = fxDrawerEl.querySelector('.macro-space-val');
-        const macroDrive = fxDrawerEl.querySelector('.macro-drive-slider');
-        const macroDriveVal = fxDrawerEl.querySelector('.macro-drive-val');
-        const macroTone = fxDrawerEl.querySelector('.macro-tone-slider');
-        const macroToneVal = fxDrawerEl.querySelector('.macro-tone-val');
-
-        macroSpace.addEventListener('input', () => {
-            const val = parseInt(macroSpace.value);
-            macroSpaceVal.textContent = val + '%';
-            
-            const delayMixVal = val;
-            const reverbMixVal = val;
-            const reverbSizeVal = Math.round(5 + (45 * val / 100)); // 0.5s to 5.0s -> 5 to 50
-            
-            const delayMixSlider = fxDrawerEl.querySelector('.aelapse-mix');
-            const reverbMixSlider = fxDrawerEl.querySelector('.aelapse-reverb-mix');
-            const reverbSizeSlider = fxDrawerEl.querySelector('.aelapse-size');
-            
-            if (delayMixSlider) {
-                delayMixSlider.value = delayMixVal;
-                delayMixSlider.dispatchEvent(new Event('input'));
-            }
-            if (reverbMixSlider) {
-                reverbMixSlider.value = reverbMixVal;
-                reverbMixSlider.dispatchEvent(new Event('input'));
-            }
-            if (reverbSizeSlider) {
-                reverbSizeSlider.value = reverbSizeVal;
-                reverbSizeSlider.dispatchEvent(new Event('input'));
-            }
+        const aeSync = fxDrawerEl.querySelector('.aelapse-sync');
+        const aeSyncVal = fxDrawerEl.querySelector('.aelapse-sync-val');
+        const syncLabels = ['1/16', '1/8T', '1/8', 'd8th', '1/4', 'd1/4', '1/2', 'd1/2', '1/1'];
+        const syncBeats = [0.25, 0.333, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0];
+        aeSync.addEventListener('input', () => {
+            const idx = parseInt(aeSync.value);
+            track.delaySyncIndex = idx;
+            aeSyncVal.textContent = syncLabels[idx];
+            const bpm = parseInt(bpmInput.value) || 120;
+            const delayTimeSec = (60.0 / bpm) * syncBeats[idx];
+            track.aelapseDelayTime = delayTimeSec;
+            track.aelapseDelayNode.delayTime.setValueAtTime(delayTimeSec, audioCtx.currentTime);
         });
 
-        macroDrive.addEventListener('input', () => {
-            const val = parseInt(macroDrive.value);
-            macroDriveVal.textContent = val + '%';
-            
-            const driveMultiplier = 1.0 + (9.0 * val / 100); // 1.0x to 10.0x
-            const thresholdVal = Math.round(-40 * val / 100); // 0dB to -40dB
-            const compressorMixVal = val; // 0% to 100%
-            const screamVal = Math.round(val * 0.6); // Scream at 60% of drive macro
-            
-            const driveSlider = fxDrawerEl.querySelector('.valentine-drive');
-            const threshSlider = fxDrawerEl.querySelector('.valentine-thresh');
-            const mixSlider = fxDrawerEl.querySelector('.valentine-mix');
-            const screamAmtSlider = fxDrawerEl.querySelector('.scream-amount');
-            const screamMxSlider = fxDrawerEl.querySelector('.scream-mix');
-            
-            if (driveSlider) {
-                driveSlider.value = driveMultiplier;
-                driveSlider.dispatchEvent(new Event('input'));
-            }
-            if (threshSlider) {
-                threshSlider.value = thresholdVal;
-                threshSlider.dispatchEvent(new Event('input'));
-            }
-            if (mixSlider) {
-                mixSlider.value = compressorMixVal;
-                mixSlider.dispatchEvent(new Event('input'));
-            }
-            if (screamAmtSlider) {
-                screamAmtSlider.value = screamVal;
-                screamAmtSlider.dispatchEvent(new Event('input'));
-            }
-            if (screamMxSlider) {
-                screamMxSlider.value = screamVal;
-                screamMxSlider.dispatchEvent(new Event('input'));
-            }
-            // Auto-enable Scream when Drive macro is active
-            if (val > 0 && !track.screamEnabled) {
-                const screamToggle = fxDrawerEl.querySelector('.scream-toggle');
-                if (screamToggle) screamToggle.click();
-            }
-        });
+        // 12. Wire FX Drawer Macro Knobs (Space, Drive, Tone)
+        const fxMacroKnobs = fxDrawerEl.querySelectorAll('.fx-macro-knob');
+        const fxMacroState = {};
 
-        macroTone.addEventListener('input', () => {
-            const val = parseInt(macroTone.value);
-            if (val === 50) {
-                macroToneVal.textContent = 'Flat';
-            } else if (val < 50) {
-                macroToneVal.textContent = 'Dark';
-            } else {
-                macroToneVal.textContent = 'Bright';
-            }
-            
-            const eqSlidersList = fxDrawerEl.querySelectorAll('.eq-slider');
-            if (eqSlidersList.length === 6) {
-                let bandGains = [0, 0, 0, 0, 0, 0];
-                if (val < 50) {
-                    const factor = (50 - val) / 50;
-                    bandGains = [6.0 * factor, 6.0 * factor, 4.0 * factor, 0, -6.0 * factor, -6.0 * factor];
-                } else if (val > 50) {
-                    const factor = (val - 50) / 50;
-                    bandGains = [-6.0 * factor, -6.0 * factor, -3.0 * factor, 0, 6.0 * factor, 8.0 * factor];
+        function applyFxMacro(macroName, value) {
+            const knobEl = fxDrawerEl.querySelector(`.fx-macro-knob[data-macro="${macroName}"]`);
+            const indicator = knobEl.querySelector('.macro-knob-indicator');
+
+            if (macroName === 'tone') {
+                // Tone is bipolar (0-100, 50 = center)
+                const deg = -135 + (value / 100) * 270;
+                indicator.style.transform = `rotate(${deg}deg)`;
+                if (value === 50) {
+                    knobEl.title = 'Tone: Flat';
+                } else if (value < 50) {
+                    knobEl.title = 'Tone: Dark';
+                } else {
+                    knobEl.title = 'Tone: Bright';
                 }
-                
-                eqSlidersList.forEach((slider, b) => {
-                    slider.value = bandGains[b];
-                    slider.dispatchEvent(new Event('input'));
-                });
+                // Push to EQ sliders
+                const eqSlidersList = fxDrawerEl.querySelectorAll('.eq-slider');
+                if (eqSlidersList.length === 6) {
+                    let bandGains = [0, 0, 0, 0, 0, 0];
+                    if (value < 50) {
+                        const factor = (50 - value) / 50;
+                        bandGains = [6.0 * factor, 6.0 * factor, 4.0 * factor, 0, -6.0 * factor, -6.0 * factor];
+                    } else if (value > 50) {
+                        const factor = (value - 50) / 50;
+                        bandGains = [-6.0 * factor, -6.0 * factor, -3.0 * factor, 0, 6.0 * factor, 8.0 * factor];
+                    }
+                    eqSlidersList.forEach((slider, b) => {
+                        slider.value = bandGains[b];
+                        slider.dispatchEvent(new Event('input'));
+                    });
+                }
+            } else {
+                // Space and Drive are 0-100 unipolar
+                const deg = -135 + (value / 100) * 270;
+                indicator.style.transform = `rotate(${deg}deg)`;
+                knobEl.title = `${macroName.charAt(0).toUpperCase() + macroName.slice(1)}: ${value}%`;
+
+                if (macroName === 'space') {
+                    const delayMixSlider = fxDrawerEl.querySelector('.aelapse-mix');
+                    const reverbMixSlider = fxDrawerEl.querySelector('.aelapse-reverb-mix');
+                    const reverbSizeSlider = fxDrawerEl.querySelector('.aelapse-size');
+                    if (delayMixSlider) { delayMixSlider.value = value; delayMixSlider.dispatchEvent(new Event('input')); }
+                    if (reverbMixSlider) { reverbMixSlider.value = value; reverbMixSlider.dispatchEvent(new Event('input')); }
+                    const sizeVal = Math.round(5 + (45 * value / 100));
+                    if (reverbSizeSlider) { reverbSizeSlider.value = sizeVal; reverbSizeSlider.dispatchEvent(new Event('input')); }
+                } else if (macroName === 'drive') {
+                    const driveMultiplier = 1.0 + (9.0 * value / 100);
+                    const thresholdVal = Math.round(-40 * value / 100);
+                    const screamVal = Math.round(value * 0.6);
+                    const driveSlider = fxDrawerEl.querySelector('.valentine-drive');
+                    const threshSlider = fxDrawerEl.querySelector('.valentine-thresh');
+                    const mixSlider = fxDrawerEl.querySelector('.valentine-mix');
+                    const screamAmtSlider = fxDrawerEl.querySelector('.scream-amount');
+                    const screamMxSlider = fxDrawerEl.querySelector('.scream-mix');
+                    if (driveSlider) { driveSlider.value = driveMultiplier; driveSlider.dispatchEvent(new Event('input')); }
+                    if (threshSlider) { threshSlider.value = thresholdVal; threshSlider.dispatchEvent(new Event('input')); }
+                    if (mixSlider) { mixSlider.value = value; mixSlider.dispatchEvent(new Event('input')); }
+                    if (screamAmtSlider) { screamAmtSlider.value = screamVal; screamAmtSlider.dispatchEvent(new Event('input')); }
+                    if (screamMxSlider) { screamMxSlider.value = Math.max(screamVal, 100); screamMxSlider.dispatchEvent(new Event('input')); }
+                    if (value > 0 && !track.screamEnabled) {
+                        const screamToggle = fxDrawerEl.querySelector('.scream-toggle');
+                        if (screamToggle) screamToggle.click();
+                    }
+                }
             }
+        }
+
+        fxMacroKnobs.forEach(knobEl => {
+            const macroName = knobEl.dataset.macro;
+            const defaultVal = macroName === 'tone' ? 50 : 0;
+            fxMacroState[macroName] = { value: defaultVal, dragging: false, startY: 0, startVal: 0 };
+
+            // Init indicator
+            const initDeg = -135 + (defaultVal / 100) * 270;
+            knobEl.querySelector('.macro-knob-indicator').style.transform = `rotate(${initDeg}deg)`;
+
+            knobEl.addEventListener('mousedown', (e) => {
+                if (track.locked) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const st = fxMacroState[macroName];
+                st.dragging = true;
+                st.startY = e.clientY;
+                st.startVal = st.value;
+                document.body.style.cursor = 'ns-resize';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                const st = fxMacroState[macroName];
+                if (!st.dragging) return;
+                const delta = st.startY - e.clientY;
+                const newVal = Math.max(0, Math.min(100, st.startVal + delta));
+                st.value = newVal;
+                applyFxMacro(macroName, newVal);
+            });
+
+            document.addEventListener('mouseup', () => {
+                const st = fxMacroState[macroName];
+                if (st.dragging) {
+                    st.dragging = false;
+                    document.body.style.cursor = '';
+                }
+            });
+
+            knobEl.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                if (track.locked) return;
+                fxMacroState[macroName].value = defaultVal;
+                applyFxMacro(macroName, defaultVal);
+            });
         });
 
         // 13. Wire Bypass Switches
@@ -1327,8 +1588,9 @@
             cardEl.innerHTML = `
                 <div class="card-header">
                     <span class="card-title" title="${name}">${name}</span>
-                    <div style="display: flex; align-items: center;">
-                        <button class="btn-use-init" title="Use as Init Audio" type="button"><svg class="btn-icon" viewBox="0 0 24 24" width="10" height="10" fill="currentColor" style="margin-right: 3px; display: inline-block; vertical-align: middle;"><path d="M12 2l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>Init</button>
+                    <div style="display: flex; align-items: center; gap: 2px;">
+                        <button class="btn-use-init" title="Use as Remake Audio" type="button">Remake</button>
+                        <button class="btn-reverse" title="Reverse" type="button">⇄</button>
                         <span class="card-variant-num">#${i + 1}</span>
                     </div>
                 </div>
@@ -1371,6 +1633,28 @@
                     e.stopPropagation();
                     if (track.locked) return;
                     setInitAudio(track, i, filePath, name);
+                });
+            }
+
+            const reverseBtn = cardEl.querySelector('.btn-reverse');
+            if (reverseBtn) {
+                reverseBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (track.locked) return;
+                    const v = track.variants[i];
+                    if (!v || !v.buffer) return;
+                    // Reverse all channel data in-place
+                    for (let ch = 0; ch < v.buffer.numberOfChannels; ch++) {
+                        v.buffer.getChannelData(ch).reverse();
+                    }
+                    v.reversed = !v.reversed;
+                    reverseBtn.classList.toggle('is-on', v.reversed);
+                    drawWaveform(v.el.querySelector('.card-waveform'), v.buffer, track.selectedVariant === i);
+                    // If playing, restart to hear the change
+                    if (isPlaying && track.selectedVariant === i) {
+                        stopAll();
+                        playAll();
+                    }
                 });
             }
 
@@ -1509,8 +1793,8 @@
 
     async function runGeneration(prompt) {
         const bpm = parseInt(bpmInput.value) || 120;
-        const numVariants = parseInt(variantsInput.value) || 4;
-        const loop = generateLoop;
+        const numVariants = 4;
+        const loop = true;
 
         btnGenerate.disabled = true;
         btnGenerate.classList.add('is-generating');
@@ -1551,6 +1835,9 @@
             showStatus(`Done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
             addTrackRow(result.files, prompt, result.track_num);
             clearInitAudio();
+
+            // Auto-play the new track
+            if (!isPlaying) playAll();
 
         } catch (err) {
             console.error('Generation error:', err);
@@ -1814,6 +2101,11 @@
         if (badge && nameEl) {
             nameEl.textContent = name;
             badge.style.display = 'flex';
+        }
+
+        // Restore the original prompt from the track that generated this audio
+        if (track.prompt) {
+            promptInput.value = track.prompt;
         }
     }
 

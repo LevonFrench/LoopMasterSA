@@ -236,6 +236,7 @@ body::before {
     font-size: 0.8rem;
     text-align: center;
     -moz-appearance: textfield;
+    cursor: ns-resize;
 }
 .control-input[type="number"]::-webkit-outer-spin-button,
 .control-input[type="number"]::-webkit-inner-spin-button {
@@ -615,23 +616,30 @@ body::before {
     border-color: var(--error);
 }
 
-/* --- Level Slider --- */
-.mixer-level {
+/* --- Vol + Pan Row --- */
+.mixer-vol-pan {
     display: flex;
     align-items: center;
     gap: 6px;
 }
 
+/* --- Level Slider --- */
+.mixer-level {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
 .mixer-level label {
     font-size: 0.6rem;
     color: var(--text-tertiary);
-    width: 16px;
-    text-align: right;
+    flex-shrink: 0;
 }
 
 .level-slider {
     flex: 1;
-    width: 100%;
     min-width: 0;
     -webkit-appearance: none;
     appearance: none;
@@ -661,58 +669,140 @@ body::before {
     font-size: 0.6rem;
     font-family: var(--font-mono);
     color: var(--text-tertiary);
-    width: 24px;
+    width: 20px;
+    text-align: right;
+    flex-shrink: 0;
 }
 
 /* --- Pan Knob --- */
 .mixer-pan {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 3px;
+    flex-shrink: 0;
 }
 
-.mixer-pan label {
-    font-size: 0.6rem;
-    color: var(--text-tertiary);
-    width: 16px;
-    text-align: right;
-}
-
-.pan-slider {
-    flex: 1;
-    width: 100%;
-    min-width: 0;
-    -webkit-appearance: none;
-    appearance: none;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--border-input);
-    outline: none;
-    cursor: pointer;
-}
-
-.pan-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 10px;
-    height: 10px;
+.pan-knob {
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
-    background: var(--text-tertiary);
-    border: 2px solid var(--bg-mixer);
-    cursor: pointer;
+    background: radial-gradient(circle at 40% 35%, #3a3a50, #1a1a2a);
+    border: 1.5px solid rgba(255, 255, 255, 0.12);
+    position: relative;
+    cursor: ns-resize;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+    transition: border-color var(--transition-fast);
+}
+
+.pan-knob:hover {
+    border-color: var(--accent);
+}
+
+.pan-knob-indicator {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    width: 2px;
+    height: 7px;
+    margin-left: -1px;
+    background: var(--accent);
+    border-radius: 1px;
+    transform-origin: center 9px;
+    transform: rotate(0deg);
+    transition: none;
 }
 
 .pan-value {
-    font-size: 0.6rem;
+    font-size: 0.55rem;
     font-family: var(--font-mono);
     color: var(--text-tertiary);
-    width: 24px;
+    width: 18px;
+    text-align: left;
+}
+
+/* --- Mixer Macro Knobs Row --- */
+.mixer-macros-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 2px 0;
+}
+
+.macro-knob-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+
+.macro-knob {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #3a3a50, #1a1a2a);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    cursor: ns-resize;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: border-color var(--transition-fast);
+}
+
+.macro-knob:hover {
+    border-color: var(--accent);
+}
+
+.macro-knob-indicator {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    width: 2px;
+    height: 5px;
+    margin-left: -1px;
+    background: var(--accent);
+    border-radius: 1px;
+    transform-origin: center 7px;
+    transform: rotate(-135deg);
+    transition: none;
+}
+
+.macro-knob-label {
+    font-size: 0.45rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    line-height: 1;
+}
+
+/* --- Reverse Button --- */
+.btn-reverse {
+    font-size: 0.55rem;
+    padding: 1px 4px;
+    background: transparent;
+    color: var(--text-tertiary);
+    border: 1px solid var(--border-input);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    line-height: 1;
+}
+
+.btn-reverse:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+}
+
+.btn-reverse.is-on {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
 }
 
 /* --- Variant Cards (right side of each row) --- */
 .variants-container {
     flex: 1;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
     padding: 6px;
     min-width: 0;
@@ -731,7 +821,10 @@ body::before {
     gap: 4px;
     cursor: pointer;
     transition: transform var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
-    min-height: 70px;
+    height: 90px;
+    min-width: 0;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .audio-card:hover {
@@ -775,6 +868,7 @@ body::before {
     z-index: 2;
     height: 18px;
     flex-shrink: 0;
+    min-width: 0;
 }
 
 .card-title {
@@ -783,6 +877,8 @@ body::before {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
+    flex: 1;
 }
 
 .audio-card.is-selected .card-title {
@@ -1114,40 +1210,68 @@ body::before {
 
 .fx-drawer {
     display: flex;
-    gap: 16px;
+    gap: 8px;
     background: rgba(10, 10, 16, 0.95);
     border-top: 1px solid var(--border-subtle);
-    padding: 14px 20px;
-    flex-wrap: wrap;
+    padding: 10px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-input) transparent;
+}
+
+.fx-drawer::-webkit-scrollbar {
+    height: 4px;
+}
+.fx-drawer::-webkit-scrollbar-track {
+    background: transparent;
+}
+.fx-drawer::-webkit-scrollbar-thumb {
+    background: var(--border-input);
+    border-radius: 2px;
 }
 
 .fx-section {
-    flex: 1;
-    min-width: 250px;
+    flex: 0 0 220px;
+    min-width: 220px;
     background: rgba(255, 255, 255, 0.015);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
-    padding: 10px 14px;
+    padding: 8px 10px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
+    overflow: hidden;
+    position: relative;
 }
 
 .fx-section-title {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     font-weight: 600;
     color: var(--text-accent);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.04em;
     border-bottom: 1px solid var(--border-subtle);
     padding-bottom: 4px;
+    padding-right: 36px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fx-toggle-btn {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    z-index: 2;
 }
 
 /* EQ Sliders styling */
 .eq-sliders-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
 @media (max-width: 800px) {
@@ -1170,12 +1294,16 @@ body::before {
 }
 
 .fx-control-row label {
-    font-size: 0.65rem;
+    font-size: 0.55rem;
     color: var(--text-secondary);
-    width: 60px;
+    width: 36px;
+    flex-shrink: 0;
     text-align: right;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .fx-control-row input[type="range"] {
@@ -1205,11 +1333,15 @@ body::before {
 }
 
 .fx-control-row span {
-    font-size: 0.65rem;
+    font-size: 0.55rem;
     font-family: var(--font-mono);
     color: var(--text-tertiary);
-    width: 55px;
+    width: 40px;
+    flex-shrink: 0;
     text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* FX button states */
@@ -1222,6 +1354,63 @@ body::before {
 .fx-section.macros-section {
     background: rgba(59, 130, 246, 0.04);
     border-color: rgba(59, 130, 246, 0.15);
+}
+
+.fx-macro-knobs-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 6px 0;
+}
+
+.fx-macro-knobs-row .macro-knob-group {
+    gap: 3px;
+}
+
+.fx-macro-knob {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #3a3a50, #1a1a2a);
+    border: 1.5px solid rgba(255, 255, 255, 0.12);
+    position: relative;
+    cursor: ns-resize;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+    transition: border-color var(--transition-fast);
+}
+
+.fx-macro-knob:hover {
+    border-color: var(--accent);
+}
+
+.fx-macro-knob .macro-knob-indicator {
+    position: absolute;
+    top: 3px;
+    left: 50%;
+    width: 2px;
+    height: 8px;
+    margin-left: -1px;
+    background: var(--accent);
+    border-radius: 1px;
+    transform-origin: center 11px;
+    transform: rotate(-135deg);
+    transition: none;
+}
+
+.fx-macro-knobs-row .macro-knob-label {
+    font-size: 0.55rem;
+}
+
+/* Filters side by side */
+.fx-filters-row {
+    display: flex;
+    gap: 6px;
+}
+
+.fx-filters-row .fx-section {
+    flex: 1;
+    min-width: 0;
 }
 
 /* FX toggle buttons (On/Bypass) */
