@@ -333,6 +333,10 @@
   - [x] Add Accent button next to Inst in `index.html`.
   - [x] Wire Accent click listener in `app.js` to change only the production style/accent parameter of the active prompt.
   - [x] Expand `instruments`, `styles`, `moods`, and `productionStyles` lists in `app.js` with new Stable Audio 3 compatible terms.
+- [x] Implement Split Mode Queued Deactivation:
+  - [x] Update `selectVariant` in `app.js` to support deactivating track when index is `-1`.
+  - [x] Update card click handler in `app.js` to queue deactivation (`_pendingVariant = -1`) when clicking the left (queue) side of an already playing variant.
+  - [x] Verify visual `.is-queued` pulse highlight during deactivation queue and correct turn-off behavior at the next loop boundary.
 
 
 

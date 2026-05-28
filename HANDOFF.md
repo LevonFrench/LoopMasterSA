@@ -169,5 +169,12 @@ During this session, we successfully resolved the transport controls and outpain
   - Replaced substring matching in `enhance_prompt` with regex word boundaries (`\b`) in [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) and [generate_variants.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/generate_variants.py) to prevent false classification matches.
   - Replaced comma separators with period separators for metadata sentences (e.g. `. BPM: {bpm}. Length: {duration}.`), aligning prompt enhancements with Stability AI's official training guidelines.
 
+### 9. Split Mode Queued Deactivation (Fixed)
+- **Problem**: In Split Mode, if a loop is playing, clicking the left (queue) side of the card would instantly switch or trigger selection, but there was no way to queue *deactivating/deselecting* the track at the next loop start to stop playing.
+- **Fix**:
+  - Updated the card click handler in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to detect if the user clicked the left half of the *already selected and playing* card. If so, it schedules deactivation (`_pendingVariant = -1`) and toggles the `.is-queued` visual class (pulsing amber border).
+  - Modified `selectVariant` to accept an index parameter of `-1`, which removes selection states, stops playback sources, and resets waveforms to the inactive desaturated styling.
+  - Configured the loop boundary tick check in `app.js` to trigger `selectVariant(track, -1)` at the next loop cycle start when a deactivation queue is pending.
+
 
 

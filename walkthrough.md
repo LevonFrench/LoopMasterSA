@@ -358,6 +358,17 @@ We implemented and verified the Accent prompt modifier button and vocabulary arr
    - For `solo electric guitar, lo-fi`, it dynamically replaces the text after the comma with a new random choice (e.g. `solo electric guitar, vintage analog`).
 3. **Array Verification**: Confirmed that lists contain over 20+ new high-quality audio terms (`tb-303`, `808 bass`, `fm synthesizer`, `amapiano`, etc.), expanding variety.
 
+### 32. Verification of Split Mode Queued Deactivation
+We implemented and verified the split mode queued deactivation workflow:
+1. **Deactivation Queue**: Ran our automated playwright test script ([test_split_deactivate.py](file:///C:/Users/hotgh/.gemini/antigravity-ide/brain/57bb37ae-6059-42b9-8afd-efb6a5cd1048/scratch/test_split_deactivate.py)) and verified that clicking the left (queue) side of the active, playing card:
+   - Sets `_pendingVariant` to `-1` for the active track.
+   - Triggers the `.is-queued` state on the active card (pulsing amber border).
+2. **End-of-Loop Transition**: Verified that when the playhead reaches the end of the loop boundary:
+   - The track triggers `selectVariant(track, -1)`.
+   - The card loses both `is-selected` and `is-queued` classes.
+   - The audio source node is stopped and the track goes silent.
+   - The waveforms redraw to the deselected desaturated opacity.
+
 
 
 

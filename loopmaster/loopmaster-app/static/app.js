@@ -617,11 +617,13 @@
     function selectVariant(track, variantIndex) {
         const wasPlaying = isPlaying;
 
-        // If clicking the currently selected variant, deselect it (disable track)
-        if (variantIndex === track.selectedVariant) {
-            track.variants[variantIndex].el.classList.remove('is-selected');
-            if (wasPlaying) stopTrackSource(track);
-            track.selectedVariant = -1;
+        // If variantIndex is -1 or same as currently selected, deselect it (disable track)
+        if (variantIndex === -1 || variantIndex === track.selectedVariant) {
+            if (track.selectedVariant !== -1) {
+                track.variants[track.selectedVariant].el.classList.remove('is-selected');
+                if (wasPlaying) stopTrackSource(track);
+                track.selectedVariant = -1;
+            }
 
             // Redraw waveforms for this row to show non-selected state
             track.variants.forEach((v, i) => {
@@ -2684,12 +2686,27 @@
                 const splitToggle = document.getElementById('toggle-split');
                 const splitEnabled = splitToggle ? splitToggle.checked : false;
 
-                if (splitEnabled && isLeftHalf && isPlaying && i !== track.selectedVariant) {
+                if (splitEnabled && isLeftHalf && isPlaying) {
                     // Split ON + left half = queue at next loop boundary
-                    track._pendingVariant = i;
-                    track.variants.forEach((v, vi) => v.el.classList.toggle('is-queued', vi === i));
+                    if (i === track.selectedVariant) {
+                        if (track._pendingVariant === -1) {
+                            track._pendingVariant = null;
+                            cardEl.classList.remove('is-queued');
+                        } else {
+                            track._pendingVariant = -1;
+                            track.variants.forEach((v, vi) => v.el.classList.toggle('is-queued', vi === i));
+                        }
+                    } else {
+                        if (track._pendingVariant === i) {
+                            track._pendingVariant = null;
+                            cardEl.classList.remove('is-queued');
+                        } else {
+                            track._pendingVariant = i;
+                            track.variants.forEach((v, vi) => v.el.classList.toggle('is-queued', vi === i));
+                        }
+                    }
                 } else {
-                    // Default or right half = instant switch
+                    // Default or right half = instant switch/toggle
                     selectVariant(track, i);
                 }
 

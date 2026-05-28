@@ -364,6 +364,12 @@ We implemented a new "Accent" prompt modifier button and expanded the random pro
 2. **Dynamic Accent Swapping**: Programmed `changeAccentOnly()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to replace only the production style descriptor (text following the final comma) of the active prompt with a new random choice from `productionStyles`. If no comma is present, the accent is cleanly appended.
 3. **Vocabulary Expansion**: Significantly expanded the `instruments`, `styles`, `moods`, and `productionStyles` lists in `app.js` with Stable Audio 3 compatible terms (e.g. `tb-303 acid synth`, `808 bass`, `fm synthesizer`, `cinematic brass swell`, `amapiano log drum groove`, etc.) to provide high variety when generating random layouts.
 
+## Completed Work: Split Mode Queued Deactivation
+We added support for queueing the deactivation/deselecting of currently active loops in Split Mode:
+1. **Queued Deactivation Handler**: Updated the card click event listener in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) so that when Split Mode is active and a user clicks the left (queue) side of the *already selected and playing* card, it schedules deactivation by setting `track._pendingVariant = -1` and toggling the `.is-queued` visual class on the card.
+2. **Deselect Support in selectVariant**: Modified `selectVariant` to handle an index parameter of `-1` safely. It removes selection highlights, stops active sources, and redraws waveforms to their unselected opacity states.
+3. **Loop Boundary Execution**: When the loop boundary tick occurs, any track with a pending variant of `-1` calls `selectVariant(track, -1)` to cleanly stop and deactivate the loop at the start of the next cycle.
+
 
 
 
