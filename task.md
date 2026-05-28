@@ -343,6 +343,9 @@
   - [x] Make track controls macro FX and pan knobs larger (24px).
   - [x] Ignore constitution rules (`AGENTS.md`, `agents.md`) in `.gitignore`.
   - [x] Optimize deployment workflow to minimize git push frequency.
+- [x] Expand random prompt scales and chord progressions:
+  - [x] Expand `keys` array in `app.js` with new modal, pentatonic, and ethnic scales (Dorian, Phrygian, Lydian, Mixolydian, whole tone, etc.).
+  - [x] Expand `chords` array in `app.js` with jazz turnarounds, Andalusian cadences, classical circle of fifths, and neo-soul harmonic stacks.
 
 
 

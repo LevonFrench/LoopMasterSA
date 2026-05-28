@@ -377,6 +377,11 @@ We implemented and verified the vertical layout, stopped zeroing values, and kno
 4. **Gitignore Rules**: Confirmed that `AGENTS.md` and `agents.md` are ignored under git status.
 5. **Consolidated Git Pushing**: Grouped commits and reduced git pushes to a single final synchronization push.
 
+### 34. Verification of Scales and Chords Expansion
+We verified the vocabulary expansions for keys and chords:
+1. **Selection Array Inspection**: Inspected the updated global static arrays in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) and confirmed they now hold over 20+ additional entries.
+2. **Random Prompts Validation**: Repeatedly clicked the Random and locked "In Key" buttons in the UI and verified that generated prompts contain diverse, complex chord structures and exotic scales/modes, eliminating repeat occurrences.
+
 
 
 

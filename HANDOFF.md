@@ -185,5 +185,11 @@ During this session, we successfully resolved the transport controls and outpain
   - **Gitignore rules**: Appended `AGENTS.md` and `agents.md` to [.gitignore](file:///j:/projects/sa3/.gitignore).
   - **Optimized Pushes**: Consolidated remote Git sync operations to final deliverables to minimize network request overhead.
 
+### 11. Scales & Chords Vocabulary Expansion (Fixed)
+- **Problem**: The random prompt generator repeatedly yielded the same major/minor scales and basic chords due to small static vocabularies.
+- **Fix**:
+  - Expanded `keys` in `app.js` with new modes (Dorian, Phrygian, Lydian, Mixolydian, Locrian), pentatonic scales, blues scales, and specialty traditional scales (whole tone, harmonic/melodic minor, gypsy minor, double harmonic major).
+  - Expanded `chords` in `app.js` with jazz cadences, Andalusian progressions, neo-soul structures (maj9/min11 voicings, 9sus4), parallel slides, and Bach counterpoint changes.
+
 
 
