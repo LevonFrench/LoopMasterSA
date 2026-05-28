@@ -907,8 +907,8 @@ body::before {
 }
 
 .pan-knob {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     background: radial-gradient(circle at 40% 35%, #3a3a50, #1a1a2a);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -924,14 +924,14 @@ body::before {
 
 .pan-knob-indicator {
     position: absolute;
-    top: 2px;
+    top: 3px;
     left: 50%;
     width: 2px;
-    height: 5px;
+    height: 6px;
     margin-left: -1px;
     background: var(--accent);
     border-radius: 1px;
-    transform-origin: center 7px;
+    transform-origin: center 9px;
     transform: rotate(0deg);
     transition: none;
 }
@@ -957,12 +957,12 @@ body::before {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1px;
+    gap: 2px;
 }
 
 .macro-knob {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     background: radial-gradient(circle at 40% 35%, #3a3a50, #1a1a2a);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -978,14 +978,14 @@ body::before {
 
 .macro-knob-indicator {
     position: absolute;
-    top: 2px;
+    top: 3px;
     left: 50%;
     width: 2px;
-    height: 5px;
+    height: 6px;
     margin-left: -1px;
     background: var(--accent);
     border-radius: 1px;
-    transform-origin: center 7px;
+    transform-origin: center 9px;
     transform: rotate(-135deg);
     transition: none;
 }
@@ -1395,11 +1395,33 @@ body.split-mode .card-split-line {
     border: 1px solid var(--border-subtle);
 }
 
+.mixer-meter.vertical {
+    background: #0e0e14;
+    width: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    border-left: 1px solid var(--border-subtle);
+    border-right: 1px solid var(--border-subtle);
+    border-top: none;
+    border-bottom: none;
+    padding: 2px 1px;
+    margin-top: 0;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    height: auto;
+    align-self: stretch;
+}
+
 .meter-canvas {
     display: block;
     width: 100%;
     height: 6px;
     background: #1e1e28;
+}
+
+.meter-canvas.vertical {
+    height: 100% !important;
 }
 
 :focus-visible {

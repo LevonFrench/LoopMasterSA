@@ -464,6 +464,26 @@
         cancelRAF();
     }
 
+    function zeroAllMeters() {
+        if (masterMeterState) {
+            masterMeterState.rms = -60;
+            masterMeterState.peak = -60;
+            masterMeterState.peakHold = -60;
+            masterMeterState.peakHoldTime = 0;
+            const masterCanvas = document.getElementById('master-meter-canvas');
+            if (masterCanvas) drawMeter(masterCanvas, masterMeterState);
+        }
+        tracks.forEach(t => {
+            if (t.meterState && t.meterCanvas) {
+                t.meterState.rms = -60;
+                t.meterState.peak = -60;
+                t.meterState.peakHold = -60;
+                t.meterState.peakHoldTime = 0;
+                drawMeter(t.meterCanvas, t.meterState);
+            }
+        });
+    }
+
     function stopAll() {
         tracks.forEach(t => stopTrackSource(t));
         playOffset = 0;
@@ -472,6 +492,7 @@
         btnPlayPause.setAttribute('aria-label', 'Play');
         cancelRAF();
         updatePlayheads();
+        zeroAllMeters();
     }
 
     // --- Undo system ---
@@ -1515,12 +1536,15 @@
                 <div class="macro-knob-group"><div class="macro-knob" data-param="dlyMix" title="Delay Mix: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">DMx</span></div>
                 <div class="macro-knob-group"><div class="macro-knob" data-param="revMix" title="Reverb Mix: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">RMx</span></div>
             </div>
-            <div class="mixer-meter">
-                <canvas class="meter-canvas" height="6"></canvas>
             </div>
         `;
+        const meterEl = document.createElement('div');
+        meterEl.className = 'mixer-meter vertical';
+        meterEl.innerHTML = `<canvas class="meter-canvas vertical" width="8"></canvas>`;
+        track.meterCanvas = meterEl.querySelector('.meter-canvas');
+
         rowEl.appendChild(mixerEl);
-        track.meterCanvas = mixerEl.querySelector('.meter-canvas');
+        rowEl.appendChild(meterEl);
 
         // 8. Build FX Drawer DOM
         const fxDrawerEl = document.createElement('div');
@@ -3682,39 +3706,78 @@
 
         if (w === 0 || h === 0) return;
 
-        // Create gradient
-        const gradient = ctx.createLinearGradient(0, 0, w, 0);
-        gradient.addColorStop(0, '#10b981');   // green
-        gradient.addColorStop(0.7, '#10b981'); // -18dB
-        gradient.addColorStop(0.71, '#fbbf24'); // yellow
-        gradient.addColorStop(0.9, '#fbbf24');  // -6dB
-        gradient.addColorStop(0.91, '#ef4444');  // red
-        gradient.addColorStop(1, '#ef4444');
+        const isVertical = h > w;
 
-        // 1. RMS
-        const rmsWidth = dbToPct(state.rms) * w;
-        if (rmsWidth > 0) {
-            ctx.globalAlpha = 0.4;
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, rmsWidth, h);
-            ctx.globalAlpha = 1.0;
-        }
+        if (isVertical) {
+            // Vertical gradient (bottom is green, top is red)
+            const gradient = ctx.createLinearGradient(0, h, 0, 0);
+            gradient.addColorStop(0, '#10b981');   // green
+            gradient.addColorStop(0.7, '#10b981'); // -18dB
+            gradient.addColorStop(0.71, '#fbbf24'); // yellow
+            gradient.addColorStop(0.9, '#fbbf24');  // -6dB
+            gradient.addColorStop(0.91, '#ef4444');  // red
+            gradient.addColorStop(1, '#ef4444');
 
-        // 2. Peak
-        const peakWidth = dbToPct(state.peak) * w;
-        if (peakWidth > 0) {
-            ctx.fillStyle = gradient;
-            const peakH = Math.max(2, Math.round(h * 0.4));
-            const peakY = (h - peakH) / 2;
-            ctx.fillRect(0, peakY, peakWidth, peakH);
-        }
+            // 1. RMS (grows up from bottom)
+            const rmsHeight = dbToPct(state.rms) * h;
+            if (rmsHeight > 0) {
+                ctx.globalAlpha = 0.4;
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, h - rmsHeight, w, rmsHeight);
+                ctx.globalAlpha = 1.0;
+            }
 
-        // 3. Peak Hold
-        const peakHoldX = dbToPct(state.peakHold) * w;
-        if (peakHoldX > 0) {
-            ctx.fillStyle = '#06b6d4'; // Cyan
-            const tickW = dpr;
-            ctx.fillRect(Math.min(w - tickW, Math.max(0, peakHoldX - tickW / 2)), 0, tickW, h);
+            // 2. Peak
+            const peakHeight = dbToPct(state.peak) * h;
+            if (peakHeight > 0) {
+                ctx.fillStyle = gradient;
+                const peakW = Math.max(2, Math.round(w * 0.4));
+                const peakX = (w - peakW) / 2;
+                ctx.fillRect(peakX, h - peakHeight, peakW, peakHeight);
+            }
+
+            // 3. Peak Hold
+            const peakHoldY = h - (dbToPct(state.peakHold) * h);
+            if (peakHoldY < h) {
+                ctx.fillStyle = '#06b6d4'; // Cyan
+                const tickH = dpr;
+                ctx.fillRect(0, Math.min(h - tickH, Math.max(0, peakHoldY - tickH / 2)), w, tickH);
+            }
+        } else {
+            // Horizontal gradient
+            const gradient = ctx.createLinearGradient(0, 0, w, 0);
+            gradient.addColorStop(0, '#10b981');   // green
+            gradient.addColorStop(0.7, '#10b981'); // -18dB
+            gradient.addColorStop(0.71, '#fbbf24'); // yellow
+            gradient.addColorStop(0.9, '#fbbf24');  // -6dB
+            gradient.addColorStop(0.91, '#ef4444');  // red
+            gradient.addColorStop(1, '#ef4444');
+
+            // 1. RMS
+            const rmsWidth = dbToPct(state.rms) * w;
+            if (rmsWidth > 0) {
+                ctx.globalAlpha = 0.4;
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, rmsWidth, h);
+                ctx.globalAlpha = 1.0;
+            }
+
+            // 2. Peak
+            const peakWidth = dbToPct(state.peak) * w;
+            if (peakWidth > 0) {
+                ctx.fillStyle = gradient;
+                const peakH = Math.max(2, Math.round(h * 0.4));
+                const peakY = (h - peakH) / 2;
+                ctx.fillRect(0, peakY, peakWidth, peakH);
+            }
+
+            // 3. Peak Hold
+            const peakHoldX = dbToPct(state.peakHold) * w;
+            if (peakHoldX > 0) {
+                ctx.fillStyle = '#06b6d4'; // Cyan
+                const tickW = dpr;
+                ctx.fillRect(Math.min(w - tickW, Math.max(0, peakHoldX - tickW / 2)), 0, tickW, h);
+            }
         }
     }
 

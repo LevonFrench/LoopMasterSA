@@ -57,3 +57,7 @@ optimized/
 **/.claude
 **/.gemini/
 **/.gstack/
+
+# Constitution / Agent Rules
+AGENTS.md
+agents.md
