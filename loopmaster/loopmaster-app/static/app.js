@@ -2974,7 +2974,12 @@
         'C major', 'C minor', 'C# minor', 'D major', 'D minor', 'Eb major',
         'E major', 'E minor', 'F major', 'F minor', 'F# minor', 'G major',
         'G minor', 'Ab major', 'A major', 'A minor', 'Bb major', 'Bb minor',
-        'B major', 'B minor', 'D dorian', 'A phrygian', 'F lydian', 'G mixolydian'
+        'B major', 'B minor', 'D dorian', 'A dorian', 'E dorian', 'G dorian',
+        'A phrygian', 'E phrygian', 'B phrygian', 'F lydian', 'C lydian', 'G mixolydian',
+        'D mixolydian', 'B locrian', 'A minor pentatonic', 'E minor pentatonic',
+        'C major pentatonic', 'G major pentatonic', 'A blues scale', 'E blues scale',
+        'double harmonic major scale', 'harmonic minor scale', 'melodic minor scale',
+        'acoustic scale', 'whole tone scale', 'octatonic scale', 'gypsy minor scale'
     ];
     
     const chords = [
@@ -2985,7 +2990,19 @@
         'ii-V-I jazz progression', 'I-vi-IV-V pop progression',
         'I-V-vi-IV anthem progression', 'vi-IV-I-V emotional progression',
         'dim7 chromatic passing chords', 'sus4 resolution patterns',
-        'minor 9th chord stabs', 'major 6/9 voicings'
+        'minor 9th chord stabs', 'major 6/9 voicings',
+        'i-IV dorian progression', 'i-bII phrygian cadence',
+        'I-bVII-IV mixolydian rock progression', 'maj9 to min11 neo-soul chords',
+        'parallel minor 9th slides', 'rootless jazz voicings',
+        'i-VI-III-VII melodic house progression', 'I-bVII-bVI-bVII epic progression',
+        'minor 11th chord stabs', 'dominant 9sus4 chords',
+        'chromatic passing diminished 7th chords', 'minor 7th to major 7th smooth changes',
+        'Andalusian cadence', 'picardy third resolution',
+        'circle of fifths chord progression', 'suspensive suspension resolutions',
+        'Neapolitan chord transitions', 'Bach-style counterpoint progressions',
+        'suspended chord arpeggios', 'open fifth dyads', 'quartal harmony stacks',
+        'drone-based static harmonies', 'morphing pad cluster chords',
+        'major 9th/13th chord swells', 'minor 7b5 chord shapes'
     ];
 
     function generateRandomPrompt(keepKey = false) {
