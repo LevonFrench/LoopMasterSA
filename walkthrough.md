@@ -369,6 +369,14 @@ We implemented and verified the split mode queued deactivation workflow:
    - The audio source node is stopped and the track goes silent.
    - The waveforms redraw to the deselected desaturated opacity.
 
+### 33. Verification of Visual Layout Refinements
+We implemented and verified the vertical layout, stopped zeroing values, and knob enlargements:
+1. **Vertical Track Meters**: Verified via browser test script ([test_knobs_and_meters.py](file:///C:/Users/hotgh/.gemini/antigravity-ide/brain/57bb37ae-6059-42b9-8afd-efb6a5cd1048/scratch/test_knobs_and_meters.py)) that `isBetween` evaluates to `true` (indicating the level meter is placed exactly between the mixer controls and the variant cards container). Confirmed that it displays vertically with `canvas.height = 82` and `canvas.width = 10` and that high-DPI scaling performs properly.
+2. **Knob Enlargements**: Verified that the width of the macro FX and pan knobs inside the mixer strip is increased to `24px`. Confirmed that pointer indicators rotate centered relative to the new dial size.
+3. **Stop Meter Zeroing**: Played audio to generate high levels on the meters, clicked Stop (`#btn-stop-all`), and verified that the tracks immediately drop to `-60 dB` and clear the meter canvases without delay.
+4. **Gitignore Rules**: Confirmed that `AGENTS.md` and `agents.md` are ignored under git status.
+5. **Consolidated Git Pushing**: Grouped commits and reduced git pushes to a single final synchronization push.
+
 
 
 

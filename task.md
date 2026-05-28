@@ -337,6 +337,12 @@
   - [x] Update `selectVariant` in `app.js` to support deactivating track when index is `-1`.
   - [x] Update card click handler in `app.js` to queue deactivation (`_pendingVariant = -1`) when clicking the left (queue) side of an already playing variant.
   - [x] Verify visual `.is-queued` pulse highlight during deactivation queue and correct turn-off behavior at the next loop boundary.
+- [x] Visual Layout Refinements:
+  - [x] Configure stop button to immediately zero out the master and track level meter values.
+  - [x] Place level meters vertically between the track controls and the waveforms.
+  - [x] Make track controls macro FX and pan knobs larger (24px).
+  - [x] Ignore constitution rules (`AGENTS.md`, `agents.md`) in `.gitignore`.
+  - [x] Optimize deployment workflow to minimize git push frequency.
 
 
 

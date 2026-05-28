@@ -176,5 +176,14 @@ During this session, we successfully resolved the transport controls and outpain
   - Modified `selectVariant` to accept an index parameter of `-1`, which removes selection states, stops playback sources, and resets waveforms to the inactive desaturated styling.
   - Configured the loop boundary tick check in `app.js` to trigger `selectVariant(track, -1)` at the next loop cycle start when a deactivation queue is pending.
 
+### 10. Visual Layout & Interaction Refinements (Fixed)
+- **Problem**: Stop button click didn't clear/zero-out active meters, track level meters were placed awkwardly below controls, dials were too small (18px) to operate easily, and agent constitution files (`AGENTS.md` and `agents.md`) were tracked in git.
+- **Fix**:
+  - **Zero Visualizations**: Added `zeroAllMeters()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to immediately set active and master meter states to `-60 dB` and clear the canvases. Called inside the stop button handler.
+  - **Vertical Meters**: Relocated the track level meter to a vertical sibling inside `.track-row` between the mixer strip controls and the waveforms. Configured `drawMeter` to dynamically detect vertical dimensions and render vertically (bottom to top).
+  - **Larger Dials**: Resized mixer strip macro knobs and pan knob to `24px` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css), updating the indicator offsets to remain perfectly aligned.
+  - **Gitignore rules**: Appended `AGENTS.md` and `agents.md` to [.gitignore](file:///j:/projects/sa3/.gitignore).
+  - **Optimized Pushes**: Consolidated remote Git sync operations to final deliverables to minimize network request overhead.
+
 
 

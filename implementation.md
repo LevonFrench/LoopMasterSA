@@ -370,6 +370,14 @@ We added support for queueing the deactivation/deselecting of currently active l
 2. **Deselect Support in selectVariant**: Modified `selectVariant` to handle an index parameter of `-1` safely. It removes selection highlights, stops active sources, and redraws waveforms to their unselected opacity states.
 3. **Loop Boundary Execution**: When the loop boundary tick occurs, any track with a pending variant of `-1` calls `selectVariant(track, -1)` to cleanly stop and deactivate the loop at the start of the next cycle.
 
+## Completed Work: Visual Layout Refinements
+We implemented several visual feedback and layout refinements:
+1. **Zeroing Visualizations**: Programmed `zeroAllMeters()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to set RMS and peak parameters to `-60 dB` and clear the master/track canvas. Added a call to `zeroAllMeters()` inside the `stopAll()` handler so that pressing Stop immediately clears level meters to silence.
+2. **Vertical Track Meters**: Relocated the track level meter canvas in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to be a vertical sibling element between the mixer strip and the variant waveforms. Styled `.mixer-meter.vertical` and `.meter-canvas.vertical` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css) to stretch vertically. Updated `drawMeter` in `app.js` to automatically detect canvas dimensions and draw vertical bars growing upwards from the bottom when `height > width`.
+3. **Larger Mixer Knobs**: Resized the macro FX knobs and the pan knob inside the mixer strip from `18px` to `24px` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css). Recalculated the indicator lines' position and rotational transform-origins to keep alignment centered.
+4. **Gitignore Constitution Rules**: Appended `AGENTS.md` and `agents.md` to [.gitignore](file:///j:/projects/sa3/.gitignore) to exclude agent guidelines from tracking.
+5. **Git Push Optimization**: Calibrated workflow to minimize remote sync pushes to single consolidated final pushes.
+
 
 
 
