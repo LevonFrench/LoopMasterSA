@@ -381,9 +381,7 @@ We implemented several visual feedback and layout refinements:
 ## Completed Work: Scales and Chords Expansion
 We significantly expanded the keys and chords arrays in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to prevent repetition:
 1. **Diverse Scales / Keys**: Added multiple modes (Dorian, Phrygian, Lydian, Mixolydian, Locrian), pentatonic scales, blues scales, and specialty ethnic/traditional scales (harmonic minor, whole tone, double harmonic major, gypsy minor).
-2. **Rich Chord Progressions**: Added Andalusian cadences, circle of fifths chord changes, Bach-style counterpoint, modal changes (Dorian i-IV, Phrygian i-bII, Mixolydian I-bVII-IV), and advanced jazz/neo-soul extensions (maj9/min11 voicings, dominant 9sus4, rootless shapes, parallel minor 9th slides).
-
-
-
-
-
+2. **Rich Chord Progressions**: Added Andalusian cadences, circle of fifths chord changes, Bach-style counterpoint, modal changes (Dorian i-IV, Phrygian i-bII, Mixolydian I-bVII-IV), and advanced jazz/neo-soul extensions (maj9/min11 voicings, dominant 9sus4, rootless shapes, parallel minor 9th slides).## Completed Work: BPM and Loop Synchronization Fix
+We resolved loop and BPM synchronization issues:
+1. **Removed Headroom Padding**: Changed `gen_duration = duration + 2.0` to `gen_duration = duration` in both `_run_generation` and `_run_regeneration` in [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py). Setting the target duration exactly matching loop duration stops Stable Audio 3 generation from drifting and aligning beats incorrectly.
+2. **Padding Seed Waveforms**: Kept input tensor zero-padding up to `gen_duration` for continuation/inpainting modes to ensure no silent gaps are generated at boundary loops.

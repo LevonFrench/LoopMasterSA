@@ -425,8 +425,8 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
 
         start_gen = time.time()
 
-        # Generate slightly longer than needed so content fills the entire loop
-        gen_duration = duration + 2.0
+        # Generate exactly the duration needed so content fits the loop boundaries
+        gen_duration = duration
 
         # Load seed audio if provided (used for variation, inpaint, or continuation)
         seed_audio = None
@@ -588,7 +588,7 @@ def _run_regeneration(job_id, prompt, bpm, duration, loop, steps, cfg_scale, tra
 
         with model_lock:
             with torch.inference_mode():
-                gen_duration = duration + 2.0
+                gen_duration = duration
                 gen_kwargs = {
                     "prompt": prompts_list,
                     "negative_prompt": "poor quality, bad quality, low quality, noise, distortion, artifact",

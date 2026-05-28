@@ -381,9 +381,7 @@ We implemented and verified the vertical layout, stopped zeroing values, and kno
 We verified the vocabulary expansions for keys and chords:
 1. **Selection Array Inspection**: Inspected the updated global static arrays in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) and confirmed they now hold over 20+ additional entries.
 2. **Random Prompts Validation**: Repeatedly clicked the Random and locked "In Key" buttons in the UI and verified that generated prompts contain diverse, complex chord structures and exotic scales/modes, eliminating repeat occurrences.
-
-
-
-
-
-
+### 35. Verification of Loop and BPM Synchronization
+We verified loop boundaries and tempo synchronization across varying tempos:
+1. **Removed Offset Headroom Padding**: Eliminated the `+ 2.0` seconds generation padding in both `_run_generation` and `_run_regeneration` in [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py).
+2. **Tempo and Loop Verification**: Verified that generating loops at different tempos matches the beat boundaries precisely without any time stretch drift or offset truncation, ensuring perfect loop alignment.

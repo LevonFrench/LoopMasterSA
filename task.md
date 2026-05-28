@@ -346,10 +346,7 @@
 - [x] Expand random prompt scales and chord progressions:
   - [x] Expand `keys` array in `app.js` with new modal, pentatonic, and ethnic scales (Dorian, Phrygian, Lydian, Mixolydian, whole tone, etc.).
   - [x] Expand `chords` array in `app.js` with jazz turnarounds, Andalusian cadences, classical circle of fifths, and neo-soul harmonic stacks.
-
-
-
-
-
-
-
+- [x] Fix BPM and looping synchronization issues:
+  - [x] Set model `gen_duration` to match exactly the target duration, eliminating the 2.0s padding offset that caused prompt conditioning mismatch.
+  - [x] Keep backend sample padding for continuation/remix mode inputs to prevent silent gaps while keeping generation duration bounds exact.
+  - [x] Verify loop alignment and tempo adherence across different tempos.

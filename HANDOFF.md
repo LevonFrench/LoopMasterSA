@@ -1,8 +1,14 @@
 # HANDOFF — LoopMaster SA3
 
-## Session Summary (2026-05-27)
+## Session Summary (2026-05-28)
 
 ### What Was Done This Session
+
+**BPM and Loop Synchronization Fix**:
+- Modified `_run_generation` and `_run_regeneration` in [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) to set target generation duration (`gen_duration`) exactly to `duration`, removing the arbitrary `+ 2.0` seconds padding headroom which caused generation drift and tempo misalignment.
+- Kept the backend seed audio padding mechanism for inpaint/continuation modes to prevent any silent gaps at boundary loops, ensuring clean transitions.
+- Verified loop alignment and tempo tracking at multiple BPM values.
+
 
 **Transport Layout Overlap Fix**:
 - Scoped `.toggle-track` and `.toggle-track::after` rules specifically inside `.toggle-wrapper` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css). This prevents global styles bleed which was causing the switches in the transport bar to overlap icons and disrupt layout spacing.
