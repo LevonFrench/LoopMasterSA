@@ -304,3 +304,62 @@ We implemented and verified individual variant locking and regeneration:
 3.  **Real-time Synchronization**: Added click listeners to `.mod-btn` calling a new `toggleGlobalModulators` function. This function toggles `#modulators-panel` display and updates the active class highlight (`is-on`) on all track rows dynamically to match. Freshly loaded/created track rows query `#modulators-panel` to sync the state on build.
 4.  **Styling**: Added custom CSS styling rules in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css) for `.mixer-btn.mod-btn.is-on` and its `:hover` state, utilizing the emerald green theme (`#10b981`).
 
+### 60. Verification of Transport Layout, Variant Deletion, and Outpainting
+We implemented and verified the transport buttons layout fix, backend variant deletion, and outpainting (2x/4x) continuation blocks:
+1. **Transport Layout Fix**:
+   - Resolved the CSS global leak by scoping `.toggle-track` and `.toggle-track::after` rules specifically inside `.toggle-wrapper` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css).
+   - This corrects the layout alignment of the transport bar, ensuring that the toggle switches (`Split` and `Song Mode`) do not bleed, skew, or overlap neighboring buttons.
+2. **Backend Delete Variant Endpoint**:
+   - Added `POST /api/delete_variant` to [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) to parse the variant file path, clean/normalize it against traversal attacks, and delete the file inside `outputs/`.
+   - Updated `/api/generate` to support an optional `duration` parameter, enabling custom-length continuation generations.
+3. **Card Buttons and Outpainting Actions**:
+   - In [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js), added `Delete`, `2x` (outpaint to 2 loops), and `4x` (outpaint to 4 loops) buttons in the header of each variant card.
+   - Click handlers on `Delete` request confirmation, issue `/api/delete_variant` server deletions, nullify buffer memory, dim the card (`opacity: 0.25; pointer-events: none`), and clear its waveform canvas. If the deleted variant was currently selected, the track row is automatically deselected.
+   - Click handlers on `2x` and `4x` trigger `runOutpaint(track, variant, loopsCount)`, initiating continuation generation of $2\times$ or $4\times$ the parent duration, and inserting the results as new rows immediately below the parent.
+   - Grid layouts dynamically scale card widths using CSS classes `.span-2` (`grid-column: span 2`) and `.span-4` (`grid-column: span 4`) based on the files count.
+4. **Timeline and Looping Boundary Synchronization**:
+   - Configured `startTrackSource` and `updateTrackLoopState` to loop playback at the variant's actual buffer duration (`source.loopEnd = v.buffer.duration`), preventing premature 8-second looping cutoffs.
+   - Updated `getActiveDuration()` to dynamically loop the global timeline (in both `tick()` sweeps and playhead seeks) at the maximum loop duration among active selected track variants when arranger mode is off.
+   - Synchronized these duration offsets in the offline mixdown context.
+
+### 27. Transport Bar & Outpaint Regeneration Diagnostics
+We analyzed the transport controls and outpainting system and diagnosed three issues:
+1. **Playback Duration Mismatch**: The transport bar's `#t-duration` element is only set to the 8s default loop length and doesn't update when playing longer (16s/32s) outpainted variants, creating a visual discrepancy (e.g. `0:11.5 / 0:08.0`).
+2. **Missing Stop Button**: The Stop button (`#btn-stop-all`) is missing from the HTML but the JS relies on it, leaving no way to stop/rewind the playhead back to 0:00.0 when Arranger Mode is off (where scrubbing is disabled).
+3. **Outpaint Regeneration Truncation**: The `/api/regenerate` endpoint hardcodes the duration parameter to 8 seconds (`960.0 / bpm`), which truncates outpainted loops back to 8s during regeneration of unlocked variants.
+
+### 28. Verification of Unified Reverb/Delay Macro Knobs & Outpaint Gap Padding
+We implemented and verified the unified controls and outpaint zero-padding:
+1. **Combined Reverb Controls**: Combined Reverb Size and Reverb Mix into the Reverb Mix (`RMx`) slider. Reverb Mix is capped at 80% wet, and Size scales from 0.5s to 5.0s. Verification scripts confirm correct parameter updates:
+   - Mix slider at 40% maps to 40% reverb mix and 2.75s size, displaying `40% (Size: 2.8s)`.
+   - Mix slider at 100% maps to 80% reverb mix and 5.0s size, displaying `80% (Size: 5.0s)`.
+2. **Combined Delay Controls**: Combined Delay Feedback and Delay Mix into the Delay Mix (`DMx`) slider. Delay Mix is capped at 75% wet, and Feedback scales from 0% to 95%. Verification scripts confirm:
+   - Mix slider at 50% maps to 37.5% delay mix and 47.5% feedback, displaying `38% (Fb: 48%)`.
+   - Mix slider at 100% maps to 75% delay mix and 95% feedback, displaying `75% (Fb: 95%)`.
+3. **DOM & Codebase Cleanup**: Removed old `RSz` and `Feedbk` controls from HTML/CSS/JS, LFO modulation, copy/paste settings, and MIDI mappings.
+4. **Outpaint Gap Fix Verification**: Programmed CPU-level zero-padding for input waveforms up to target `gen_duration` (continuation length) in `app_server.py`. Ran [test_outpaint_gen.py](file:///C:/Users/hotgh/.gemini/antigravity-ide/brain/57bb37ae-6059-42b9-8afd-efb6a5cd1048/scratch/test_outpaint_gen.py) which triggered a successful outpaint workflow in the browser without silent/flat gaps, yielding a continuous looping 16s variant.
+
+### 29. Verification of Default Master Volume Level set to 0.0 dB
+We set the default master level to 0 dB and verified:
+1. **Startup Value**: The master volume slider initializes at position `100` (representing 0.0 dB) in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html).
+2. **Dynamic readouts**: Confirmed that the UI displays `0.0 dB` master volume readout and `LIMITER 0.0dB` threshold level on application startup.
+3. **Audio Node Parameters**: Verified that fallback values in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) evaluate to 100 on start, correctly configuring the master `GainNode` and `DynamicsCompressorNode` to unity gain without attenuation or threshold offsets.
+
+### 30. Verification of Prompt Classification and BPM/Length Metadata Adherence
+We implemented and verified the prompt parser updates:
+1. **Regex Word Boundary Matches**: Checked that adjectives like `"thundering"` do not trigger the `"thunder"` sound effect keyword (since we match with `\b`), correctly routing the prompt to `TrackType: Instrument` or `TrackType: Music` instead of `TrackType: SFX`.
+2. **Period Metadata Separation**: Inspected the console outputs from generation jobs, confirming that prompt enhancements are generated in the exact format `. BPM: {bpm}. Length: {duration}.` as required by Stable Audio 3's conditioning layers.
+
+### 31. Verification of Accent Button & Expanded Vocabulary Lists
+We implemented and verified the Accent prompt modifier button and vocabulary arrays:
+1. **Visual UI Layout**: Confirmed that the `#btn-change-accent` button renders correctly in the prompt toolbar next to `Inst`, styled as a premium pill button with a wand vector SVG icon.
+2. **Dynamic Accent Replacement**: Typed prompts with and without commas (e.g. `solo electric guitar` vs `solo electric guitar, lo-fi`), clicked `Accent`, and verified that:
+   - For `solo electric guitar`, it cleanly appends the random production style (e.g. `solo electric guitar, pristine digital`).
+   - For `solo electric guitar, lo-fi`, it dynamically replaces the text after the comma with a new random choice (e.g. `solo electric guitar, vintage analog`).
+3. **Array Verification**: Confirmed that lists contain over 20+ new high-quality audio terms (`tb-303`, `808 bass`, `fm synthesizer`, `amapiano`, etc.), expanding variety.
+
+
+
+
+
+

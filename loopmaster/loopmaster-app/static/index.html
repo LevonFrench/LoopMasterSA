@@ -30,6 +30,7 @@
                             <button class="prompt-pill-btn" id="btn-change-chord" type="button" title="Change Key/Chord only in current prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Chord</button>
                             <button class="prompt-pill-btn" id="btn-change-style" type="button" title="Change Style/Genre only in current prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Style</button>
                             <button class="prompt-pill-btn" id="btn-change-instrument" type="button" title="Change Instrument only in current prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M12 2v20M17 5v14M22 9v6M7 8v8M2 10v4"/></svg>Inst</button>
+                            <button class="prompt-pill-btn" id="btn-change-accent" type="button" title="Change Accent/Production Style only in current prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M15 4V2m0 14v-2M8 9h2m10 0h-2m-2.2-4.8l-1.4 1.4m-5.6 5.6l-1.4 1.4m0-8.4l1.4 1.4m5.6 5.6l1.4 1.4M3 21l9-9m4-5l1-1"/></svg>Accent</button>
                             <button class="prompt-pill-btn" id="btn-random-drums" type="button" title="Generate Random Drum Loop Prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v10c0 1.66 4 3 9 3s9-1.34 9-3V5M7 17v4M17 17v4"/></svg>Drums</button>
                             <button class="prompt-pill-btn" id="btn-random-bass" type="button" title="Generate Random Bass Prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M2 10h3l2.5-6 3 16 2.5-14 3 10 1.5-6h4.5"/></svg>Bass</button>
                             <button class="prompt-pill-btn" id="btn-random-lead" type="button" title="Generate Random Lead Prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v12M10 3v12M14 3v12M18 3v12M2 15h20"/></svg>Lead</button>
@@ -134,6 +135,10 @@
                     <svg class="ic ic-play" viewBox="0 0 16 16"><path d="M4 2.5l9 5.5-9 5.5z"/></svg>
                     <svg class="ic ic-pause" viewBox="0 0 16 16"><rect x="3.5" y="2" width="3" height="12" rx="0.5"/><rect x="9.5" y="2" width="3" height="12" rx="0.5"/></svg>
                 </button>
+                <button class="btn-transport" id="btn-stop-all" type="button" disabled aria-label="Stop" title="Stop & Rewind">
+                    <svg class="ic ic-stop" viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="1"/></svg>
+                </button>
+
                 <span class="transport-time">
                     <span id="t-position">0:00.0</span> / <span id="t-duration">0:00.0</span>
                 </span>
@@ -142,13 +147,13 @@
                 <div class="master-meter-section" id="master-meter-section" style="display: none;">
                     <span class="master-meter-label">MASTER</span>
                     <input type="range" id="master-volume-slider" class="master-volume-slider"
-                           min="0" max="100" value="91" step="1"
+                           min="0" max="100" value="100" step="1"
                            title="Master Volume">
-                    <span class="master-volume-readout" id="master-volume-readout">-3.6 dB</span>
+                    <span class="master-volume-readout" id="master-volume-readout">0.0 dB</span>
                     <div class="master-meter-container">
                         <canvas id="master-meter-canvas" width="140" height="8"></canvas>
                     </div>
-                    <span class="limiter-label">LIMITER -2.6dB</span>
+                    <span class="limiter-label">LIMITER 0.0dB</span>
                 </div>
 
                 <div class="transport-spacer"></div>
@@ -172,6 +177,7 @@
                         <circle cx="9.5" cy="14" r="1" fill="currentColor"/>
                         <circle cx="14.5" cy="14" r="1" fill="currentColor"/>
                     </svg>
+                </button>
                 <label class="toggle-switch" title="Split cards: left = queue at loop start, right = instant switch">
                     <input type="checkbox" id="toggle-split">
                     <span class="toggle-track"></span>Split

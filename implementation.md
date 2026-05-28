@@ -324,3 +324,47 @@ To support dynamic song transitions and fills for rhythm tracks:
   - Row 2: Copy Settings, Paste Settings, Regenerate Unlocked, Delete Track
   - This utilizes all 8 grid slots in the existing CSS Grid `repeat(4, 1fr)` layout, providing a clean balanced look.
 - **Global Modulation Drawer Control**: Bound track row MOD buttons to toggle `#modulators-panel`. Active highlights (`is-on` class) sync globally across all tracks in real-time. Styled `.mixer-btn.mod-btn.is-on` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css) using emerald green accents.
+
+## Diagnosed Issues & Technical Plan: Transport and Outpaint
+We diagnosed three issues with the transport bar and outpainting:
+- **Playback Duration Mismatch**: The `#t-duration` element is only set to the 8s default loop length and doesn't update when playing longer (16s/32s) outpainted variants. The fix will dynamically update `tDuration.textContent = formatTime(activeDuration)` inside the `updatePlayheads()` loop in `app.js`.
+- **Missing Transport Stop/Rewind Button**: The Stop button (`#btn-stop-all`) is missing from the HTML but referenced in JS, leaving no way to reset the playhead back to `0:00.0` when Arranger Mode is disabled (where scrubbing is turned off). The fix is to add `#btn-stop-all` back to `index.html` as a `.btn-transport` icon button next to Play/Pause, and manage its disabled state in sync with `btnPlayPause`.
+- **Outpaint Loop Regeneration Truncation**: The `/api/regenerate` endpoint hardcodes the duration parameter to 8 seconds (`960.0 / bpm`). When a user attempts to regenerate unlocked slots in an outpainted track (which is 16s or 32s), the regenerated audio is truncated to 8 seconds. The fix is to accept the `duration` parameter in `/api/regenerate` from the client and pass it into the model execution thread.
+
+## Completed Work: BPM and Looping Synchronization Fix
+We fixed the playback tempo and loop boundary drift when changing the global BPM slider:
+1. **Dynamic Playback Rate Scaling**: Configured `startTrackSource` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to set `source.playbackRate.value = currentBpm / creationBpm`. This dynamically speeds up or slows down loop buffers to match the active tempo.
+2. **Buffer-Space Boundaries**: Swapped the loop boundaries (`loopStart` and `loopEnd`) from real-time seconds to buffer-space seconds (`(v.loopMultiplier || 1) * (960.0 / creationBpm)`).
+3. **Offset Conversion**: Converted the real-time `playOffset` to buffer-space seconds (`offsetBuffer = (playOffset % loopDurRealTime) * rate`) for `source.start(0, offsetBuffer)`.
+4. **Real-Time BPM Slider Dragging Sync**: Re-wired the `bpmInput` `'input'` event listener to capture playhead percentage, calculate new durations, scale `playOffset`, adjust `playStartCtxTime` proportionally, and restart active sources in real-time.
+5. **Offline Mixdown Fidelity**: Mirrored this math in the `OfflineAudioContext` mixdown engine inside `runRenderMix`.
+6. **Integration Testing Hooks**: Exposed a `window._dev` testing hook on the frontend to allow automated verification of inner playback states.
+
+## Completed Work: Reverb/Delay Unified Macro Knobs & Outpaint Gap Fix
+We combined the reverb and delay detailed parameters into unified macro controls and resolved silent gaps in outpainted generations:
+1. **Unified Reverb Controls**: Combined Reverb Size (`RSz`) and Reverb Mix (`RMx`) into a single `RMx` control. We capped the maximum mix at 80% wet, and size automatically/slowly scales from `0.5s` to `5.0s` as the mix is increased.
+2. **Unified Delay Controls**: Combined Delay Feedback (`DFb`) and Delay Mix (`DMx`) into a single `DMx` control. We capped the maximum mix at 75% wet, and feedback automatically/slowly scales from `0%` to `95%` as the mix is increased.
+3. **Frontend DOM Cleanup**: Removed detailed `RSz` and `Feedbk` sliders/readouts from the FX drawer UI, track mixer strips, copy/paste setting serialization, LFO target options, and MIDI Learn mapping selectors to simplify the interface.
+4. **Outpaint Zero-Padding Fix**: Modified `inpaint`, `response`, and `continuation` modes in `app_server.py` to append zero-padding to the `init_waveform` tensor up to `gen_duration` (target length) on the CPU before model generation. This ensures the model has reference audio aligned to the target duration, preventing silent or flat gaps.
+
+## Completed Work: Default Master Level set to 0 dB
+We set the default master level to 0 dB:
+1. **Slider Default**: Updated the default fader value of `#master-volume-slider` from `91` (-3.6 dB) to `100` (0.0 dB) in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html).
+2. **Fallback Settings**: Configured the master fader slider value fallback in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to default to `100` instead of `91`.
+3. **UI Text Labels**: Initialized the master volume readout label to `0.0 dB` and the limiter ceiling threshold to `LIMITER 0.0dB` in `index.html` to align with the startup fader configuration.
+
+## Completed Work: Prompt Auto-Classification & BPM/Length Metadata Format Fixes
+We resolved issues causing incorrect track classifications and weak model tempo/looping adherence:
+1. **Regex Word Boundary Classification**: Upgraded the substring keyword matching logic in `enhance_prompt` inside [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) and [generate_variants.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/generate_variants.py) to use regex word boundaries (`\b`). This prevents false positive substring matches (for example, `"thundering"` containing the keyword `"thunder"`, which previously forced drum loops to be incorrectly classified as `TrackType: SFX`).
+2. **Standardized Period Metadata Separators**: Updated the BPM and Length tags formatting in `enhance_prompt` to use periods (`.`) instead of commas to separate metadata sentences (e.g. `. BPM: 120. Length: 8 seconds.`). This strictly matches the metadata conditioning format used in Stable Audio 3's official training guidelines, maximizing the model's adherence to target tempo and looping prompts.
+
+## Completed Work: Accent Button & Expanded Vocabulary Lists
+We implemented a new "Accent" prompt modifier button and expanded the random prompt vocabulary:
+1. **Accent Button**: Added a new `#btn-change-accent` button to the prompt toolbar styled as a pill button in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html), utilizing a premium wand vector SVG icon.
+2. **Dynamic Accent Swapping**: Programmed `changeAccentOnly()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to replace only the production style descriptor (text following the final comma) of the active prompt with a new random choice from `productionStyles`. If no comma is present, the accent is cleanly appended.
+3. **Vocabulary Expansion**: Significantly expanded the `instruments`, `styles`, `moods`, and `productionStyles` lists in `app.js` with Stable Audio 3 compatible terms (e.g. `tb-303 acid synth`, `808 bass`, `fm synthesizer`, `cinematic brass swell`, `amapiano log drum groove`, etc.) to provide high variety when generating random layouts.
+
+
+
+
+

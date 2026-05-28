@@ -336,9 +336,9 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
             "trumpet", "violin", "cello", "saxophone", "rhodes", "organ", "clavinet"
         ]
         
-        if any(k in prompt_lower for k in sfx_keywords):
+        if any(re.search(rf'\b{re.escape(k)}\b', prompt_lower) for k in sfx_keywords):
             final_prompt = f"TrackType: SFX, {prompt}"
-        elif any(k in prompt_lower for k in instrument_keywords) or (loop and "loop" in prompt_lower):
+        elif any(re.search(rf'\b{re.escape(k)}\b', prompt_lower) for k in instrument_keywords) or (loop and "loop" in prompt_lower):
             final_prompt = f"TrackType: Instrument, {prompt}"
         else:
             final_prompt = f"TrackType: Music, VocalType: Instrumental, {prompt}"
@@ -376,14 +376,16 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
         else:
             final_prompt += ", analog warmth, high fidelity, 44.1 kHz, stereo, well-mixed"
  
-    # 4. Standardized BPM & Length formatting suffix
+    # 4. Standardized BPM & Length formatting suffix using periods (dots) for Stability AI 3 guidelines
     duration_int = int(round(duration))
-    final_prompt += f", BPM: {bpm}"
+    if not final_prompt.endswith('.'):
+        final_prompt += '.'
+    final_prompt += f" BPM: {bpm}."
     if "length:" not in final_prompt.lower():
-        final_prompt += f", Length: {duration_int} seconds"
+        final_prompt += f" Length: {duration_int} seconds."
         
     if loop:
-        final_prompt += ", seamless loop, looping"
+        final_prompt += " seamless loop, looping"
         
     return final_prompt
 
@@ -423,6 +425,9 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
 
         start_gen = time.time()
 
+        # Generate slightly longer than needed so content fills the entire loop
+        gen_duration = duration + 2.0
+
         # Load seed audio if provided (used for variation, inpaint, or continuation)
         seed_audio = None
         if init_audio_path:
@@ -436,6 +441,16 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
                     if invert_timing:
                         init_waveform = torch.flip(init_waveform, dims=[-1])
                         print(f"[Seed Audio] Inverted timing/progression (reversed waveform along time dimension) for {full_init_path}.")
+
+                    # Pad seed audio to target gen_duration for inpainting/continuation modes to prevent gaps
+                    if remix_mode in ["inpaint", "response", "continuation"]:
+                        current_samples = init_waveform.shape[1]
+                        target_samples = int(gen_duration * init_sr)
+                        if current_samples < target_samples:
+                            padding_samples = target_samples - current_samples
+                            padding = torch.zeros((init_waveform.shape[0], padding_samples), dtype=init_waveform.dtype)
+                            init_waveform = torch.cat([init_waveform, padding], dim=-1)
+                            print(f"[Seed Audio] Padded seed audio from {current_samples} to {target_samples} samples ({gen_duration}s) for mode '{remix_mode}'.")
                         
                     if model.model_half:
                         init_waveform = init_waveform.half()
@@ -447,8 +462,6 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
 
         with model_lock:
             with torch.inference_mode():
-                # Generate slightly longer than needed so content fills the entire loop
-                gen_duration = duration + 2.0
                 
                 # Configure generation parameters based on remix mode
                 gen_kwargs = {
@@ -715,7 +728,7 @@ def api_generate():
     cfg_scale = float(data.get("cfg_scale", 1.0))
     seed = int(data.get("seed", -1))
     duration_padding_sec = float(data.get("duration_padding_sec", 6.0))
-    duration = 960.0 / bpm
+    duration = float(data.get("duration", 960.0 / bpm))
 
     init_audio_path = data.get("init_audio_path")
     init_noise_level = float(data.get("init_noise_level", 0.6))
@@ -777,7 +790,8 @@ def api_regenerate():
     cfg_scale = float(data.get("cfg_scale", 1.0))
     seed = int(data.get("seed", -1))
     duration_padding_sec = float(data.get("duration_padding_sec", 6.0))
-    duration = 960.0 / bpm
+    duration = float(data.get("duration", 960.0 / bpm))
+
     
     unlocked_indices = data.get("unlocked_indices", [])
     if not unlocked_indices:
@@ -823,6 +837,28 @@ def api_delete_track(track_num):
         except Exception as e:
             return jsonify({"error": str(e)}), 500
     return jsonify({"error": "Track not found"}), 404
+
+@app.post("/api/delete_variant")
+def api_delete_variant():
+    data = request.json or {}
+    file_path = data.get("file_path")
+    if not file_path:
+        return jsonify({"error": "File path is required"}), 400
+
+    # Prevent directory traversal attacks
+    safe_path = os.path.normpath(file_path).lstrip(os.path.sep)
+    if safe_path.startswith("..") or os.path.isabs(safe_path):
+        return jsonify({"error": "Invalid file path"}), 400
+
+    full_path = os.path.join(OUTPUT_DIR, safe_path)
+    if os.path.exists(full_path) and os.path.isfile(full_path):
+        try:
+            os.remove(full_path)
+            print(f"Deleted variant file: {full_path}")
+            return jsonify({"status": "success"})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"error": "File not found"}), 404
 
 @app.post("/api/convert")
 def api_convert():

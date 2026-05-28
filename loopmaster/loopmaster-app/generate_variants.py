@@ -272,9 +272,9 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
             "trumpet", "violin", "cello", "saxophone", "rhodes", "organ", "clavinet"
         ]
         
-        if any(k in prompt_lower for k in sfx_keywords):
+        if any(re.search(rf'\b{re.escape(k)}\b', prompt_lower) for k in sfx_keywords):
             final_prompt = f"TrackType: SFX, {prompt}"
-        elif any(k in prompt_lower for k in instrument_keywords) or (loop and "loop" in prompt_lower):
+        elif any(re.search(rf'\b{re.escape(k)}\b', prompt_lower) for k in instrument_keywords) or (loop and "loop" in prompt_lower):
             final_prompt = f"TrackType: Instrument, {prompt}"
         else:
             final_prompt = f"TrackType: Music, VocalType: Instrumental, {prompt}"
@@ -312,14 +312,16 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
         else:
             final_prompt += ", analog warmth, high fidelity, 44.1 kHz, stereo, well-mixed"
  
-    # 4. Standardized BPM & Length formatting suffix
+    # 4. Standardized BPM & Length formatting suffix using periods (dots) for Stability AI 3 guidelines
     duration_int = int(round(duration))
-    final_prompt += f", BPM: {bpm}"
+    if not final_prompt.endswith('.'):
+        final_prompt += '.'
+    final_prompt += f" BPM: {bpm}."
     if "length:" not in final_prompt.lower():
-        final_prompt += f", Length: {duration_int} seconds"
+        final_prompt += f" Length: {duration_int} seconds."
         
     if loop:
-        final_prompt += ", seamless loop, looping"
+        final_prompt += " seamless loop, looping"
         
     return final_prompt
 

@@ -22,6 +22,7 @@
     const btnChangeChord = document.getElementById('btn-change-chord');
     const btnChangeStyle = document.getElementById('btn-change-style');
     const btnChangeInstrument = document.getElementById('btn-change-instrument');
+    const btnChangeAccent = document.getElementById('btn-change-accent');
     const btnRandomDrums = document.getElementById('btn-random-drums');
     const btnRandomBass = document.getElementById('btn-random-bass');
     const btnRandomLead = document.getElementById('btn-random-lead');
@@ -80,6 +81,26 @@
     let arrangerModeActive = false;
     let arrangerLengthLoops = 32;
     let arrangerGrid = {}; // trackId -> Array(arrangerLengthLoops) of bool
+
+    function getActiveDuration() {
+        if (arrangerModeActive) {
+            return arrangerLengthLoops * globalDuration;
+        }
+        let maxDur = globalDuration;
+        tracks.forEach(t => {
+            if (t.selectedVariant !== -1) {
+                const v = t.variants[t.selectedVariant];
+                if (v && v.buffer) {
+                    const mult = v.loopMultiplier || 1;
+                    const dur = mult * globalDuration;
+                    if (dur > maxDur) {
+                        maxDur = dur;
+                    }
+                }
+            }
+        });
+        return maxDur;
+    }
 
 
     /*
@@ -283,7 +304,28 @@
 
     // --- BPM ---
     bpmInput.addEventListener('input', () => {
+        const activeDurationBefore = getActiveDuration();
+        let currentTime = 0;
+        if (isPlaying && audioCtx) {
+            currentTime = (audioCtx.currentTime - playStartCtxTime) % activeDurationBefore;
+        } else {
+            currentTime = playOffset % activeDurationBefore;
+        }
+        const pct = activeDurationBefore > 0 ? currentTime / activeDurationBefore : 0;
+
         updateDurationLabel();
+
+        const activeDurationAfter = getActiveDuration();
+        playOffset = pct * activeDurationAfter;
+        if (isPlaying) {
+            playStartCtxTime = audioCtx.currentTime - playOffset;
+            tracks.forEach(t => {
+                stopTrackSource(t);
+                startTrackSource(t);
+            });
+        }
+        updatePlayheads();
+
         // Sync BPM into the prompt text if it contains a BPM reference
         const newBpm = bpmInput.value;
         const current = promptInput.value;
@@ -410,7 +452,7 @@
         // Capture current position
         if (audioCtx) {
             const elapsed = audioCtx.currentTime - playStartCtxTime;
-            playOffset = elapsed % globalDuration;
+            playOffset = elapsed % getActiveDuration();
         }
 
         // Stop all sources
@@ -458,6 +500,7 @@
             const emptyEl = tracksContainer.querySelector('.grid-empty-state');
             if (emptyEl) emptyEl.remove();
             btnPlayPause.disabled = false;
+            if (btnStopAll) btnStopAll.disabled = false;
             if (btnRenderMix) btnRenderMix.disabled = false;
             // Restore gain level
             t.gainNode.gain.value = t.level;
@@ -467,7 +510,7 @@
             // If playing, start the restored track in sync
             if (isPlaying && audioCtx) {
                 const elapsed = audioCtx.currentTime - playStartCtxTime;
-                playOffset = elapsed % globalDuration;
+                playOffset = elapsed % getActiveDuration();
                 startTrackSource(t);
             }
         }
@@ -507,6 +550,7 @@
                 </div>
             `;
             btnPlayPause.disabled = true;
+            if (btnStopAll) btnStopAll.disabled = true;
             if (btnRenderMix) btnRenderMix.disabled = true;
             stopAll();
         }
@@ -522,16 +566,27 @@
         const source = ctx.createBufferSource();
         source.buffer = v.buffer;
         source.loop = track.looping;
+
+        const creationBpm = track.originalParams?.bpm || 120;
+        const currentBpm = parseInt(bpmInput.value) || 120;
+        const rate = currentBpm / creationBpm;
+        source.playbackRate.value = rate;
+
+        const loopDurBuffer = (v.loopMultiplier || 1) * (960.0 / creationBpm);
+        const loopDurRealTime = (v.loopMultiplier || 1) * globalDuration;
+
         if (track.looping) {
             source.loopStart = 0;
-            source.loopEnd = globalDuration;
+            source.loopEnd = loopDurBuffer;
         }
         source.connect(track.fxInputNode);
         v.sourceNode = source;
 
-        const offset = playOffset % (track.looping ? globalDuration : v.buffer.duration);
-        if (track.looping || playOffset < v.buffer.duration) {
-            source.start(0, offset);
+        const offsetRealTime = playOffset % loopDurRealTime;
+        const offsetBuffer = offsetRealTime * rate;
+
+        if (track.looping || playOffset < loopDurRealTime) {
+            source.start(0, offsetBuffer);
         }
     }
 
@@ -541,8 +596,9 @@
         if (v && v.sourceNode) {
             v.sourceNode.loop = track.looping;
             if (track.looping) {
+                const creationBpm = track.originalParams?.bpm || 120;
                 v.sourceNode.loopStart = 0;
-                v.sourceNode.loopEnd = globalDuration;
+                v.sourceNode.loopEnd = (v.loopMultiplier || 1) * (960.0 / creationBpm);
             }
         }
     }
@@ -593,7 +649,7 @@
         if (wasPlaying) {
             // Recalculate offset to stay in sync
             if (audioCtx) {
-                playOffset = (audioCtx.currentTime - playStartCtxTime) % globalDuration;
+                playOffset = (audioCtx.currentTime - playStartCtxTime) % getActiveDuration();
             }
             startTrackSource(track);
         }
@@ -784,7 +840,7 @@
             if (audioCtx) {
                 const bpm = parseInt(bpmInput.value) || 120;
                 const barDuration = 240.0 / bpm;
-                const activeDuration = arrangerModeActive ? (arrangerLengthLoops * globalDuration) : globalDuration;
+                const activeDuration = getActiveDuration();
                 
                 let currentTime = 0;
                 if (isPlaying) {
@@ -946,7 +1002,7 @@
                 // Master Volume
                 const masterValSlider = document.getElementById('master-volume-slider');
                 if (masterVolumeNode && masterValSlider) {
-                    const baseVal = parseInt(masterValSlider.value) || 91;
+                    const baseVal = parseInt(masterValSlider.value) || 100;
                     const modBaseVal = baseVal + masterOffsets.level * 100;
                     const clampedVal = Math.max(0, Math.min(100, modBaseVal));
                     const p = getMasterFaderParams(clampedVal);
@@ -979,7 +1035,7 @@
     function updatePlayheads() {
         let currentTime;
         const bpm = parseInt(bpmInput.value) || 120;
-        const activeDuration = arrangerModeActive ? (arrangerLengthLoops * globalDuration) : globalDuration;
+        const activeDuration = getActiveDuration();
         
         if (isPlaying && audioCtx) {
             currentTime = (audioCtx.currentTime - playStartCtxTime) % activeDuration;
@@ -989,6 +1045,7 @@
 
         const pct = activeDuration > 0 ? currentTime / activeDuration : 0;
         tPosition.textContent = formatTime(currentTime);
+        tDuration.textContent = formatTime(activeDuration);
 
         // Detect loop boundary
         if (isPlaying && pct < prevPlayPct - 0.5) {
@@ -1007,23 +1064,18 @@
         prevPlayPct = pct;
 
         // Update card playheads
-        if (!arrangerModeActive) {
-            tracks.forEach(t => {
-                t.variants.forEach(v => {
-                    const seekBar = v.el.querySelector('.card-seek-bar');
-                    if (seekBar) seekBar.style.setProperty('--progress', pct.toString());
-                });
+        tracks.forEach(t => {
+            t.variants.forEach(v => {
+                const seekBar = v.el.querySelector('.card-seek-bar');
+                if (seekBar) {
+                    const dur = (v.loopMultiplier || 1) * globalDuration;
+                    const localProgress = (currentTime % dur) / dur;
+                    seekBar.style.setProperty('--progress', localProgress.toString());
+                }
             });
-        } else {
-            tracks.forEach(t => {
-                t.variants.forEach(v => {
-                    const seekBar = v.el.querySelector('.card-seek-bar');
-                    if (seekBar) {
-                        const localProgress = (currentTime % globalDuration) / globalDuration;
-                        seekBar.style.setProperty('--progress', localProgress.toString());
-                    }
-                });
-            });
+        });
+
+        if (arrangerModeActive) {
             const playheadLine = document.getElementById('arranger-playhead-line');
             if (playheadLine) {
                 playheadLine.style.left = `${pct * 100}%`;
@@ -1399,6 +1451,7 @@
             aelapseDryGainNode: aelapseDryGain,
             aelapseDelayGainNode: aelapseDelayGain,
             aelapseReverbGainNode: aelapseReverbGain,
+            aelapseFeedbackNode: aelapseFeedbackNode,
             
             // FX state values for offline rendering
             filtrType: 'lowpass',
@@ -1458,7 +1511,6 @@
                 <div class="macro-knob-group"><div class="macro-knob" data-param="reso" title="Reso: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Res</span></div>
                 <div class="macro-knob-group"><div class="macro-knob" data-param="tone" title="Tone: Flat"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Tone</span></div>
                 <div class="macro-knob-group"><div class="macro-knob" data-param="dlyMix" title="Delay Mix: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">DMx</span></div>
-                <div class="macro-knob-group"><div class="macro-knob" data-param="revSize" title="Reverb Size: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">RSz</span></div>
                 <div class="macro-knob-group"><div class="macro-knob" data-param="revMix" title="Reverb Mix: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">RMx</span></div>
             </div>
             <div class="mixer-meter">
@@ -1488,7 +1540,6 @@
                     <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="filter" title="Filter: Off"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Filter</span></div>
                     <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="reso" title="Reso: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Reso</span></div>
                     <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="delay" title="Delay: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Delay</span></div>
-                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="feedback" title="Feedback: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Feedbk</span></div>
                     <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="crush" title="Crush: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Crush</span></div>
                 </div>
             </div>
@@ -1537,9 +1588,7 @@
                 </div>
                 <div class="fx-controls-grid">
                     <div class="fx-control-row"><label>Sync</label><input type="range" class="aelapse-sync" min="0" max="8" value="2" step="1"><span class="aelapse-sync-val">1/8</span></div>
-                    <div class="fx-control-row"><label>Feedback</label><input type="range" class="aelapse-feedback" min="0" max="95" value="30" step="5"><span class="aelapse-fb-val">30%</span></div>
                     <div class="fx-control-row"><label>Delay Mix</label><input type="range" class="aelapse-mix" min="0" max="100" value="0" step="5"><span class="aelapse-mix-val">0%</span></div>
-                    <div class="fx-control-row"><label>Reverb Size</label><input type="range" class="aelapse-size" min="5" max="50" value="20" step="1"><span class="aelapse-size-val">2.0s</span></div>
                     <div class="fx-control-row"><label>Reverb Mix</label><input type="range" class="aelapse-reverb-mix" min="0" max="100" value="0" step="5"><span class="aelapse-reverb-val">0%</span></div>
                 </div>
             </div>
@@ -1633,9 +1682,7 @@
                         eqGains: Array.from(fxDrawerEl.querySelectorAll('.eq-slider')).map(s => s.value),
                         
                         aelapseSync: fxDrawerEl.querySelector('.aelapse-sync').value,
-                        aelapseFeedback: fxDrawerEl.querySelector('.aelapse-feedback').value,
                         aelapseMix: fxDrawerEl.querySelector('.aelapse-mix').value,
-                        aelapseSize: fxDrawerEl.querySelector('.aelapse-size').value,
                         aelapseReverbMix: fxDrawerEl.querySelector('.aelapse-reverb-mix').value,
 
                         macros: {
@@ -1645,7 +1692,6 @@
                             filter: fxMacroState.filter ? fxMacroState.filter.value : 50,
                             reso: fxMacroState.reso ? fxMacroState.reso.value : 0,
                             delay: fxMacroState.delay ? fxMacroState.delay.value : 0,
-                            feedback: fxMacroState.feedback ? fxMacroState.feedback.value : 0,
                             crush: fxMacroState.crush ? fxMacroState.crush.value : 0,
                         }
                     }
@@ -1754,9 +1800,7 @@
                     '.scream-amount': fx.screamAmount,
                     '.scream-mix': fx.screamMix,
                     '.aelapse-sync': fx.aelapseSync,
-                    '.aelapse-feedback': fx.aelapseFeedback,
                     '.aelapse-mix': fx.aelapseMix,
-                    '.aelapse-size': fx.aelapseSize,
                     '.aelapse-reverb-mix': fx.aelapseReverbMix,
                 };
 
@@ -1797,6 +1841,14 @@
                 e.stopPropagation();
                 if (track.locked) return;
                 
+                let trackDuration = 960.0 / (track.originalParams?.bpm || 120);
+                for (let v of track.variants) {
+                    if (v && v.buffer) {
+                        trackDuration = v.buffer.duration;
+                        break;
+                    }
+                }
+
                 const unlockedVariants = track.variants.filter(v => !v.locked);
                 if (unlockedVariants.length === 0) {
                     showStatus('No variants are unlocked to regenerate!', 'error');
@@ -1828,6 +1880,7 @@
                         steps: track.originalParams?.steps ?? 8,
                         unlocked_indices: unlockedIndices,
                         duration_padding_sec: 6.0,
+                        duration: trackDuration,
                         loop: true
                     };
                     
@@ -2022,30 +2075,19 @@
                         });
                     }
                 } else if (param === 'dlyMix') {
-                    const mix = value / 100;
-                    track.aelapseDelayMix = mix;
-                    if (!track.aelapseEnabled && value > 0) {
-                        const toggle = track.wrapper.querySelector('.aelapse-toggle');
-                        if (toggle) toggle.click();
+                    const slider = track.wrapper.querySelector('.aelapse-mix');
+                    if (slider) {
+                        slider.value = value;
+                        slider.dispatchEvent(new Event('input'));
                     }
-                    track.aelapseDelayGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
-                    knobEl.title = `Delay Mix: ${value}%`;
-                } else if (param === 'revSize') {
-                    const size = 0.5 + (value / 100) * 4.5; // 0.5s to 5.0s
-                    track.aelapseReverbSize = size;
-                    try {
-                        track.aelapseReverbNode.buffer = createSpringImpulseResponse(ctx, size, 2.5);
-                    } catch(e) {}
-                    knobEl.title = `Rev Size: ${size.toFixed(1)}s`;
+                    knobEl.title = `Delay: ${Math.round(value * 0.75)}%`;
                 } else if (param === 'revMix') {
-                    const mix = value / 100;
-                    track.aelapseReverbMix = mix;
-                    if (!track.aelapseEnabled && value > 0) {
-                        const toggle = track.wrapper.querySelector('.aelapse-toggle');
-                        if (toggle) toggle.click();
+                    const slider = track.wrapper.querySelector('.aelapse-reverb-mix');
+                    if (slider) {
+                        slider.value = value;
+                        slider.dispatchEvent(new Event('input'));
                     }
-                    track.aelapseReverbGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
-                    knobEl.title = `Rev Mix: ${value}%`;
+                    knobEl.title = `Reverb: ${Math.round(value * 0.80)}%`;
                 }
             }
         }
@@ -2186,43 +2228,46 @@
 
 
 
-        const aeFeedback = fxDrawerEl.querySelector('.aelapse-feedback');
-        const aeFbVal = fxDrawerEl.querySelector('.aelapse-fb-val');
-        aeFeedback.addEventListener('input', () => {
-            const pct = parseFloat(aeFeedback.value) / 100;
-            aeFbVal.textContent = aeFeedback.value + '%';
-            track.aelapseFeedback = pct;
-            aelapseFeedbackNode.gain.value = pct;
-        });
-
         const aeMix = fxDrawerEl.querySelector('.aelapse-mix');
         const aeMixVal = fxDrawerEl.querySelector('.aelapse-mix-val');
         aeMix.addEventListener('input', () => {
             const pct = parseFloat(aeMix.value) / 100;
-            aeMixVal.textContent = aeMix.value + '%';
-            track.aelapseDelayMix = pct;
-            updateAelapseBypass(track);
-        });
+            const mix = pct * 0.75; // cap delay mix at 75%
+            const feedback = pct * 0.95; // slowly increase feedback along with mix
 
-        const aeSize = fxDrawerEl.querySelector('.aelapse-size');
-        const aeSizeVal = fxDrawerEl.querySelector('.aelapse-size-val');
-        aeSize.addEventListener('input', () => {
-            const val = parseFloat(aeSize.value) / 10;
-            aeSizeVal.textContent = val.toFixed(1) + 's';
-            track.aelapseReverbSize = val;
-            try {
-                track.aelapseReverbNode.buffer = createSpringImpulseResponse(ctx, val, 2.5);
-            } catch (err) {
-                console.error('Failed to update convolver buffer:', err);
-            }
+            track.aelapseDelayMix = mix;
+            track.aelapseFeedback = feedback;
+
+            track.aelapseDelayGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+            track.aelapseFeedbackNode.gain.setTargetAtTime(feedback, ctx.currentTime, 0.01);
+
+            const displayMix = Math.round(mix * 100);
+            const displayFb = Math.round(feedback * 100);
+            aeMixVal.textContent = `${displayMix}% (Fb: ${displayFb}%)`;
+            
+            updateAelapseBypass(track);
         });
 
         const aeReverbMix = fxDrawerEl.querySelector('.aelapse-reverb-mix');
         const aeReverbVal = fxDrawerEl.querySelector('.aelapse-reverb-val');
         aeReverbMix.addEventListener('input', () => {
             const pct = parseFloat(aeReverbMix.value) / 100;
-            aeReverbVal.textContent = aeReverbMix.value + '%';
-            track.aelapseReverbMix = pct;
+            const mix = pct * 0.80; // cap reverb mix at 80%
+            const size = 0.5 + pct * 4.5; // slowly increase size from 0.5s to 5.0s
+
+            track.aelapseReverbMix = mix;
+            track.aelapseReverbSize = size;
+
+            track.aelapseReverbGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+            try {
+                track.aelapseReverbNode.buffer = createSpringImpulseResponse(ctx, size, 2.5);
+            } catch (err) {
+                console.error('Failed to update convolver buffer:', err);
+            }
+
+            const displayMix = Math.round(mix * 100);
+            aeReverbVal.textContent = `${displayMix}% (Size: ${size.toFixed(1)}s)`;
+
             updateAelapseBypass(track);
         });
 
@@ -2319,11 +2364,8 @@
                 if (macroName === 'space') {
                     const delayMixSlider = fxDrawerEl.querySelector('.aelapse-mix');
                     const reverbMixSlider = fxDrawerEl.querySelector('.aelapse-reverb-mix');
-                    const reverbSizeSlider = fxDrawerEl.querySelector('.aelapse-size');
                     if (delayMixSlider) { delayMixSlider.value = value; delayMixSlider.dispatchEvent(new Event('input')); }
                     if (reverbMixSlider) { reverbMixSlider.value = value; reverbMixSlider.dispatchEvent(new Event('input')); }
-                    const sizeVal = Math.round(5 + (45 * value / 100));
-                    if (reverbSizeSlider) { reverbSizeSlider.value = sizeVal; reverbSizeSlider.dispatchEvent(new Event('input')); }
                 } else if (macroName === 'drive') {
                     const screamVal = Math.round(value * 0.6);
                     const screamAmtSlider = fxDrawerEl.querySelector('.scream-amount');
@@ -2344,9 +2386,6 @@
                         if (toggle) toggle.click();
                     }
                     if (delayMixSlider) { delayMixSlider.value = value; delayMixSlider.dispatchEvent(new Event('input')); }
-                } else if (macroName === 'feedback') {
-                    const fbSlider = fxDrawerEl.querySelector('.aelapse-feedback');
-                    if (fbSlider) { fbSlider.value = Math.round(value * 0.95); fbSlider.dispatchEvent(new Event('input')); }
                 } else if (macroName === 'crush') {
                     // Crush: drives scream distortion cutoff down + amount up
                     const screamCutoffSlider = fxDrawerEl.querySelector('.scream-cutoff');
@@ -2480,9 +2519,7 @@
                     eqGains: Array.from(fxDrawerEl.querySelectorAll('.eq-slider')).map(s => s.value),
                     
                     aelapseSync: fxDrawerEl.querySelector('.aelapse-sync').value,
-                    aelapseFeedback: fxDrawerEl.querySelector('.aelapse-feedback').value,
                     aelapseMix: fxDrawerEl.querySelector('.aelapse-mix').value,
-                    aelapseSize: fxDrawerEl.querySelector('.aelapse-size').value,
                     aelapseReverbMix: fxDrawerEl.querySelector('.aelapse-reverb-mix').value,
 
                     macros: {
@@ -2492,7 +2529,6 @@
                         filter: fxMacroState.filter ? fxMacroState.filter.value : 50,
                         reso: fxMacroState.reso ? fxMacroState.reso.value : 0,
                         delay: fxMacroState.delay ? fxMacroState.delay.value : 0,
-                        feedback: fxMacroState.feedback ? fxMacroState.feedback.value : 0,
                         crush: fxMacroState.crush ? fxMacroState.crush.value : 0,
                     }
                 };
@@ -2550,9 +2586,7 @@
                     '.scream-amount': settings.screamAmount,
                     '.scream-mix': settings.screamMix,
                     '.aelapse-sync': settings.aelapseSync,
-                    '.aelapse-feedback': settings.aelapseFeedback,
                     '.aelapse-mix': settings.aelapseMix,
-                    '.aelapse-size': settings.aelapseSize,
                     '.aelapse-reverb-mix': settings.aelapseReverbMix,
                 };
 
@@ -2593,8 +2627,11 @@
 
         batchFiles.forEach((filePath, i) => {
             const name = filePath.split('/').pop() || `v${i + 1}`;
+            const slotsPerCard = 4 / batchFiles.length;
             const cardEl = document.createElement('div');
             cardEl.className = 'audio-card is-loading';
+            if (slotsPerCard === 2) cardEl.classList.add('span-2');
+            else if (slotsPerCard === 4) cardEl.classList.add('span-4');
             if (i === 0) cardEl.classList.add('is-selected');
 
             cardEl.innerHTML = `
@@ -2606,6 +2643,11 @@
                         <button class="btn-lock-variant" title="Lock Variant" type="button">
                             <svg class="btn-icon icon-unlock" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
                         </button>
+                        <button class="btn-delete-variant" title="Delete Variant" type="button">
+                            <svg class="btn-icon" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </button>
+                        <button class="btn-outpaint-2" title="Outpaint to 2 loops (2x)" type="button">2x</button>
+                        <button class="btn-outpaint-4" title="Outpaint to 4 loops (4x)" type="button">4x</button>
                         <span class="card-variant-num">#${i + 1}</span>
                     </div>
                 </div>
@@ -2629,7 +2671,7 @@
             variantsEl.appendChild(cardEl);
 
             cardEl.addEventListener('click', (e) => {
-                if (track.locked) return;
+                if (track.locked || cardEl.classList.contains('is-deleted')) return;
                 const cardRect = cardEl.getBoundingClientRect();
                 const clickX = e.clientX - cardRect.left;
                 const isLeftHalf = clickX < cardRect.width / 2;
@@ -2681,7 +2723,7 @@
                     if (isPlaying && track.selectedVariant === i) {
                         if (audioCtx) {
                             const elapsed = audioCtx.currentTime - playStartCtxTime;
-                            playOffset = elapsed % globalDuration;
+                            playOffset = elapsed % getActiveDuration();
                         }
                         stopTrackSource(track);
                         startTrackSource(track);
@@ -2702,6 +2744,71 @@
                     } else {
                         lockVariantBtn.innerHTML = `<svg class="btn-icon icon-unlock" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>`;
                     }
+                });
+            }
+
+            const deleteVariantBtn = cardEl.querySelector('.btn-delete-variant');
+            if (deleteVariantBtn) {
+                deleteVariantBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (track.locked || variant.locked) return;
+                    
+                    if (confirm('Are you sure you want to delete this variant generation?')) {
+                        try {
+                            const res = await fetch('/api/delete_variant', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ file_path: variant.filePath })
+                            });
+                            if (!res.ok) {
+                                const err = await res.json().catch(() => ({}));
+                                throw new Error(err.error || `HTTP ${res.status}`);
+                            }
+                            
+                            // Free memory and update UI
+                            variant.buffer = null;
+                            cardEl.classList.add('is-deleted');
+                            const titleEl = cardEl.querySelector('.card-title');
+                            if (titleEl) {
+                                titleEl.textContent = `${variant.name} (Deleted)`;
+                            }
+                            
+                            // Deselect if playing
+                            if (track.selectedVariant === i) {
+                                stopTrackSource(track);
+                                track.selectedVariant = -1;
+                                track.variants.forEach(v => v.el.classList.remove('is-selected'));
+                            }
+                            
+                            // Clear canvas
+                            const canvas = cardEl.querySelector('.card-waveform');
+                            if (canvas) {
+                                const ctx = canvas.getContext('2d');
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            }
+                        } catch (err) {
+                            console.error('Error deleting variant:', err);
+                            alert(`Failed to delete variant: ${err.message}`);
+                        }
+                    }
+                });
+            }
+
+            const outpaint2Btn = cardEl.querySelector('.btn-outpaint-2');
+            if (outpaint2Btn) {
+                outpaint2Btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (track.locked) return;
+                    runOutpaint(track, variant, 2);
+                });
+            }
+
+            const outpaint4Btn = cardEl.querySelector('.btn-outpaint-4');
+            if (outpaint4Btn) {
+                outpaint4Btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (track.locked) return;
+                    runOutpaint(track, variant, 4);
                 });
             }
 
@@ -2731,6 +2838,12 @@
             const buf = await resp.arrayBuffer();
             const ctx = ensureAudioCtx();
             variant.buffer = await ctx.decodeAudioData(buf);
+            
+            // Calculate and store loop multiplier based on creation BPM
+            const creationBpm = track ? track.originalParams?.bpm : (parseInt(bpmInput.value) || 120);
+            const oneLoopDur = 960.0 / creationBpm;
+            variant.loopMultiplier = Math.max(1, Math.round(variant.buffer.duration / oneLoopDur));
+
             variant.el.classList.remove('is-loading');
             drawWaveform(variant.el.querySelector('.card-waveform'), variant.buffer, isSelected, track ? track.originalParams?.bpm : null);
 
@@ -2738,7 +2851,7 @@
             if (track && track.selectedVariant === 0 && variant === track.variants[0]) {
                 if (isPlaying && audioCtx) {
                     const elapsed = audioCtx.currentTime - playStartCtxTime;
-                    playOffset = elapsed % globalDuration;
+                    playOffset = elapsed % getActiveDuration();
                     startTrackSource(track);
                 } else if (!isPlaying && track._autoPlay) {
                     playAll();
@@ -2753,18 +2866,19 @@
 
     // --- Random Prompt Generator ---
     const instruments = [
-        'acoustic guitar', 'electric guitar', 'classical guitar', 'nylon string guitar',
-        'grand piano', 'upright piano', 'fender rhodes piano', 'wurlitzer piano',
-        'synth lead', 'analog synthesizer', 'modular synthesizer', 'moog synthesizer',
-        'funky bass guitar', 'fretless bass', 'acoustic double bass', 'slap bass',
-        'saxophone', 'alto saxophone', 'tenor saxophone', 'trumpet', 'trombone',
-        'flute', 'clarinet', 'oboe', 'violin', 'viola', 'cello', 'string ensemble',
-        'drum kit', 'percussion', 'congas', 'bongos',
-        'hammond organ', 'church organ', 'accordion',
+        'acoustic guitar', 'electric guitar', 'classical guitar', 'nylon string guitar', 'jazz guitar', 'slide guitar', 'pedal steel guitar',
+        'grand piano', 'upright piano', 'fender rhodes piano', 'wurlitzer piano', 'electric piano', 'toy piano', 'clavinet',
+        'synth lead', 'analog synthesizer', 'modular synthesizer', 'moog synthesizer', 'synth pad', 'fm synthesizer', 'tb-303 acid synth', 'synth bass', 'sub bass',
+        'funky bass guitar', 'fretless bass', 'acoustic double bass', 'slap bass', '808 bass',
+        'saxophone', 'alto saxophone', 'tenor saxophone', 'trumpet', 'trombone', 'french horn', 'brass section',
+        'flute', 'pan flute', 'ocarina', 'clarinet', 'oboe', 'violin', 'viola', 'cello', 'electric violin', 'string ensemble', 'brass ensemble', 'orchestral strings',
+        'drum kit', 'percussion', 'congas', 'bongos', 'djembe', 'cajon', 'handpan', 'hang drum', 'steel tongue drum',
+        'hammond organ', 'hammond b3 organ', 'church organ', 'accordion', 'electric organ',
         'marimba', 'vibraphone', 'xylophone', 'kalimba', 'steel drums',
-        'classical harp', 'sitar', 'erhu', 'koto', 'tabla',
+        'classical harp', 'sitar', 'erhu', 'koto', 'tabla', 'dulcimer', 'zither', 'balalaika', 'oud', 'saz', 'bouzouki',
         'music box', 'celesta', 'glockenspiel', 'glockenspeil', 'harmonica', 'banjo', 'mandolin',
-        'theremin', 'mellotron', 'vocoder'
+        'theremin', 'mellotron', 'mellotron flute', 'vocoder', 'hurdy gurdy', 'timpani', 'tubular bells',
+        'cowbell', 'shakers', 'tambourine', 'drum machine', '808 drum machine', '909 drum machine', 'vocal chops', 'vocal chants'
     ];
     
     const styles = [
@@ -2778,20 +2892,41 @@
         'trap melodies', 'drill patterns', 'vaporwave textures',
         'IDM glitch sequences', 'breakbeat chops', 'dub delays',
         'new age atmospheres', 'world music fusion', 'tribal rhythms',
-        'neo-soul harmonies', 'gospel chords', 'progressive rock phrases'
+        'neo-soul harmonies', 'gospel chords', 'progressive rock phrases',
+        'acid bassline', 'dubstep wobble', 'future bass chords', 'ambient drone evolving',
+        'cinematic brass swell', 'orchestral staccato', 'swinging jazz groove', 'rhythmic pluck sequence',
+        'boogie-woogie piano', 'walking bass line', 'reverberant pluck', 'staccato chords',
+        'legato melody', 'pizzicato theme', 'glitchy percussion', 'vinyl crackle ambiance',
+        'spacey arpeggios', 'heavy metal riffs', 'funk slap pattern', 'flamenco rasgueado',
+        'bluegrass roll', 'reggaeton riddim', 'amapiano log drum groove', 'liquid drum and bass roller',
+        'house chord stabs', 'techno rumble bass', 'disco bass octave groove', 'garage 2-step groove',
+        'shoegaze guitar walls', 'ambient guitar swells', 'industrial noise rhythm', 'glitch hop percussion'
     ];
 
     const moods = [
         'euphoric', 'melancholic', 'dreamy', 'dark', 'uplifting', 'peaceful',
         'aggressive', 'mysterious', 'nostalgic', 'ethereal', 'energetic', 'hypnotic',
         'spacious', 'intimate', 'epic', 'playful', 'haunting', 'cinematic',
-        'warm', 'cold', 'bright', 'lush', 'gritty', 'smooth'
+        'warm', 'cold', 'bright', 'lush', 'gritty', 'smooth', 'moody', 'chill',
+        'vintage', 'futuristic', 'psychedelic', 'soothing', 'suspenseful', 'triumphant',
+        'mystical', 'relaxed', 'sombre', 'reflective', 'pensive', 'cozy', 'serene',
+        'surreal', 'trippy', 'funky', 'soulful', 'laid-back', 'intense', 'spooky'
     ];
 
     const productionStyles = [
         'studio quality', 'lo-fi', 'vintage analog', 'pristine digital',
         'lush reverb', 'dry close-mic', 'tape saturated', 'modern polished',
-        'textured', '1980s production', 'ambient washed', 'crisp'
+        'textured', '1980s production', 'ambient washed', 'crisp',
+        'high fidelity', 'room reverb', 'cavernous reverb', 'tape flutter',
+        'vinyl crackle', 'bit-crushed lofi', '44.1 kHz stereo', 'well-mixed',
+        'analog warmth', 'tube saturation', 'compressed punch', 'wide stereo image',
+        'subtle tape hiss', 'dead room recording', 'spring reverb', 'plate reverb',
+        'gated reverb', 'stereo delay feedback', 'high-fidelity stereo mix', 'crisp modern master',
+        'tape cassette emulation', 'dusty vinyl rip', 'record crackle', 'tape saturation warmth',
+        'tube preamplifier distortion', 'spring reverb tank', 'dynamic delay slapback',
+        'clean direct input (DI)', 'stereo widening effect', 'bitcrushed texture', 'vintage sampler tone',
+        'well-balanced mix', 'radio edit', 'professional master', 'dry dry close-up', 'binaural recording',
+        'field recording ambiance'
     ];
     
     const keys = [
@@ -2985,6 +3120,22 @@
         promptInput.focus();
     }
 
+    function changeAccentOnly() {
+        const currentPrompt = promptInput.value.trim();
+        const newProd = productionStyles[Math.floor(Math.random() * productionStyles.length)];
+        
+        let newPrompt = currentPrompt;
+        if (currentPrompt.includes(',')) {
+            const lastCommaIdx = currentPrompt.lastIndexOf(',');
+            newPrompt = currentPrompt.substring(0, lastCommaIdx) + `, ${newProd}`;
+        } else {
+            newPrompt = currentPrompt + `, ${newProd}`;
+        }
+        
+        promptInput.value = newPrompt;
+        promptInput.focus();
+    }
+
     if (btnChangeChord) {
         btnChangeChord.addEventListener('click', changeChordOnly);
     }
@@ -2995,6 +3146,10 @@
 
     if (btnChangeInstrument) {
         btnChangeInstrument.addEventListener('click', changeInstrumentOnly);
+    }
+
+    if (btnChangeAccent) {
+        btnChangeAccent.addEventListener('click', changeAccentOnly);
     }
 
     // --- Random Drum Loop Generator ---
@@ -3241,6 +3396,81 @@
         }
     }
 
+    async function runOutpaint(track, variant, loopsCount) {
+        if (btnGenerate.disabled) return; // Prevent concurrent generations
+
+        const originalParams = track.originalParams || {
+            prompt: track.prompt || "music loop",
+            bpm: parseInt(bpmInput.value) || 120,
+            seed: -1,
+            cfgScale: 1.0,
+            steps: 8
+        };
+        const prompt = originalParams.prompt;
+        const bpm = originalParams.bpm;
+        const parentDuration = 960.0 / bpm;
+        const targetDuration = parentDuration * loopsCount;
+        const numVariants = loopsCount === 2 ? 2 : 1;
+
+        btnGenerate.disabled = true;
+        btnGenerate.classList.add('is-generating');
+        btnGenerate.textContent = 'Outpainting…';
+        showStatus('Submitting Outpaint…');
+
+        try {
+            const bodyPayload = {
+                prompt,
+                bpm,
+                num_variants: numVariants,
+                loop: true,
+                duration_padding_sec: 6.0,
+                seed: -1,
+                cfg_scale: originalParams.cfgScale,
+                steps: originalParams.steps,
+                duration: targetDuration,
+                init_audio_path: variant.filePath,
+                remix_mode: 'continuation',
+                continue_start: variant.buffer ? variant.buffer.duration : parentDuration
+            };
+
+            const res = await fetch('/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyPayload)
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || `HTTP ${res.status}`);
+            }
+
+            const { job_id } = await res.json();
+            showStatus('OUTPAINTING');
+
+            const result = await pollJob(job_id);
+            if (result.status === 'error') throw new Error(result.error || 'Failed');
+
+            showStatus(`Done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
+
+            const outpaintParams = {
+                prompt,
+                bpm,
+                seed: -1,
+                cfgScale: originalParams.cfgScale,
+                steps: originalParams.steps
+            };
+
+            addTrackRow(result.files, prompt, result.track_num, true, track.id, outpaintParams);
+        } catch (err) {
+            console.error('Outpaint error:', err);
+            showStatus(`Error: ${err.message}`, 'error');
+        } finally {
+            btnGenerate.disabled = false;
+            btnGenerate.classList.remove('is-generating');
+            btnGenerate.textContent = 'Generate';
+        }
+    }
+
     async function pollJob(jobId) {
         for (let i = 0; i < 300; i++) {
             await new Promise(r => setTimeout(r, 1000));
@@ -3303,6 +3533,7 @@
         }
 
         btnPlayPause.disabled = false;
+        if (btnStopAll) btnStopAll.disabled = false;
         if (btnRenderMix) btnRenderMix.disabled = false;
         if (btnExportLoops) btnExportLoops.disabled = false;
         updateDurationLabel();
@@ -3856,7 +4087,7 @@
         try {
             const currentCtx = ensureAudioCtx();
             const sampleRate = currentCtx.sampleRate;
-            const singleLoopDuration = arrangerModeActive ? (arrangerLengthLoops * globalDuration) : globalDuration;
+            const singleLoopDuration = getActiveDuration();
             const contentDuration = singleLoopDuration * loopCount;
             const tailDuration = 5.0; // seconds of fade-out for delay/reverb tails
             const totalDuration = contentDuration + tailDuration;
@@ -3907,9 +4138,15 @@
                 const source = offlineCtx.createBufferSource();
                 source.buffer = v.buffer;
                 source.loop = t.looping;
+
+                const creationBpm = t.originalParams?.bpm || 120;
+                const currentBpm = parseInt(bpmInput.value) || 120;
+                const rate = currentBpm / creationBpm;
+                source.playbackRate.value = rate;
+
                 if (t.looping) {
                     source.loopStart = 0;
-                    source.loopEnd = singleLoopDuration;
+                    source.loopEnd = (v.loopMultiplier || 1) * (960.0 / creationBpm);
                 }
 
                 // --- REPLICATE DSP EFFECTS ---
@@ -4881,7 +5118,7 @@
         progressEl.className = 'arranger-time-bar-progress';
         progressEl.id = 'arranger-time-bar-progress';
         
-        const activeDuration = arrangerModeActive ? (arrangerLengthLoops * globalDuration) : globalDuration;
+        const activeDuration = getActiveDuration();
         const currentProgress = activeDuration > 0 ? (isPlaying ? ((audioCtx.currentTime - playStartCtxTime) % activeDuration) : playOffset) / activeDuration : 0;
         progressEl.style.width = `${currentProgress * 100}%`;
         cellsHeader.appendChild(progressEl);
@@ -5072,6 +5309,16 @@
     // --- Initialize MIDI and Modulators ---
     initMIDI();
     setupGlobalModulatorsListeners();
+
+    // Expose dev variables for testing
+    window._dev = {
+        tracks,
+        playAll,
+        audioCtx,
+        isPlaying: () => isPlaying,
+        globalDuration: () => globalDuration,
+        getActiveDuration
+    };
 
 })();
 

@@ -4,6 +4,27 @@
 
 ### What Was Done This Session
 
+**Transport Layout Overlap Fix**:
+- Scoped `.toggle-track` and `.toggle-track::after` rules specifically inside `.toggle-wrapper` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css). This prevents global styles bleed which was causing the switches in the transport bar to overlap icons and disrupt layout spacing.
+
+**Backend Variant Deletion & Custom Generation Duration**:
+- Added `POST /api/delete_variant` endpoint in [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) to delete individual variant WAV files from outputs folders, including path sanitization safeguards.
+- Updated `/api/generate` to accept a custom `duration` request parameter (defaulting to standard 8s), allowing outpaint tasks to configure arbitrary continuation lengths.
+
+**Variant Card Controls (Delete, Outpaint 2x/4x)**:
+- Added Delete (cross icon), 2x (outpaint to 2 loops), and 4x (outpaint to 4 loops) buttons to each variant card header in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js).
+- Styled card-header buttons in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css). Dimmed card items and disabled pointer-events when they are marked deleted or if the card is locked.
+- Enabled grid spanning layouts in `.variants-container` using CSS Grid column-spans: 2-loop outpainted tracks render 2 double-width cards (`span-2`), and 4-loop outpainted tracks render 1 full-width card (`span-4`).
+
+**Outpaint Continuation Trigger**:
+- Programmed `runOutpaint(track, variant, loopsCount)` in `app.js` using remix mode `'continuation'` to keep parent audio (first 8s/16s/etc) and generate continuation audio up to $16s$ or $32s$. Automatically loads generated files in a new track inserted directly below the parent.
+
+**Loop and Timeline Duration Synchronization**:
+- Modified Web Audio source nodes inside `startTrackSource` and `updateTrackLoopState` to loop at `v.buffer.duration` instead of the hardcoded global 8s, enabling full length playback of extended loops.
+- Programmed `getActiveDuration()` to dynamically loop the global playback sweep (including `playOffset` and card playhead animations) at the maximum active loop length when arranger mode is off. Replicated logic in the offline mixdown context.
+
+**Prior Tasks Done in This Session**:
+
 **Strict Prompt BPM Metadata Formatting**:
 - **Redundant BPM Term Stripping**: Modified `enhance_prompt()` in both [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) and [generate_variants.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/generate_variants.py) to strip out any existing informal, user-written, or randomly injected tempo terms (e.g. `120 bpm`, `120bpm`, `at 120 bpm`) at the beginning of prompt processing using regular expressions.
 - **Structured Metadata Injection**: Changed the formatting logic so that the server *always* appends the structured metadata tag `, BPM: {bpm}` to the end of the prompt. Previously, if the prompt already contained the word "bpm" in any context, the server would skip appending the standardized metadata tag, causing the model's conditioning layers to ignore the target tempo constraint.
@@ -98,3 +119,55 @@
 **Simplified Export Loops dialog**:
 - **Format Toggle Gating**: Fetch `#export-format-group` and toggle its display to `'none'` when zipping loops via `openExportModal('export')`, keeping it visible only for mixdown renders.
 - **Lossless WAV Defaulting**: Force `targetFormat` to `'wav'` when zipping loops, zipping the raw WAV buffers directly without asking the user.
+
+---
+
+## Session Fixes & Status (2026-05-27)
+
+During this session, we successfully resolved the transport controls and outpaint length issues:
+
+### 1. Transport Bar Playback Duration Mismatch (Fixed)
+- **Problem**: The `#t-duration` element was statically set to the 8s default loop length and didn't update when playing longer (16s/32s) outpainted variants, leading to values like `0:11.5 / 0:08.0`.
+- **Fix**: Updated `tDuration.textContent = formatTime(activeDuration)` inside the `updatePlayheads()` loop in `app.js`. The total duration readout now dynamically adapts to the length of the longest active variant.
+
+### 2. Missing Transport Stop/Rewind Button (Fixed)
+- **Problem**: The Stop button (`#btn-stop-all`) was missing from the HTML markup but referenced in JavaScript, preventing the user from resetting the playhead back to `0:00.0` when Arranger Mode was disabled (since waveform scrubbing was turned off).
+- **Fix**: Added the Stop button back to `index.html` as a `.btn-transport` icon button next to Play/Pause (styled as a square icon). Updated `app.js` to enable/disable `btnStopAll` in sync with `btnPlayPause`.
+
+### 3. Outpaint Loop Regeneration Truncation (Fixed)
+- **Problem**: The `/api/regenerate` endpoint in `app_server.py` hardcoded the regeneration duration parameter to 8 seconds (`960.0 / bpm`). When a user attempted to regenerate unlocked slots in an outpainted track (which is 16s or 32s), the regenerated audio was truncated to 8 seconds.
+- **Fix**: Modified the `/api/regenerate` endpoint in `app_server.py` to parse and accept a custom `duration` request parameter. Updated the frontend in `app.js` to calculate the active track duration from loaded variant buffers and pass it in the `/api/regenerate` payload.### 4. BPM and Looping Synchronization (Fixed)
+- **Problem**: When changing the global BPM slider, loop boundaries (`loopEnd`) and playhead seeking offsets drifted or cut off because they were calculated in real-time seconds instead of Web Audio buffer-space seconds. Additionally, loops continued to play at their original tempo, breaking synchronization.
+- **Fix**:
+  - Scaled `playbackRate.value` dynamically for each audio source based on `currentBpm / creationBpm` in both real-time and offline mixdown rendering contexts.
+  - Specified `loopStart` and `loopEnd` in buffer-space seconds (`(v.loopMultiplier || 1) * (960.0 / creationBpm)`), separating them from changing real-time seconds.
+  - Mapped real-time playhead offsets to buffer-space offsets (`offsetBuffer = (playOffset % loopDurRealTime) * rate`) when starting/seeking sources.
+  - Added real-time sync when dragging/inputting on the BPM slider: captures playhead percentage, updates project duration values, scales `playOffset`, updates `playStartCtxTime` proportionally, and restarts active sources to match the new speed and phase without drift.
+  - Exposed `window._dev` testing hook to facilitate automated integration testing.
+
+### 5. Unified Reverb & Delay Macro Controls (Fixed)
+- **Problem**: Individual slider controls for Reverb Size (`RSz`) and Delay Feedback (`DFb`) cluttered the FX drawer and mixer macro rows. Additionally, we want to cap reverb/delay mix to prevent fully wet outputs.
+- **Fix**:
+  - Combined Reverb Size and Reverb Mix into the Reverb Mix (`RMx`) slider. Reverb Mix is capped at 80% wet, and Size scales from 0.5s to 5.0s.
+  - Combined Delay Feedback and Delay Mix into the Delay Mix (`DMx`) slider. Delay Mix is capped at 75% wet, and Feedback scales from 0% to 95%.
+  - Removed detailed `RSz` and `Feedbk` sliders from the DOM, copy/paste setting serialization, LFO target options, and MIDI Learn mapping selectors to clean up the interface.
+
+### 6. Outpaint Zero-Padding Continuation Gaps (Fixed)
+- **Problem**: Outpainted or continuation variants generated with Stable Audio 3 resulted in silent/flat gaps or discontinuities at the loop boundary.
+- **Fix**:
+  - Programmed CPU-level zero-padding for input waveforms up to target `gen_duration` (continuation length) in `app_server.py`. This ensures the model has reference audio aligned to the target duration, preventing silent/flat gaps.
+
+### 7. Default Master Fader set to 0.0 dB (Fixed)
+- **Problem**: The master fader defaulted to `91` (-3.6 dB fader volume, -2.6 dB limiter ceiling threshold), which attenuated the initial volume state.
+- **Fix**:
+  - Set the default slider value to `100` (representing 0.0 dB) in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html) and updated fallback parsing in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to 100.
+  - Set the readout and limiter ceiling labels to display `0.0 dB` on startup.
+
+### 8. Prompt Auto-Classification and BPM/Length Metadata Format (Fixed)
+- **Problem**: Adjectives containing sound effect keywords as substrings (e.g., `"thundering"` containing `"thunder"`) caused instrument tracks to be incorrectly classified as `TrackType: SFX`. Furthermore, separating BPM and Length metadata tags with commas instead of periods diverged from Stable Audio 3's conditioning training guidelines, resulting in weak tempo/looping adherence.
+- **Fix**:
+  - Replaced substring matching in `enhance_prompt` with regex word boundaries (`\b`) in [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) and [generate_variants.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/generate_variants.py) to prevent false classification matches.
+  - Replaced comma separators with period separators for metadata sentences (e.g. `. BPM: {bpm}. Length: {duration}.`), aligning prompt enhancements with Stability AI's official training guidelines.
+
+
+

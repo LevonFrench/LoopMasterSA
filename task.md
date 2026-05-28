@@ -290,4 +290,53 @@
   - [x] Wire MOD button click handlers to toggle the global modulators panel.
   - [x] Synchronize MOD buttons active highlight state (`is-on`) with the drawer open state.
   - [x] Add hover and active styling in `app.css` for `.mixer-btn.mod-btn.is-on`.
+- [x] Fix transport buttons layout overlapping:
+  - [x] Scope `.toggle-track` in `.toggle-wrapper` in `app.css` to prevent global bleed.
+- [x] Implement backend delete variant endpoint:
+  - [x] Add `POST /api/delete_variant` to `app_server.py`.
+  - [x] Read and sanitize path, delete specific variant WAV file in `outputs/`.
+  - [x] Allow custom duration parameter in `POST /api/generate` to support outpainting.
+- [x] Add UI controls on variant cards:
+  - [x] Add Delete, Outpaint 2x, and Outpaint 4x buttons in card header template in `app.js`.
+  - [x] Style the new card header buttons in `app.css`.
+  - [x] Define `.span-2` and `.span-4` card layout column classes in `app.css`.
+- [x] Implement variant deletion on frontend:
+  - [x] Bind click listener to delete button on card.
+  - [x] Request confirmation, fetch `/api/delete_variant` on the server, free buffer memory, and dim the card.
+  - [x] Handle selected variant deselection if deleted variant is currently selected.
+- [x] Implement outpainting on frontend:
+  - [x] Calculate target duration, continuation start, and number of variants.
+  - [x] Run outpaint continuation task and add a new row below the parent track.
+  - [x] Set column span classes (`span-2` / `span-4`) on cards depending on files count.
+- [x] Synchronize playback looping and global timelines:
+  - [x] Loop at variant buffer duration rather than hardcoded 8 seconds.
+  - [x] Dynamically loop global playhead at the maximum active variant duration.
+  - [x] Match looping bounds in the offline rendering engine.
+- [x] Fix transport bar and outpaint bugs:
+  - [x] Dynamically update total duration readout (#t-duration) in `updatePlayheads()` to show `getActiveDuration()` instead of hardcoded 8s.
+  - [x] Add `#btn-stop-all` Stop button back to `index.html` (as a `.btn-transport` icon button next to play/pause) and disable/enable it dynamically in `app.js`.
+  - [x] Accept `duration` parameter in `/api/regenerate` endpoint in `app_server.py` to prevent truncating regenerated outpainted loops to 8s.
+- [x] Combine Reverb and Delay Controls (Macro Knobs):
+  - [x] Combine Reverb Size (`RSz`) and Reverb Mix (`RMx`) into a single `RMx` control (capped at 80% max mix, auto-scaling size from 0.5s to 5.0s).
+  - [x] Combine Delay Feedback (`DFb`) and Delay Mix (`DMx`) into a single `DMx` control (capped at 75% max mix, auto-scaling feedback from 0% to 95%).
+  - [x] Remove detailed `RSz` and `Feedbk` sliders from the drawer UI and mixer strip controls.
+- [x] Fix Outpaint Generation Gaps:
+  - [x] Append zero-padding to the input `init_waveform` tensor up to `gen_duration` in `app_server.py` to prevent gaps in outpainted and continuation tracks.
+- [x] Set default master level to 0 dB:
+  - [x] Change default master fader slider value to 100 in `index.html`.
+  - [x] Change fallback fader value in `app.js` to 100.
+  - [x] Update limiter label and readout defaults to 0.0 dB in `index.html`.
+- [x] Fix Auto-Classification and BPM/Length Metadata adherence:
+  - [x] Convert substring checks in `enhance_prompt` to regex word boundaries to prevent false positives (e.g. "thundering" matching "thunder" as SFX).
+  - [x] Separate metadata attributes (BPM and Length) with periods instead of commas, matching Stability AI's official training data guidelines.
+- [x] Add Accent prompt modifier button and expand vocabulary:
+  - [x] Add Accent button next to Inst in `index.html`.
+  - [x] Wire Accent click listener in `app.js` to change only the production style/accent parameter of the active prompt.
+  - [x] Expand `instruments`, `styles`, `moods`, and `productionStyles` lists in `app.js` with new Stable Audio 3 compatible terms.
+
+
+
+
+
+
 

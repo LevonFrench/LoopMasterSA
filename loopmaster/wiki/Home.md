@@ -85,7 +85,6 @@ Source Buffer
   → Filtr (BiquadFilterNode)
   → Luftikus EQ (6× BiquadFilterNode)
   → Scream (WaveShaperNode + BiquadFilterNode)
-  → Valentine Saturator (WaveShaperNode)
   → Ælapse Delay (DelayNode + feedback loop + LFO)
   → Ælapse Reverb (ConvolverNode)
   → Track Compressor (DynamicsCompressorNode)
@@ -142,14 +141,9 @@ Three-layer horizontal canvas meters per track and master:
 - Pre-filter `BiquadFilterNode` (lowpass, 200Hz–16kHz) for harshness control
 - Q/drive coupled to single "Scream" parameter
 
-### Valentine
-- **Saturator**: `WaveShaperNode` with sigmoid curve, input gain 1x–10x
-- **Compressor**: `DynamicsCompressorNode`, threshold -40 to 0dB, ratio up to 20:1
-- Parallel dry/wet blend
-
-### Ælapse
-- **Delay**: `DelayNode` (up to 2.0s) with feedback `GainNode` (up to 95%). 2Hz LFO modulates delay time by ±2ms for tape wow/flutter.
-- **Reverb**: `ConvolverNode` with programmatically generated stereo impulse response (decayed white noise + chirp for spring dispersion).
+### Ælapse (Unified Controls)
+- **Delay Mix (DMx)**: Single macro control that caps delay mix at 75% wet. As DMx is increased, feedback (`DFb`) is automatically scaled up proportionally from 0% to 95%. LFO (2Hz) modulates delay time by ±2ms for tape wow/flutter.
+- **Reverb Mix (RMx)**: Single macro control that caps reverb mix at 80% wet. As RMx is increased, reverb size (`RSz`) automatically scales up from 0.5s to 5.0s, rebuilding the convolver impulse response on the fly.
 - **Tempo-Synced delay times** via beat division lookup.
 
 ---
@@ -217,3 +211,22 @@ loopmaster-app/
 | Ælapse | [smiarx/aelapse](https://github.com/smiarx/aelapse) |
 | Scream | [Cure-Audio/Scream](https://github.com/Cure-Audio/Scream) |
 | Filtr | [tiagolr/filtr](https://github.com/tiagolr/filtr) |
+
+---
+
+## Known Issues & Diagnostics (Session 2026-05-27)
+
+During runtime testing and code analysis, several technical issues were identified for subsequent resolution:
+
+### 1. Transport Bar Playback Duration Mismatch
+- **Issue**: The transport panel's duration element (`#t-duration`) is statically updated once on BPM changes to `globalDuration` (e.g. 8s at 120bpm). When an outpainted/remixed loop with a duration of 16s or 32s is playing, the playhead dynamically sweeps up to 16s/32s, causing the time display to show out-of-bound values like `0:11.5 / 0:08.0`.
+- **Planned Fix**: Dynamically update `tDuration.textContent = formatTime(activeDuration)` inside the `updatePlayheads()` loop so that the total duration readout is always synchronized with the active playback loop's duration.
+
+### 2. Missing Transport Stop/Rewind Button
+- **Issue**: The "Stop All" button was previously removed from `index.html` to save layout space, leaving only the Play/Pause button. Consequently, when Arranger Mode is disabled, the user has no way to reset the playhead position back to `0:00.0` without waiting for the loop to finish or toggling arranger view.
+- **Planned Fix**: Add the Stop button (`#btn-stop-all`) back to `index.html` as a standard transport button (class `.btn-transport`, id `btn-stop-all`), styled as a square icon button next to the Play/Pause button. Update `app.js` to manage the disabled state of `btnStopAll` in sync with `btnPlayPause`.
+
+### 3. Outpaint Loop Regeneration Truncation
+- **Issue**: The `/api/regenerate` endpoint in `app_server.py` hardcodes the regeneration length to `960.0 / bpm` (8 seconds). When a user attempts to regenerate unlocked slots in an outpainted track (which is 16s or 32s), the regenerated audio is truncated to 8 seconds.
+- **Planned Fix**: Modify `/api/regenerate` in `app_server.py` to parse and accept the `duration` parameter from client requests (defaulting to `960.0 / bpm`) and pass it into the model execution thread.
+
