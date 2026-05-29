@@ -7,16 +7,16 @@
     'use strict';
 
     // --- DOM ---
-    const promptInput   = document.getElementById('prompt-input');
-    const bpmInput      = document.getElementById('bpm-input');
-    const btnGenerate   = document.getElementById('btn-generate');
+    const promptInput = document.getElementById('prompt-input');
+    const bpmInput = document.getElementById('bpm-input');
+    const btnGenerate = document.getElementById('btn-generate');
     const btnPromptHistory = document.getElementById('btn-prompt-history');
-    const statusBar     = document.getElementById('status-bar');
-    const statusText    = document.getElementById('status-text');
-    const btnPlayPause  = document.getElementById('btn-play-pause');
-    const tPosition     = document.getElementById('t-position');
-    const tDuration     = document.getElementById('t-duration');
-    const btnStopAll    = document.getElementById('btn-stop-all');
+    const statusBar = document.getElementById('status-bar');
+    const statusText = document.getElementById('status-text');
+    const btnPlayPause = document.getElementById('btn-play-pause');
+    const tPosition = document.getElementById('t-position');
+    const tDuration = document.getElementById('t-duration');
+    const btnStopAll = document.getElementById('btn-stop-all');
     const tracksContainer = document.getElementById('tracks-container');
     const btnRandomPrompt = document.getElementById('btn-random-prompt');
     const btnRandomInKey = document.getElementById('btn-random-in-key');
@@ -66,10 +66,10 @@
                 }
             };
         `;
-        const blob = new Blob([workerCode], {type: 'application/javascript'});
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
         const workerUrl = URL.createObjectURL(blob);
         audioSchedulerWorker = new Worker(workerUrl);
-        audioSchedulerWorker.onmessage = function(e) {
+        audioSchedulerWorker.onmessage = function (e) {
             if (e.data === 'tick') {
                 runAudioSchedulerTick();
             }
@@ -200,15 +200,19 @@
         const buffer = audioCtx.createBuffer(2, len, sampleRate);
         const left = buffer.getChannelData(0);
         const right = buffer.getChannelData(1);
-        
+
+        let lastValL = 0;
+        let lastValR = 0;
         for (let i = 0; i < len; i++) {
             const percent = i / len;
             const envelope = Math.pow(1 - percent, decay);
             const noiseL = Math.random() * 2 - 1;
             const noiseR = Math.random() * 2 - 1;
-            const springChirp = Math.sin(i * 0.05 * Math.exp(-percent * 2));
-            left[i] = (noiseL * 0.7 + springChirp * 0.3) * envelope;
-            right[i] = (noiseR * 0.7 + springChirp * 0.3) * envelope;
+            // 1-pole lowpass filter for warmer, less metallic/pitchy sound
+            lastValL = lastValL * 0.9 + noiseL * 0.1;
+            lastValR = lastValR * 0.9 + noiseR * 0.1;
+            left[i] = lastValL * envelope * 3.0; // scale up to compensate for lowpass attenuation
+            right[i] = lastValR * envelope * 3.0;
         }
         return buffer;
     }
@@ -219,7 +223,7 @@
         const isHidden = modulatorsPanel.style.display === 'none';
         const nextState = isHidden ? 'block' : 'none';
         modulatorsPanel.style.display = nextState;
-        
+
         // Update all MOD buttons to match the drawer open state
         const isOpen = nextState === 'block';
         document.querySelectorAll('.mod-btn').forEach(btn => {
@@ -241,7 +245,7 @@
         globalDuration = calcDuration(bpm);
         bpmInput.title = `4 bars = ${globalDuration.toFixed(2)}s`;
         tDuration.textContent = formatTime(globalDuration);
-        
+
         // Update delay times for all tracks to keep them tempo-synced!
         tracks.forEach(t => {
             const syncBeats = [0.25, 0.333, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0];
@@ -260,18 +264,15 @@
         if (val <= 0.001) {
             return {
                 volumeGain: 0.0,
-                threshold: -36.0,
+                threshold: -1.0,
                 displayDb: -Infinity
             };
         }
-        const threshold = -6.0 + (val - 1.0) * 30.0;
         const targetDb = (val - 1.0) * 40.0;
-        const autoMakeup = -threshold * 0.95;
-        const faderVolumeDb = targetDb - autoMakeup;
-        const volumeGain = Math.pow(10, faderVolumeDb / 20);
+        const volumeGain = Math.pow(10, targetDb / 20);
         return {
             volumeGain: volumeGain,
-            threshold: threshold,
+            threshold: -1.0,
             displayDb: targetDb
         };
     }
@@ -279,7 +280,7 @@
     function ensureAudioCtx() {
         if (!audioCtx) {
             audioCtx = new AudioContext();
-            
+
             // Create master nodes
             masterGain = audioCtx.createGain();
             masterGain.gain.value = 1.0;
@@ -290,10 +291,10 @@
             const params = getMasterFaderParams(sliderVal);
 
             masterLimiter.threshold.setValueAtTime(params.threshold, audioCtx.currentTime);
-            masterLimiter.knee.setValueAtTime(0.0, audioCtx.currentTime);
+            masterLimiter.knee.setValueAtTime(8.0, audioCtx.currentTime);
             masterLimiter.ratio.setValueAtTime(20.0, audioCtx.currentTime);
             masterLimiter.attack.setValueAtTime(0.003, audioCtx.currentTime);
-            masterLimiter.release.setValueAtTime(0.1, audioCtx.currentTime);
+            masterLimiter.release.setValueAtTime(0.25, audioCtx.currentTime);
 
             // Makeup gain set to 1.0 (0 dB) so we don't apply static gain
             masterMakeup = audioCtx.createGain();
@@ -489,7 +490,7 @@
         isPlaying = true;
         btnPlayPause.classList.add('is-playing');
         btnPlayPause.setAttribute('aria-label', 'Pause');
-        
+
         // Trigger start/loop/bar envelopes on play start
         lastBarIndex = -1;
         if (playOffset === 0) {
@@ -684,7 +685,7 @@
             if (track.scheduledSourceNodes) {
                 track.scheduledSourceNodes = track.scheduledSourceNodes.filter(n => n !== source);
             }
-            try { source.disconnect(); } catch (_) {}
+            try { source.disconnect(); } catch (_) { }
         };
 
         // Keep a reference to the latest scheduled node for backward compatibility
@@ -743,8 +744,8 @@
                 try {
                     node.onended = null;
                     node.stop();
-                } catch (_) {}
-                try { node.disconnect(); } catch (_) {}
+                } catch (_) { }
+                try { node.disconnect(); } catch (_) { }
             });
             track.scheduledSourceNodes = [];
         }
@@ -978,11 +979,11 @@
 
     function runAudioSchedulerTick() {
         if (!audioCtx) return;
-        
+
         const bpm = parseInt(bpmInput.value) || 120;
         const barDuration = 240.0 / bpm;
         const activeDuration = getActiveDuration();
-        
+
         let currentTime = 0;
         if (isPlaying) {
             currentTime = (audioCtx.currentTime - playStartCtxTime) % activeDuration;
@@ -998,16 +999,16 @@
                 if (track.selectedVariant === -1 || !track.looping) return;
                 const v = track.variants[track.selectedVariant];
                 if (!v || !v.buffer) return;
-                
+
                 const loopDurRealTime = (v.loopMultiplier || 1) * globalDuration;
-                
+
                 while (track.nextScheduleTime !== null && track.nextScheduleTime < now + lookAheadTime) {
                     scheduleSourceNode(track, track.nextScheduleTime, 0);
                     track.nextScheduleTime += loopDurRealTime;
                 }
             });
         }
-        
+
         // Track bar index boundary
         const barIndex = Math.floor(currentTime / barDuration);
         if (isPlaying && barIndex !== lastBarIndex) {
@@ -1021,7 +1022,7 @@
             lastLoopIndex = loopIndex;
             applyArrangerMutingForLoop(loopIndex);
         }
-        
+
         // Smooth arranger/mute gates
         const anySoloed = tracks.some(t => t.soloed);
         tracks.forEach(t => {
@@ -1036,7 +1037,7 @@
             }
             t._arrangerGate += (t._targetGate - t._arrangerGate) * 0.3;
         });
-        
+
         // Calculate LFOs
         const getLfoValue = (lfo, num) => {
             if (!lfo.enabled) return 0.0;
@@ -1067,26 +1068,26 @@
                 default: return 0.0;
             }
         };
-        
+
         const lfo1Val = getLfoValue(globalModulators.lfo1, 1);
         const lfo2Val = getLfoValue(globalModulators.lfo2, 2);
         const lfo3Val = getLfoValue(globalModulators.lfo3, 3);
         const lfo4Val = getLfoValue(globalModulators.lfo4, 4);
-        
+
         // Calculate Envelopes (Disabled)
         const getEnvValue = (env) => {
             return 0.0;
         };
-        
+
         const env1Val = getEnvValue(globalModulators.env1);
         const env2Val = getEnvValue(globalModulators.env2);
-        
+
         const modBypassEl = document.getElementById('toggle-modulators-bypass');
         const isModBypassed = modBypassEl ? modBypassEl.checked : false;
-        
+
         const modOffsets = {};
         const masterOffsets = { level: 0 };
-        
+
         if (!isModBypassed) {
             modMatrixSlots.forEach(slot => {
                 if (slot.src === 'none' || slot.trackId === 'none' || slot.param === 'none' || slot.depth === 0) return;
@@ -1097,7 +1098,7 @@
                 else if (slot.src === 'lfo4') modVal = lfo4Val;
                 else if (slot.src === 'env1') modVal = env1Val;
                 else if (slot.src === 'env2') modVal = env2Val;
-                
+
                 const offset = (slot.depth / 100) * modVal;
                 if (slot.trackId === 'master') {
                     masterOffsets[slot.param] = (masterOffsets[slot.param] || 0) + offset;
@@ -1123,7 +1124,7 @@
                 }
             });
         }
-        
+
         // Apply offsets to tracks
         tracks.forEach(track => {
             const offsets = modOffsets[track.id] || {
@@ -1140,7 +1141,7 @@
                 crusherBits: 0,
                 crusherNormfreq: 0
             };
-            
+
             // Volume
             let level = track.level + offsets.level;
             level = Math.max(0, Math.min(1, level));
@@ -1148,7 +1149,7 @@
                 track.gainNode.gain.value = level * track._arrangerGate;
             }
             updateSliderModDot(track, '.level-knob', level);
-            
+
             // Pan
             let pan = track.pan + offsets.pan * 2.0;
             pan = Math.max(-1, Math.min(1, pan));
@@ -1166,7 +1167,7 @@
                     panText.textContent = displayVal === 0 ? 'C' : displayVal < 0 ? `L${Math.abs(displayVal)}` : `R${displayVal}`;
                 }
             }
-            
+
             // Filter
             let filterCutoff = track.filtrCutoff + offsets.filter * 15000;
             filterCutoff = Math.max(20, Math.min(20000, filterCutoff));
@@ -1247,7 +1248,7 @@
             }
             updateSliderModDot(track, '.crusher-normfreq', (crusherNormfreq - 0.001) / 0.999);
         });
-        
+
         // Master Volume
         const masterValSlider = document.getElementById('master-volume-slider');
         if (masterVolumeNode && masterValSlider) {
@@ -1257,7 +1258,7 @@
             const p = getMasterFaderParams(clampedVal);
             masterVolumeNode.gain.value = p.volumeGain;
             masterLimiter.threshold.value = p.threshold;
-            
+
             const masterReadout = document.getElementById('master-volume-readout');
             if (masterReadout) masterReadout.textContent = `${p.displayDb === -Infinity ? '-inf' : p.displayDb.toFixed(1)} dB`;
 
@@ -1268,7 +1269,7 @@
         cancelRAF();
         function tick() {
             updatePlayheads();
-            
+
             if (isPlaying && vizAnalyser) {
                 renderVizSpectrum();
                 renderVizOscilloscope();
@@ -1289,7 +1290,7 @@
         let currentTime;
         const bpm = parseInt(bpmInput.value) || 120;
         const activeDuration = getActiveDuration();
-        
+
         if (isPlaying && audioCtx) {
             currentTime = (audioCtx.currentTime - playStartCtxTime) % activeDuration;
         } else {
@@ -1566,7 +1567,7 @@
             else if (syncValue === '1/4') divisor = 60;
             else if (syncValue === '1/8') divisor = 30;
             else if (syncValue === '1/16') divisor = 15;
-            
+
             const rateHz = bpm / divisor;
             track.tunaChorusRate = rateHz;
             if (track.tunaChorusNode) {
@@ -1605,7 +1606,7 @@
             else if (syncValue === '1/4') divisor = 60;
             else if (syncValue === '1/8') divisor = 30;
             else if (syncValue === '1/16') divisor = 15;
-            
+
             const rateHz = bpm / divisor;
             track.tunaPhaserRate = rateHz;
             if (track.tunaPhaserNode) {
@@ -1690,7 +1691,7 @@
                 newVal = Math.round(newVal / step) * step;
             }
             newVal = Math.max(min, Math.min(max, newVal));
-            
+
             value = newVal;
             updateKnobRotation(value);
             onChange(value);
@@ -1723,7 +1724,7 @@
 
     function updateTrackLockState(track) {
         const isLocked = !!track.locked;
-        
+
         // Disable/enable mixer sliders
         const levelKnobEl = track.el.querySelector('.level-knob');
         const panKnobEl = track.el.querySelector('.pan-knob');
@@ -1846,7 +1847,7 @@
         const eqFilters = [];
         const eqFreqs = [10, 40, 160, 640, 2500, 12000];
         const eqTypes = ['peaking', 'peaking', 'peaking', 'peaking', 'peaking', 'highshelf'];
-        
+
         let lastNode = null;
         for (let b = 0; b < 6; b++) {
             const filter = ctx.createBiquadFilter();
@@ -1978,7 +1979,7 @@
         const aelapseLFO = ctx.createOscillator();
         aelapseLFO.frequency.value = 2.0;
         const aelapseLFOGain = ctx.createGain();
-        aelapseLFOGain.gain.value = 0.002;
+        aelapseLFOGain.gain.value = 0.0;
         aelapseLFO.connect(aelapseLFOGain);
         aelapseLFOGain.connect(aelapseDelay.delayTime);
         aelapseLFO.start();
@@ -2110,7 +2111,7 @@
             pan: 0,
             selectedVariant: 0,
             variants: [],
-            
+
             locked: false,
             _arrangerGate: 1.0,
             _targetGate: 1.0,
@@ -2135,7 +2136,7 @@
             aelapseDelayGainNode: aelapseDelayGain,
             aelapseReverbGainNode: aelapseReverbGain,
             aelapseFeedbackNode: aelapseFeedbackNode,
-            
+
             // Tremolo Nodes
             tremoloGainNode,
             tremoloLfoNode,
@@ -2149,7 +2150,7 @@
             gateGatedGainNode,
             gateLfoNode,
             gateBiasNode,
-            
+
             tunaChorusNode,
             tunaChorusDryGainNode: tunaChorusDryGain,
             tunaChorusWetGainNode: tunaChorusWetGain,
@@ -2164,7 +2165,7 @@
             tunaBitcrusherDryGainNode: tunaBitcrusherDryGain,
             tunaBitcrusherWetGainNode: tunaBitcrusherWetGain,
             tunaBitcrusherSumNode: tunaBitcrusherSum,
-            
+
             // FX state values for offline rendering
             filtrHpCutoff: 10,
             filtrHpResonance: 0.707,
@@ -2184,13 +2185,13 @@
             aelapseFeedback: 0.3,
             aelapseDelayMix: 0.0,
             aelapseDelayWowRate: 2.0,
-            aelapseDelayWowDepth: 0.002,
+            aelapseDelayWowDepth: 0.0,
             aelapseReverbMix: 0.0,
             aelapseReverbSize: 2.0,
             aelapseReverbPreDelay: 0.0,
             aelapseReverbDamp: 20000,
             delaySyncIndex: 3,
-            
+
             // Tuna FX state values
             tunaChorusEnabled: false,
             tunaChorusRateSync: 'Free',
@@ -2199,7 +2200,7 @@
             tunaChorusDepth: 0.7,
             tunaChorusFeedback: 0.2,
             tunaChorusMix: 0.5,
-            
+
             tunaPhaserEnabled: false,
             tunaPhaserRateSync: 'Free',
             tunaPhaserRateSyncIndex: 0,
@@ -2207,7 +2208,7 @@
             tunaPhaserDepth: 0.6,
             tunaPhaserFeedback: 0.2,
             tunaPhaserMix: 0.5,
-            
+
             tunaBitcrusherEnabled: false,
             tunaBitcrusherBits: 8,
             tunaBitcrusherNormfreq: 0.1,
@@ -2231,9 +2232,17 @@
             nextScheduleTime: null
         };
 
+        updateFiltrBypass(track);
+        updateEqBypass(track);
+        updateScreamBypass(track);
         updateTunaChorusBypass(track);
         updateTunaPhaserBypass(track);
         updateTunaBitcrusherBypass(track);
+        updateAelapseBypass(track);
+        updateTremoloBypass(track);
+        updateGateBypass(track);
+        updateGateFrequency(track);
+        updateGateWidth(track);
         updateTunaTempoSync(track);
 
         // 6. Build wrapper container
@@ -2311,6 +2320,7 @@
                     <div class="fx-clipboard-btns" style="display: flex; gap: 6px;">
                         <button class="fx-copy-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Copy FX Settings">Copy</button>
                         <button class="fx-paste-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Paste FX Settings">Paste</button>
+                        <button class="fx-reset-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Reset FX to Defaults">Reset</button>
                     </div>
                 </div>
                 <div class="macros-knobs-grid">
@@ -2730,7 +2740,7 @@
                         <div class="fx-knob aelapse-wow-depth" title="Wow Depth">
                             <div class="knob-indicator"></div>
                         </div>
-                        <span class="fx-knob-value aelapse-wow-depth-val">0.2%</span>
+                        <span class="fx-knob-value aelapse-wow-depth-val">0.0%</span>
                     </div>
                 </div>
             </div>
@@ -2926,20 +2936,20 @@
                         eqEnabled: track.eqEnabled,
                         aelapseDelayEnabled: track.aelapseDelayEnabled,
                         aelapseReverbEnabled: track.aelapseReverbEnabled,
-                        
+
                         filtrHpCutoff: track.filtrHpCutoff,
                         filtrHpReso: track.filtrHpResonance,
                         filtrLpCutoff: track.filtrLpCutoff,
                         filtrLpReso: track.filtrLpResonance,
                         filtrDrive: track.filtrDrive,
                         filtrMix: track.filtrMix,
-                        
+
                         screamCutoff: track.screamCutoff,
                         screamAmount: track.screamAmount,
                         screamMix: track.screamMix,
-                        
+
                         eqGains: [...track.eqGains],
-                        
+
                         aelapseSync: track.delaySyncIndex,
                         aelapseMix: track.aelapseDelayMix,
                         aelapseReverbMix: track.aelapseReverbMix,
@@ -3217,7 +3227,7 @@
                     '.aelapse-reverb-mix': fx.aelapseReverbMix,
                     '.aelapse-reverb-size': fx.aelapseReverbSize,
                     '.aelapse-wow-rate': fx.aelapseDelayWowRate !== undefined ? fx.aelapseDelayWowRate : 2.0,
-                    '.aelapse-wow-depth': fx.aelapseDelayWowDepth !== undefined ? Math.round(fx.aelapseDelayWowDepth * 1000) : 2,
+                    '.aelapse-wow-depth': fx.aelapseDelayWowDepth !== undefined ? Math.round(fx.aelapseDelayWowDepth * 1000) : 0,
                     '.aelapse-reverb-predelay': fx.aelapseReverbPreDelay !== undefined ? fx.aelapseReverbPreDelay : 0,
                     '.aelapse-reverb-damp': fx.aelapseReverbDamp !== undefined ? fx.aelapseReverbDamp : 20000,
                     '.chorus-rate-sync-knob': fx.tunaChorusRateSyncIndex !== undefined ? fx.tunaChorusRateSyncIndex : 0,
@@ -3276,7 +3286,7 @@
             regenBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 if (track.locked) return;
-                
+
                 let trackDuration = 960.0 / (track.originalParams?.bpm || 120);
                 for (let v of track.variants) {
                     if (v && v.buffer) {
@@ -3290,23 +3300,23 @@
                     showStatus('No variants are unlocked to regenerate!', 'error');
                     return;
                 }
-                
+
                 const N = unlockedVariants.length;
                 showStatus('Submitting regeneration...');
-                
+
                 unlockedVariants.forEach(v => {
                     v.el.classList.add('is-loading');
                     v.buffer = null;
                     const titleEl = v.el.querySelector('.card-title');
                     if (titleEl) titleEl.textContent = 'loading…';
                 });
-                
+
                 regenBtn.disabled = true;
                 regenBtn.classList.add('is-generating');
-                
+
                 try {
                     const unlockedIndices = track.variants.map((v, idx) => v.locked ? -1 : idx).filter(idx => idx !== -1);
-                    
+
                     const payload = {
                         track_num: track.id,
                         prompt: track.originalParams?.prompt || track.prompt,
@@ -3319,22 +3329,22 @@
                         duration: trackDuration,
                         loop: true
                     };
-                    
+
                     const res = await fetch('/api/regenerate', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload),
                     });
-                    
+
                     if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
                         throw new Error(err.error || `HTTP ${res.status}`);
                     }
-                    
+
                     const { job_id } = await res.json();
                     const result = await pollJob(job_id);
                     if (result.status === 'error') throw new Error(result.error || 'Failed');
-                    
+
                     for (let idx of unlockedIndices) {
                         const newFilePath = result.files[idx];
                         if (newFilePath) {
@@ -3342,24 +3352,24 @@
                             variant.filePath = newFilePath;
                             const name = newFilePath.split('/').pop();
                             variant.name = name;
-                            
+
                             const titleEl = variant.el.querySelector('.card-title');
                             if (titleEl) {
                                 titleEl.textContent = name;
                                 titleEl.title = name;
                             }
-                            
+
                             await loadVariantAudio(variant, `/outputs/${newFilePath}`, track.selectedVariant === idx, track);
                         }
                     }
-                    
+
                     showStatus(`Regeneration done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
-                    
+
                     if (isPlaying && unlockedIndices.includes(track.selectedVariant)) {
                         stopTrackSource(track);
                         startTrackSource(track);
                     }
-                    
+
                 } catch (err) {
                     console.error('Regeneration failed:', err);
                     showStatus(`Regeneration failed: ${err.message}`, 'error');
@@ -3464,7 +3474,7 @@
                         track.filtrMix = 1.0;
                         track.filtrDryGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
                         track.filtrWetGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
-                        if (knobEl) knobEl.title = `LP: ${cutoff >= 1000 ? (cutoff/1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
+                        if (knobEl) knobEl.title = `LP: ${cutoff >= 1000 ? (cutoff / 1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
                     } else {
                         // HP: map 1..100 → cutoff 20..12000 (log scale)
                         const norm = value / 100; // 0..1
@@ -3476,7 +3486,7 @@
                         track.filtrMix = 1.0;
                         track.filtrDryGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
                         track.filtrWetGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
-                        if (knobEl) knobEl.title = `HP: ${cutoff >= 1000 ? (cutoff/1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
+                        if (knobEl) knobEl.title = `HP: ${cutoff >= 1000 ? (cutoff / 1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
                     }
                 }
             } else {
@@ -4117,9 +4127,9 @@
             if (aelapseLFOGain) aelapseLFOGain.gain.setValueAtTime(val / 1000, ctx.currentTime);
         }, {
             min: 0,
-            max: 20, // maps to 0.0 to 0.02
+            max: 5, // maps to 0.0 to 0.005 (0.5% max)
             step: 1,
-            defaultVal: 2,
+            defaultVal: 0, // default is 0% (off)
             value: Math.round(track.aelapseDelayWowDepth * 1000)
         });
 
@@ -4275,7 +4285,7 @@
         fxMacroKnobs.forEach(knobEl => {
             const macroName = knobEl.dataset.macro;
             const defaultVal = (macroName === 'tone' || macroName === 'filter') ? 50 : 0;
-            
+
             initKnob(knobEl, (val) => {
                 applyFxMacro(macroName, val);
             }, {
@@ -4285,7 +4295,7 @@
                 defaultVal: defaultVal,
                 value: defaultVal
             });
-            
+
             fxMacroState[macroName] = knobEl;
 
             // Wire hover highlighting for macro knobs
@@ -4360,7 +4370,7 @@
                         track.filtrFilterNode.frequency.setTargetAtTime(cutoff, ctx.currentTime, 0.02);
                         track.filtrDryGainNode.gain.setTargetAtTime(0, ctx.currentTime, 0.01);
                         track.filtrWetGainNode.gain.setTargetAtTime(1, ctx.currentTime, 0.01);
-                        knobEl.title = `LP: ${cutoff >= 1000 ? (cutoff/1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
+                        knobEl.title = `LP: ${cutoff >= 1000 ? (cutoff / 1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
                     } else {
                         const norm = (value - 50) / 50;
                         const cutoff = 20 * Math.pow(12000 / 20, norm);
@@ -4368,7 +4378,7 @@
                         track.filtrFilterNode.frequency.setTargetAtTime(cutoff, ctx.currentTime, 0.02);
                         track.filtrDryGainNode.gain.setTargetAtTime(0, ctx.currentTime, 0.01);
                         track.filtrWetGainNode.gain.setTargetAtTime(1, ctx.currentTime, 0.01);
-                        knobEl.title = `HP: ${cutoff >= 1000 ? (cutoff/1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
+                        knobEl.title = `HP: ${cutoff >= 1000 ? (cutoff / 1000).toFixed(1) + 'kHz' : Math.round(cutoff) + 'Hz'}`;
                     }
                 }
             } else {
@@ -4736,22 +4746,26 @@
                     eqEnabled: track.eqEnabled,
                     aelapseDelayEnabled: track.aelapseDelayEnabled,
                     aelapseReverbEnabled: track.aelapseReverbEnabled,
-                    
+
                     filtrType: fxDrawerEl.querySelector('.filtr-type').value,
                     filtrCutoff: fxDrawerEl.querySelector('.filtr-cutoff').value,
                     filtrReso: fxDrawerEl.querySelector('.filtr-reso').value,
                     filtrMix: fxDrawerEl.querySelector('.filtr-mix').value,
-                    
+
                     screamCutoff: fxDrawerEl.querySelector('.scream-cutoff').value,
                     screamAmount: fxDrawerEl.querySelector('.scream-amount').value,
                     screamMix: fxDrawerEl.querySelector('.scream-mix').value,
-                    
+
                     eqGains: Array.from(fxDrawerEl.querySelectorAll('.eq-slider')).map(s => s.value),
-                    
+
                     aelapseSync: fxDrawerEl.querySelector('.aelapse-sync').value,
                     aelapseMix: fxDrawerEl.querySelector('.aelapse-mix').value,
                     aelapseReverbMix: fxDrawerEl.querySelector('.aelapse-reverb-mix').value,
                     aelapseReverbSize: fxDrawerEl.querySelector('.aelapse-reverb-size').value,
+                    aelapseDelayWowRate: fxDrawerEl.querySelector('.aelapse-wow-rate')?.value || 2.0,
+                    aelapseDelayWowDepth: fxDrawerEl.querySelector('.aelapse-wow-depth')?.value || 0,
+                    aelapseReverbPreDelay: fxDrawerEl.querySelector('.aelapse-reverb-predelay')?.value || 0,
+                    aelapseReverbDamp: fxDrawerEl.querySelector('.aelapse-reverb-damp')?.value || 20000,
 
                     tunaChorusEnabled: track.tunaChorusEnabled,
                     tunaChorusRateSync: fxDrawerEl.querySelector('.chorus-rate-sync').value,
@@ -4791,7 +4805,7 @@
                         pump: fxMacroState.pump ? fxMacroState.pump.value : 0,
                     }
                 };
-                
+
                 const originalText = copyBtn.textContent;
                 copyBtn.textContent = 'Copied!';
                 setTimeout(() => { copyBtn.textContent = originalText; }, 1000);
@@ -4903,6 +4917,10 @@
                     '.aelapse-mix': settings.aelapseMix,
                     '.aelapse-reverb-mix': settings.aelapseReverbMix,
                     '.aelapse-reverb-size': settings.aelapseReverbSize,
+                    '.aelapse-wow-rate': settings.aelapseDelayWowRate !== undefined ? settings.aelapseDelayWowRate : 2.0,
+                    '.aelapse-wow-depth': settings.aelapseDelayWowDepth !== undefined ? settings.aelapseDelayWowDepth : 0,
+                    '.aelapse-reverb-predelay': settings.aelapseReverbPreDelay !== undefined ? settings.aelapseReverbPreDelay : 0,
+                    '.aelapse-reverb-damp': settings.aelapseReverbDamp !== undefined ? settings.aelapseReverbDamp : 20000,
                     '.chorus-rate-sync': settings.tunaChorusRateSync,
                     '.chorus-rate': settings.tunaChorusRate,
                     '.chorus-depth': settings.tunaChorusDepth,
@@ -4946,6 +4964,172 @@
                 const originalText = pasteBtn.textContent;
                 pasteBtn.textContent = 'Pasted!';
                 setTimeout(() => { pasteBtn.textContent = originalText; }, 1000);
+            });
+        }
+
+        const resetBtn = fxDrawerEl.querySelector('.fx-reset-btn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (track.locked) return;
+
+                const ctx = ensureAudioCtx();
+
+                // 1. Reset toggles & bypass state values
+                track.filtrEnabled = false;
+                track.screamEnabled = false;
+                track.eqEnabled = true;
+                track.aelapseDelayEnabled = true;
+                track.aelapseReverbEnabled = true;
+                track.tunaChorusEnabled = false;
+                track.tunaPhaserEnabled = false;
+                track.tunaBitcrusherEnabled = false;
+                track.tremoloEnabled = false;
+                track.gateEnabled = false;
+
+                // Update UI toggle button classes and text
+                const toggles = [
+                    { selector: '.filtr-toggle', enabled: false, activeText: 'On', inactiveText: 'Off', section: '.filtr-section' },
+                    { selector: '.scream-toggle', enabled: false, activeText: 'On', inactiveText: 'Off', section: '.scream-section' },
+                    { selector: '.eq-toggle', enabled: true, activeText: 'On', inactiveText: 'Bypass', section: '.eq-section' },
+                    { selector: '.aelapse-delay-toggle', enabled: true, activeText: 'On', inactiveText: 'Off', section: '.delay-section' },
+                    { selector: '.aelapse-reverb-toggle', enabled: true, activeText: 'On', inactiveText: 'Off', section: '.reverb-section' },
+                    { selector: '.chorus-toggle', enabled: false, activeText: 'On', inactiveText: 'Off', section: '.chorus-section' },
+                    { selector: '.phaser-toggle', enabled: false, activeText: 'On', inactiveText: 'Off', section: '.phaser-section' },
+                    { selector: '.crusher-toggle', enabled: false, activeText: 'On', inactiveText: 'Off', section: '.crusher-section' },
+                    { selector: '.tremolo-toggle', enabled: false, activeText: 'On', inactiveText: 'Off', section: '.tremolo-section' },
+                    { selector: '.gate-toggle', enabled: false, activeText: 'On', inactiveText: 'Off', section: '.gate-section' }
+                ];
+
+                toggles.forEach(t => {
+                    const btn = fxDrawerEl.querySelector(t.selector);
+                    if (btn) {
+                        btn.textContent = t.enabled ? t.activeText : t.inactiveText;
+                        btn.classList.toggle('is-off', !t.enabled);
+                    }
+                    const section = fxDrawerEl.querySelector(t.section);
+                    if (section) {
+                        section.classList.toggle('is-bypassed', !t.enabled);
+                    }
+                });
+
+                // Call bypass functions to update Web Audio Graph
+                updateFiltrBypass(track);
+                updateScreamBypass(track);
+                updateEqBypass(track);
+                updateTunaChorusBypass(track);
+                updateTunaPhaserBypass(track);
+                updateTunaBitcrusherBypass(track);
+                updateAelapseBypass(track);
+                updateTremoloBypass(track);
+                updateGateBypass(track);
+
+                // 2. Reset select dropdowns
+                const filtrType = fxDrawerEl.querySelector('.filtr-type');
+                if (filtrType) {
+                    filtrType.value = 'lowpass';
+                    filtrType.dispatchEvent(new Event('change'));
+                }
+                const chorusSync = fxDrawerEl.querySelector('.chorus-rate-sync');
+                if (chorusSync) {
+                    chorusSync.value = 'Free';
+                    chorusSync.dispatchEvent(new Event('change'));
+                }
+                const phaserSync = fxDrawerEl.querySelector('.phaser-rate-sync');
+                if (phaserSync) {
+                    phaserSync.value = 'Free';
+                    phaserSync.dispatchEvent(new Event('change'));
+                }
+                const tremoloShape = fxDrawerEl.querySelector('.tremolo-shape');
+                if (tremoloShape) {
+                    tremoloShape.value = 'sine';
+                    tremoloShape.dispatchEvent(new Event('change'));
+                }
+                const gateShape = fxDrawerEl.querySelector('.gate-shape');
+                if (gateShape) {
+                    gateShape.value = 'square';
+                    gateShape.dispatchEvent(new Event('change'));
+                }
+
+                // 3. Reset EQ Gains
+                const eqSliders = fxDrawerEl.querySelectorAll('.eq-slider');
+                eqSliders.forEach(slider => {
+                    slider.value = 0;
+                    const valEl = slider.parentNode.querySelector('.slider-val');
+                    if (valEl) valEl.textContent = '0dB';
+                });
+                track.eqGains = [0, 0, 0, 0, 0, 0];
+                track.eqFiltersNode.forEach(f => f.gain.setTargetAtTime(0, ctx.currentTime, 0.02));
+
+                // 4. Reset detailed parameter knobs and sliders
+                const sliders = {
+                    '.filtr-cutoff': 20000,
+                    '.filtr-reso': 7, // 0.707 * 10
+                    '.filtr-mix': 100,
+                    '.scream-cutoff': 8000,
+                    '.scream-amount': 71,
+                    '.scream-mix': 100,
+                    '.aelapse-sync': 3, // maps to delaySyncIndex 3 ('1/8')
+                    '.aelapse-mix': 0,
+                    '.aelapse-reverb-mix': 0,
+                    '.aelapse-reverb-size': 2.0,
+                    '.aelapse-wow-rate': 2.0,
+                    '.aelapse-wow-depth': 0,
+                    '.aelapse-reverb-predelay': 0,
+                    '.aelapse-reverb-damp': 20000,
+                    '.chorus-rate-sync-knob': 0,
+                    '.chorus-rate': 1.5,
+                    '.chorus-depth': 70,
+                    '.chorus-feedback': 20,
+                    '.chorus-mix': 50,
+                    '.phaser-rate-sync-knob': 0,
+                    '.phaser-rate': 1.2,
+                    '.phaser-depth': 60,
+                    '.phaser-feedback': 20,
+                    '.phaser-mix': 50,
+                    '.crusher-bits': 8,
+                    '.crusher-normfreq': 0.1,
+                    '.crusher-mix': 50,
+                    '.tremolo-rate': 5.0,
+                    '.tremolo-depth': 0,
+                    '.gate-sync-knob': 2,
+                    '.gate-width': 50,
+                    '.gate-mix': 50
+                };
+
+                for (const selector in sliders) {
+                    const el = fxDrawerEl.querySelector(selector);
+                    if (el) {
+                        el.value = sliders[selector];
+                        el.dispatchEvent(new Event('input'));
+                    }
+                }
+
+                // 5. Reset all creative FX macro values Group B
+                for (const key in fxMacroState) {
+                    const defaultVal = (key === 'tone' || key === 'filter') ? 50 : 0;
+                    if (fxMacroState[key]) {
+                        fxMacroState[key].value = defaultVal;
+                    }
+                    applyFxMacro(key, defaultVal);
+                }
+
+                // 6. Reset front-panel macro knobs Group A
+                ['filter', 'reso', 'tone', 'dlyMix', 'revMix'].forEach(param => {
+                    const defaultVal = param === 'tone' ? 50 : 0;
+                    if (macroKnobState[param]) {
+                        macroKnobState[param].value = defaultVal;
+                    }
+                    applyMacroKnob(param, defaultVal);
+                });
+
+                const originalText = resetBtn.textContent;
+                resetBtn.textContent = 'Reset!';
+                resetBtn.style.color = '#ef4444'; // Red accent
+                setTimeout(() => {
+                    resetBtn.textContent = originalText;
+                    resetBtn.style.color = '';
+                }, 1000);
             });
         }
 
@@ -5077,7 +5261,7 @@
                     if (track.locked) return;
                     variant.locked = !variant.locked;
                     cardEl.classList.toggle('card-is-locked', variant.locked);
-                    
+
                     if (variant.locked) {
                         lockVariantBtn.innerHTML = `<svg class="btn-icon icon-lock" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
                     } else {
@@ -5091,7 +5275,7 @@
                 deleteVariantBtn.addEventListener('click', async (e) => {
                     e.stopPropagation();
                     if (track.locked || variant.locked) return;
-                    
+
                     if (confirm('Are you sure you want to delete this variant generation?')) {
                         try {
                             const res = await fetch('/api/delete_variant', {
@@ -5103,7 +5287,7 @@
                                 const err = await res.json().catch(() => ({}));
                                 throw new Error(err.error || `HTTP ${res.status}`);
                             }
-                            
+
                             // Free memory and update UI
                             variant.buffer = null;
                             cardEl.classList.add('is-deleted');
@@ -5111,14 +5295,14 @@
                             if (titleEl) {
                                 titleEl.textContent = `${variant.name} (Deleted)`;
                             }
-                            
+
                             // Deselect if playing
                             if (track.selectedVariant === i) {
                                 stopTrackSource(track);
                                 track.selectedVariant = -1;
                                 track.variants.forEach(v => v.el.classList.remove('is-selected'));
                             }
-                            
+
                             // Clear canvas
                             const canvas = cardEl.querySelector('.card-waveform');
                             if (canvas) {
@@ -5179,7 +5363,7 @@
             const buf = await resp.arrayBuffer();
             const ctx = ensureAudioCtx();
             variant.buffer = await ctx.decodeAudioData(buf);
-            
+
             // Calculate and store loop multiplier based on creation BPM
             const creationBpm = track ? track.originalParams?.bpm : (parseInt(bpmInput.value) || 120);
             const oneLoopDur = 960.0 / creationBpm;
@@ -5233,7 +5417,7 @@
             arrangerGrid,
             tracks: tracks.map(t => {
                 const fxDrawer = t.wrapper.querySelector('.fx-drawer');
-                
+
                 // Collect detailed FX settings
                 const fxSettings = {
                     filtrEnabled: t.filtrEnabled,
@@ -5241,23 +5425,27 @@
                     eqEnabled: t.eqEnabled,
                     aelapseDelayEnabled: t.aelapseDelayEnabled,
                     aelapseReverbEnabled: t.aelapseReverbEnabled,
-                    
+
                     filtrType: fxDrawer.querySelector('.filtr-type')?.value || 'lowpass',
                     filtrCutoff: parseFloat(fxDrawer.querySelector('.filtr-cutoff')?.value) || 20000,
                     filtrReso: parseFloat(fxDrawer.querySelector('.filtr-reso')?.value) || 0.707,
                     filtrMix: parseFloat(fxDrawer.querySelector('.filtr-mix')?.value) || 1.0,
-                    
+
                     screamCutoff: parseFloat(fxDrawer.querySelector('.scream-cutoff')?.value) || 8000,
                     screamAmount: parseFloat(fxDrawer.querySelector('.scream-amount')?.value) || 0.707,
                     screamMix: parseFloat(fxDrawer.querySelector('.scream-mix')?.value) || 1.0,
-                    
+
                     eqGains: Array.from(fxDrawer.querySelectorAll('.eq-slider')).map(s => parseFloat(s.value) || 0),
-                    
+
                     aelapseSync: fxDrawer.querySelector('.aelapse-sync')?.value || '1/4',
                     aelapseMix: parseFloat(fxDrawer.querySelector('.aelapse-mix')?.value) || 0,
                     aelapseReverbMix: parseFloat(fxDrawer.querySelector('.aelapse-reverb-mix')?.value) || 0,
                     aelapseReverbSize: parseFloat(fxDrawer.querySelector('.aelapse-reverb-size')?.value) || 2.0,
-                    
+                    aelapseDelayWowRate: fxDrawer.querySelector('.aelapse-wow-rate')?.value !== undefined ? parseFloat(fxDrawer.querySelector('.aelapse-wow-rate')?.value) : 2.0,
+                    aelapseDelayWowDepth: fxDrawer.querySelector('.aelapse-wow-depth')?.value !== undefined ? parseFloat(fxDrawer.querySelector('.aelapse-wow-depth')?.value) / 1000 : 0.0,
+                    aelapseReverbPreDelay: fxDrawer.querySelector('.aelapse-reverb-predelay')?.value !== undefined ? parseFloat(fxDrawer.querySelector('.aelapse-reverb-predelay')?.value) : 0.0,
+                    aelapseReverbDamp: fxDrawer.querySelector('.aelapse-reverb-damp')?.value !== undefined ? parseFloat(fxDrawer.querySelector('.aelapse-reverb-damp')?.value) : 20000,
+
                     tunaChorusEnabled: t.tunaChorusEnabled,
                     tunaChorusRateSync: fxDrawer.querySelector('.chorus-rate-sync')?.value || 'Free',
                     tunaChorusRate: parseFloat(fxDrawer.querySelector('.chorus-rate')?.value) || 1.5,
@@ -5317,7 +5505,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `project_${new Date().toISOString().slice(0,10)}.lproj`;
+        a.download = `project_${new Date().toISOString().slice(0, 10)}.lproj`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -5339,7 +5527,7 @@
         // 2. Set global settings
         bpmInput.value = projectData.bpm || 120;
         bpmInput.dispatchEvent(new Event('input'));
-        
+
         arrangerLengthLoops = projectData.arrangerLengthLoops || 8;
         const arrangerSelect = document.getElementById('arranger-length');
         if (arrangerSelect) arrangerSelect.value = arrangerLengthLoops;
@@ -5372,7 +5560,7 @@
         projectData.tracks.forEach(tData => {
             const files = tData.variants.map(v => v.filePath);
             addTrackRow(files, tData.prompt, tData.id, false, tData.parentTrackId || null, tData.originalParams);
-            
+
             const track = tracks.find(tr => tr.id === tData.id);
             if (!track) return;
 
@@ -5406,14 +5594,14 @@
                 if (track.variants[idx]) {
                     track.variants[idx].locked = vData.locked || false;
                     track.variants[idx].loopMultiplier = vData.loopMultiplier || 1;
-                    
+
                     const cardEl = track.variants[idx].el;
                     if (cardEl) {
                         cardEl.classList.toggle('card-locked', vData.locked);
                         const lockBtn = cardEl.querySelector('.lock-btn');
                         if (lockBtn) {
                             lockBtn.classList.toggle('is-locked', vData.locked);
-                            lockBtn.innerHTML = vData.locked ? 
+                            lockBtn.innerHTML = vData.locked ?
                                 `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>` :
                                 `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
                         }
@@ -5449,7 +5637,7 @@
                 if (filtrSection) {
                     filtrSection.classList.toggle('is-bypassed', !track.filtrEnabled);
                 }
-                
+
                 const filtrTypeEl = fxDrawer.querySelector('.filtr-type');
                 if (filtrTypeEl) filtrTypeEl.value = fx.filtrType;
                 const filtrCutoffEl = fxDrawer.querySelector('.filtr-cutoff');
@@ -5458,7 +5646,7 @@
                 if (filtrResoEl) filtrResoEl.value = fx.filtrReso;
                 const filtrMixEl = fxDrawer.querySelector('.filtr-mix');
                 if (filtrMixEl) filtrMixEl.value = fx.filtrMix;
-                
+
                 updateFiltrBypass(track);
 
                 track.eqEnabled = fx.eqEnabled;
@@ -5471,7 +5659,7 @@
                 if (eqSection) {
                     eqSection.classList.toggle('is-bypassed', !track.eqEnabled);
                 }
-                
+
                 const eqSliders = fxDrawer.querySelectorAll('.eq-slider');
                 if (fx.eqGains) {
                     eqSliders.forEach((slider, sIdx) => {
@@ -5482,7 +5670,7 @@
                         }
                     });
                 }
-                
+
                 updateEqBypass(track);
 
                 // Split Delay
@@ -5508,7 +5696,7 @@
                 if (reverbSection) {
                     reverbSection.classList.toggle('is-bypassed', !track.aelapseReverbEnabled);
                 }
-                
+
                 const aelapseSyncEl = fxDrawer.querySelector('.aelapse-sync');
                 if (aelapseSyncEl) aelapseSyncEl.value = fx.aelapseSync;
                 const aelapseMixEl = fxDrawer.querySelector('.aelapse-mix');
@@ -5518,6 +5706,15 @@
                 const aelapseReverbSizeEl = fxDrawer.querySelector('.aelapse-reverb-size');
                 if (aelapseReverbSizeEl) aelapseReverbSizeEl.value = fx.aelapseReverbSize !== undefined ? fx.aelapseReverbSize : 2.0;
 
+                const aelapseWowRateEl = fxDrawer.querySelector('.aelapse-wow-rate');
+                if (aelapseWowRateEl) aelapseWowRateEl.value = fx.aelapseDelayWowRate !== undefined ? fx.aelapseDelayWowRate : 2.0;
+                const aelapseWowDepthEl = fxDrawer.querySelector('.aelapse-wow-depth');
+                if (aelapseWowDepthEl) aelapseWowDepthEl.value = fx.aelapseDelayWowDepth !== undefined ? Math.round(fx.aelapseDelayWowDepth * 1000) : 0;
+                const aelapseReverbPreDelayEl = fxDrawer.querySelector('.aelapse-reverb-predelay');
+                if (aelapseReverbPreDelayEl) aelapseReverbPreDelayEl.value = fx.aelapseReverbPreDelay !== undefined ? fx.aelapseReverbPreDelay : 0;
+                const aelapseReverbDampEl = fxDrawer.querySelector('.aelapse-reverb-damp');
+                if (aelapseReverbDampEl) aelapseReverbDampEl.value = fx.aelapseReverbDamp !== undefined ? fx.aelapseReverbDamp : 20000;
+
                 const chorusMixEl = fxDrawer.querySelector('.chorus-mix');
                 if (chorusMixEl) chorusMixEl.value = fx.tunaChorusMix !== undefined ? fx.tunaChorusMix : 50;
 
@@ -5526,7 +5723,7 @@
 
                 const crusherMixEl = fxDrawer.querySelector('.crusher-mix');
                 if (crusherMixEl) crusherMixEl.value = fx.tunaBitcrusherMix !== undefined ? fx.tunaBitcrusherMix : 50;
-                
+
                 updateAelapseBypass(track);
 
                 track.tunaChorusEnabled = !!fx.tunaChorusEnabled;
@@ -5605,6 +5802,10 @@
                 if (aelapseMixEl) aelapseMixEl.dispatchEvent(new Event('input'));
                 if (aelapseReverbMixEl) aelapseReverbMixEl.dispatchEvent(new Event('input'));
                 if (aelapseReverbSizeEl) aelapseReverbSizeEl.dispatchEvent(new Event('input'));
+                if (aelapseWowRateEl) aelapseWowRateEl.dispatchEvent(new Event('input'));
+                if (aelapseWowDepthEl) aelapseWowDepthEl.dispatchEvent(new Event('input'));
+                if (aelapseReverbPreDelayEl) aelapseReverbPreDelayEl.dispatchEvent(new Event('input'));
+                if (aelapseReverbDampEl) aelapseReverbDampEl.dispatchEvent(new Event('input'));
                 if (crusherMixEl) crusherMixEl.dispatchEvent(new Event('input'));
                 if (chorusMixEl) chorusMixEl.dispatchEvent(new Event('input'));
                 if (phaserMixEl) phaserMixEl.dispatchEvent(new Event('input'));
@@ -5618,13 +5819,13 @@
                     }
                 }
             }
-            
+
             updateTrackLockState(track, track.locked);
         });
 
         updateModMatrixTracks();
         syncModMatrixUI();
-        
+
         if (arrangerModeActive) renderArrangerTimeline();
         updateMixerState();
         if (totalVariantsToLoad === 0) {
@@ -5672,17 +5873,17 @@
         showStatus('Remaking missing audio...');
         btnGenerate.disabled = true;
         btnGenerate.classList.add('is-generating');
-        
+
         try {
             for (const track of missingTracks) {
                 showStatus(`Remaking track ${track.id}...`);
-                
+
                 const params = track.originalParams;
                 if (!params) {
                     console.warn(`No originalParams for track ${track.id}, skipping`);
                     continue;
                 }
-                
+
                 const bodyPayload = {
                     prompt: params.prompt,
                     bpm: params.bpm,
@@ -5694,7 +5895,7 @@
                     steps: params.steps ?? 8,
                     duration: params.duration ?? (960.0 / params.bpm)
                 };
-                
+
                 if (track.parentTrackId !== null && track.parentTrackId !== undefined) {
                     const parentTrack = tracks.find(t => t.id === track.parentTrackId);
                     if (parentTrack) {
@@ -5711,24 +5912,24 @@
                         }
                     }
                 }
-                
+
                 const res = await fetch('/api/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(bodyPayload)
                 });
-                
+
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
                     throw new Error(err.error || `HTTP ${res.status}`);
                 }
-                
+
                 const { job_id } = await res.json();
                 const result = await pollJob(job_id);
                 if (result.status === 'error') {
                     throw new Error(result.error || 'Failed generating track');
                 }
-                
+
                 for (let idx = 0; idx < track.variants.length; idx++) {
                     const newFilePath = result.files[idx];
                     if (newFilePath) {
@@ -5736,19 +5937,19 @@
                         variant.filePath = newFilePath;
                         const name = newFilePath.split('/').pop();
                         variant.name = name;
-                        
+
                         const titleEl = variant.el.querySelector('.card-title');
                         if (titleEl) {
                             titleEl.textContent = name;
                             titleEl.title = name;
                         }
-                        
+
                         variant.el.classList.add('is-loading');
                         await loadVariantAudio(variant, `/outputs/${newFilePath}`, track.selectedVariant === idx, track);
                     }
                 }
             }
-            
+
             showStatus('All missing audio remade!', 'done');
         } catch (err) {
             console.error('Error remaking missing audio:', err);
@@ -5797,7 +5998,7 @@
                 }
             }
         }
-        
+
         for (let num = 1; num <= 2; num++) {
             const envState = globalModulators[`env${num}`];
             if (!envState) continue;
@@ -5806,7 +6007,7 @@
             const sSlider = document.getElementById(`env${num}-s`);
             const rSlider = document.getElementById(`env${num}-r`);
             const trigSelect = document.getElementById(`env${num}-trig`);
-            
+
             if (aSlider) aSlider.value = envState.a;
             if (dSlider) dSlider.value = envState.d;
             if (sSlider) sSlider.value = envState.s;
@@ -5821,7 +6022,7 @@
             const slotIdx = parseInt(slotEl.dataset.slot);
             const slot = modMatrixSlots[slotIdx];
             if (!slot) return;
-            
+
             const srcSelect = slotEl.querySelector('.mod-src');
             const destTrackSelect = slotEl.querySelector('.mod-dest-track');
             const destParamSelect = slotEl.querySelector('.mod-dest-param');
@@ -5840,15 +6041,15 @@
 
     function captureTrackStates(loopIndex, eventType) {
         const timestamp = formatTime(isPlaying && audioCtx ? (audioCtx.currentTime - playStartCtxTime) : playOffset);
-        
+
         let logHtml = `<div class="record-log-entry">`;
         logHtml += `<div class="record-log-header">[${timestamp}] Loop ${loopIndex} - ${eventType}</div>`;
-        
+
         tracks.forEach((track, idx) => {
             const trackNum = idx + 1;
             const volDb = (20 * Math.log10(track.level || 0.0001)).toFixed(1);
             const panVal = Math.round(track.pan * 100);
-            
+
             const filterVal = track.macroKnobState.filter ? track.macroKnobState.filter.value : 50;
             const resoVal = track.macroKnobState.reso ? track.macroKnobState.reso.value : 0;
             const toneVal = track.macroKnobState.tone ? track.macroKnobState.tone.value : 50;
@@ -5868,7 +6069,7 @@
                 </div>
             `;
         });
-        
+
         logHtml += `</div>`;
 
         if (recordLogList) {
@@ -5893,7 +6094,7 @@
         'theremin', 'mellotron', 'mellotron flute', 'vocoder', 'hurdy gurdy', 'timpani', 'tubular bells',
         'cowbell', 'shakers', 'tambourine', 'drum machine', '808 drum machine', '909 drum machine', 'vocal chops', 'vocal chants'
     ];
-    
+
     const styles = [
         'bluesy licks', 'funky riffs', 'jazz improvisation', 'ambient soundscapes',
         'classical melody runs', 'chillhop beat elements', 'hyperpop sequence loops',
@@ -5941,7 +6142,7 @@
         'well-balanced mix', 'radio edit', 'professional master', 'dry dry close-up', 'binaural recording',
         'field recording ambiance'
     ];
-    
+
     const keys = [
         'C major', 'C minor', 'C# minor', 'D major', 'D minor', 'Eb major',
         'E major', 'E minor', 'F major', 'F minor', 'F# minor', 'G major',
@@ -5953,7 +6154,7 @@
         'double harmonic major scale', 'harmonic minor scale', 'melodic minor scale',
         'acoustic scale', 'whole tone scale', 'octatonic scale', 'gypsy minor scale'
     ];
-    
+
     const chords = [
         'Cmaj7 to Fmaj7 chord progression', 'Am9 to Dm9 chord sequence',
         'G7 to Cmaj7 jazz turnaround', 'Fmaj7 chord changes',
@@ -6043,7 +6244,7 @@
     function generateRandomPrompt(keepKey = false) {
         const isPureRandom = Math.random() < 0.25;
         let inst, style, mood, prod;
-        
+
         if (isPureRandom) {
             inst = instruments[Math.floor(Math.random() * instruments.length)];
             style = styles[Math.floor(Math.random() * styles.length)];
@@ -6058,7 +6259,7 @@
             mood = genre.moods[Math.floor(Math.random() * genre.moods.length)];
             prod = genre.productionStyles[Math.floor(Math.random() * genre.productionStyles.length)];
         }
-        
+
         if (!keepKey || !currentKeyOrChord) {
             if (Math.random() < 0.5) {
                 const key = keys[Math.floor(Math.random() * keys.length)];
@@ -6068,24 +6269,24 @@
                 currentKeyOrChord = { type: 'chord', value: chord };
             }
         }
-        
+
         let generated = "";
         if (currentKeyOrChord.type === 'key') {
             generated = `${mood} ${inst} ${style} in ${currentKeyOrChord.value}`;
         } else {
             generated = `${mood} ${inst} ${style} playing ${currentKeyOrChord.value}`;
         }
-        
+
         // Occasionally add production style
         if (Math.random() < 0.3) {
             generated += `, ${prod}`;
         }
-        
+
         if (btnRandomInKey) {
             btnRandomInKey.title = `Generate Random Prompt in ${currentKeyOrChord.value}`;
             btnRandomInKey.innerHTML = `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L14 9"/></svg>${currentKeyOrChord.value}`;
         }
-        
+
         promptInput.value = generated;
         promptInput.focus();
     }
@@ -6110,20 +6311,20 @@
             const chord = chords[Math.floor(Math.random() * chords.length)];
             currentKeyOrChord = { type: 'chord', value: chord };
         }
-        
+
         const currentPrompt = promptInput.value.trim();
         if (btnRandomInKey) {
             btnRandomInKey.title = `Generate Random Prompt in ${currentKeyOrChord.value}`;
             btnRandomInKey.innerHTML = `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L14 9"/></svg>${currentKeyOrChord.value}`;
         }
-        
+
         let newPrompt = currentPrompt;
         const inRegex = /\bin\s+([A-Ga-g][#b]?(?:\s+[a-zA-Z0-9#\/\-\+]+)*)/i;
         const playingRegex = /\bplaying\s+([^,]+)/i;
-        
+
         const newVal = currentKeyOrChord.value;
         const transitionWord = currentKeyOrChord.type === 'key' ? 'in' : 'playing';
-        
+
         if (inRegex.test(currentPrompt)) {
             newPrompt = currentPrompt.replace(inRegex, `${transitionWord} ${newVal}`);
         } else if (playingRegex.test(currentPrompt)) {
@@ -6132,7 +6333,7 @@
             generateRandomPrompt(true);
             return;
         }
-        
+
         promptInput.value = newPrompt;
         promptInput.focus();
     }
@@ -6140,7 +6341,7 @@
     function changeStyleOnly() {
         const currentPrompt = promptInput.value.trim();
         const isPureRandom = Math.random() < 0.25;
-        
+
         let newStyle, genreInstruments, genreMoods;
         if (isPureRandom) {
             newStyle = styles[Math.floor(Math.random() * styles.length)];
@@ -6153,7 +6354,7 @@
             genreInstruments = genre.instruments;
             genreMoods = genre.moods;
         }
-        
+
         let matchedInstrument = null;
         for (const inst of genreInstruments) {
             if (currentPrompt.toLowerCase().includes(inst.toLowerCase())) {
@@ -6169,15 +6370,15 @@
                 }
             }
         }
-        
+
         const inMatch = currentPrompt.match(/\bin\s+/i);
         const playingMatch = currentPrompt.match(/\bplaying\s+/i);
         const markerMatch = inMatch || playingMatch;
-        
+
         if (matchedInstrument && markerMatch) {
             const instEscaped = matchedInstrument.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
             const regex = new RegExp(`(${instEscaped}\\s+)(.*?\\s+)(in|playing\\b)`, 'i');
-            
+
             if (regex.test(currentPrompt)) {
                 const newPrompt = currentPrompt.replace(regex, `$1${newStyle} $3`);
                 promptInput.value = newPrompt;
@@ -6185,17 +6386,17 @@
                 return;
             }
         }
-        
+
         const inst = matchedInstrument || genreInstruments[Math.floor(Math.random() * genreInstruments.length)];
         const mood = genreMoods[Math.floor(Math.random() * genreMoods.length)];
         if (!currentKeyOrChord) {
             const key = keys[Math.floor(Math.random() * keys.length)];
             currentKeyOrChord = { type: 'key', value: key };
         }
-        
+
         const transitionWord = currentKeyOrChord.type === 'key' ? 'in' : 'playing';
         let generated = `${mood} ${inst} ${newStyle} ${transitionWord} ${currentKeyOrChord.value}`;
-        
+
         promptInput.value = generated;
         promptInput.focus();
     }
@@ -6203,12 +6404,12 @@
     function changeInstrumentOnly() {
         const currentPrompt = promptInput.value.trim();
         const isPureRandom = Math.random() < 0.25;
-        
+
         let matchedInstrument = null;
         let pool = instruments;
         let genreMoods = moods;
         let genreStyles = styles;
-        
+
         if (isPureRandom) {
             const sortedInstruments = [...instruments].sort((a, b) => b.length - a.length);
             for (const inst of sortedInstruments) {
@@ -6244,7 +6445,7 @@
             genreMoods = genre.moods;
             genreStyles = genre.styles;
         }
-        
+
         let excluded = [];
         if (matchedInstrument) {
             excluded.push(matchedInstrument.toLowerCase());
@@ -6252,11 +6453,11 @@
                 excluded.push('glockenspiel', 'glockenspeil');
             }
         }
-        
+
         const filteredInstruments = pool.filter(inst => !excluded.includes(inst.toLowerCase()));
         const finalPool = filteredInstruments.length > 0 ? filteredInstruments : pool;
         const newInstrument = finalPool[Math.floor(Math.random() * finalPool.length)];
-        
+
         if (matchedInstrument) {
             const regex = new RegExp(matchedInstrument.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i');
             const newPrompt = currentPrompt.replace(regex, newInstrument);
@@ -6264,7 +6465,7 @@
             promptInput.focus();
             return;
         }
-        
+
         const mood = genreMoods[Math.floor(Math.random() * genreMoods.length)];
         const style = genreStyles[Math.floor(Math.random() * genreStyles.length)];
         if (!currentKeyOrChord) {
@@ -6273,7 +6474,7 @@
         }
         const transitionWord = currentKeyOrChord.type === 'key' ? 'in' : 'playing';
         const generated = `${mood} ${newInstrument} ${style} ${transitionWord} ${currentKeyOrChord.value}`;
-        
+
         promptInput.value = generated;
         promptInput.focus();
     }
@@ -6281,7 +6482,7 @@
     function changeAccentOnly() {
         const currentPrompt = promptInput.value.trim();
         const isPureRandom = Math.random() < 0.25;
-        
+
         let newProd;
         if (isPureRandom) {
             newProd = productionStyles[Math.floor(Math.random() * productionStyles.length)];
@@ -6290,7 +6491,7 @@
             const genre = genres[genreKey];
             newProd = genre.productionStyles[Math.floor(Math.random() * genre.productionStyles.length)];
         }
-        
+
         let newPrompt = currentPrompt;
         if (currentPrompt.includes(',')) {
             const lastCommaIdx = currentPrompt.lastIndexOf(',');
@@ -6298,7 +6499,7 @@
         } else {
             newPrompt = currentPrompt + `, ${newProd}`;
         }
-        
+
         promptInput.value = newPrompt;
         promptInput.focus();
     }
@@ -6722,7 +6923,7 @@
             if (parentIdx !== -1) {
                 // Insert after parent in tracks array
                 tracks.splice(parentIdx + 1, 0, track);
-                
+
                 // Insert after parent in DOM
                 const parentTrack = tracks[parentIdx];
                 if (parentTrack.wrapper) {
@@ -6825,7 +7026,7 @@
         if (bufferLength > 0) {
             rms = Math.sqrt(sumSquares / bufferLength);
         }
-        
+
         let rmsDb = -60;
         if (rms > 0.000001) {
             rmsDb = 20 * Math.log10(rms);
@@ -7038,7 +7239,7 @@
         document.querySelectorAll('.btn-use-init').forEach(btn => {
             btn.classList.remove('is-active');
         });
-        
+
         // Highlight active button in the DOM
         const trackRowEl = track.el;
         if (trackRowEl) {
@@ -7322,9 +7523,9 @@
             const filename = exportFilenameInput ? exportFilenameInput.value.trim() : '';
             const loopCount = exportLoopsInput ? Math.max(1, parseInt(exportLoopsInput.value) || 1) : 1;
             const targetFormat = (exportActionType === 'export') ? 'wav' : (exportFormatSelect ? exportFormatSelect.value : 'wav');
-            
+
             closeExportModal();
-            
+
             if (exportActionType === 'render') {
                 runRenderMix(filename, loopCount, targetFormat);
             } else {
@@ -7357,10 +7558,10 @@
 
             const offlineLimiter = offlineCtx.createDynamicsCompressor();
             offlineLimiter.threshold.setValueAtTime(params.threshold, 0);
-            offlineLimiter.knee.setValueAtTime(0.0, 0);
+            offlineLimiter.knee.setValueAtTime(8.0, 0);
             offlineLimiter.ratio.setValueAtTime(20.0, 0);
             offlineLimiter.attack.setValueAtTime(0.003, 0);
-            offlineLimiter.release.setValueAtTime(0.1, 0);
+            offlineLimiter.release.setValueAtTime(0.25, 0);
 
             const offlineMakeup = offlineCtx.createGain();
             offlineMakeup.gain.setValueAtTime(1.0, 0);
@@ -7428,7 +7629,7 @@
                 if (t.eqEnabled) {
                     const freqs = [10, 40, 160, 640, 2500, 12000];
                     const types = ['peaking', 'peaking', 'peaking', 'peaking', 'peaking', 'highshelf'];
-                    
+
                     for (let b = 0; b < 6; b++) {
                         const filter = offlineCtx.createBiquadFilter();
                         filter.type = types[b];
@@ -7567,7 +7768,7 @@
                 // 3. Aelapse Delay & Reverb (SEND EFFECT — dry stays at 1.0)
                 let offlineAelapseDelayGain = null;
                 let offlineAelapseReverbGain = null;
-                
+
                 const aelapseSum = offlineCtx.createGain();
 
                 // Dry path — always 1.0 (send effect, not insert)
@@ -8025,7 +8226,7 @@
             const url = URL.createObjectURL(content);
             const link = document.createElement('a');
             link.href = url;
-            
+
             let downloadFilename = filename || 'loopmastersa_loops';
             if (!downloadFilename.toLowerCase().endsWith('.zip')) {
                 downloadFilename += '.zip';
@@ -8112,7 +8313,7 @@
                 e.stopPropagation();
 
                 document.querySelectorAll('.midi-waiting').forEach(other => other.classList.remove('midi-waiting'));
-                
+
                 midiLearningControl = getControlIdentifier(el);
                 if (midiLearningControl) {
                     el.classList.add('midi-waiting');
@@ -8340,18 +8541,18 @@
         // Toggle Song Mode and Arranger visibility
         const toggleArranger = document.getElementById('toggle-arranger');
         const arrangerPanel = document.getElementById('arranger-panel');
-            toggleArranger.addEventListener('change', () => {
-                arrangerModeActive = toggleArranger.checked;
-                arrangerPanel.style.display = arrangerModeActive ? 'flex' : 'none';
-                
-                const playheadLine = document.getElementById('arranger-playhead-line');
-                if (playheadLine) {
-                    playheadLine.style.display = arrangerModeActive ? 'block' : 'none';
-                }
-                
-                renderArrangerTimeline();
-                updatePlayheads();
-            });
+        toggleArranger.addEventListener('change', () => {
+            arrangerModeActive = toggleArranger.checked;
+            arrangerPanel.style.display = arrangerModeActive ? 'flex' : 'none';
+
+            const playheadLine = document.getElementById('arranger-playhead-line');
+            if (playheadLine) {
+                playheadLine.style.display = arrangerModeActive ? 'block' : 'none';
+            }
+
+            renderArrangerTimeline();
+            updatePlayheads();
+        });
 
         const arrangerLengthSelect = document.getElementById('arranger-length');
         if (arrangerLengthSelect) {
@@ -8526,7 +8727,7 @@
         destTrackSelects.forEach(select => {
             const currentVal = select.value;
             select.innerHTML = '<option value="none">Track...</option><option value="master">Master</option>';
-            
+
             tracks.forEach((track, idx) => {
                 const trackNum = idx + 1;
                 const opt = document.createElement('option');
@@ -8535,7 +8736,7 @@
                 opt.textContent = `T${trackNum}: ${displayPrompt}`;
                 select.appendChild(opt);
             });
-            
+
             const optionExists = Array.from(select.options).some(o => o.value === currentVal);
             if (optionExists) {
                 select.value = currentVal;
@@ -8558,7 +8759,7 @@
 
         const headerRow = document.createElement('div');
         headerRow.className = 'arranger-row arranger-header-row';
-        
+
         const spacer = document.createElement('div');
         spacer.className = 'arranger-track-label';
         spacer.style.border = 'none';
@@ -8584,7 +8785,7 @@
         const progressEl = document.createElement('div');
         progressEl.className = 'arranger-time-bar-progress';
         progressEl.id = 'arranger-time-bar-progress';
-        
+
         const activeDuration = getActiveDuration();
         const currentProgress = activeDuration > 0 ? (isPlaying ? ((audioCtx.currentTime - playStartCtxTime) % activeDuration) : playOffset) / activeDuration : 0;
         progressEl.style.width = `${currentProgress * 100}%`;
@@ -8600,7 +8801,7 @@
         cellsHeader.addEventListener('mousedown', (e) => {
             isScrubbing = true;
             handleScrub(e);
-            
+
             const onMouseMove = (moveEvent) => {
                 if (isScrubbing) handleScrub(moveEvent);
             };
@@ -8657,7 +8858,7 @@
 
                 cells.appendChild(cell);
             }
-            
+
             row.appendChild(cells);
             gridEl.appendChild(row);
         });
@@ -8675,7 +8876,7 @@
         playhead.id = 'arranger-playhead-line';
         playhead.style.left = `${currentProgress * 100}%`;
         playhead.style.display = arrangerModeActive ? 'block' : 'none';
-        
+
         playheadWrapper.appendChild(playhead);
         container.appendChild(gridEl);
         container.appendChild(playheadWrapper);
@@ -8684,11 +8885,11 @@
     function applyArrangerMutingForLoop(loopIndex) {
         const arrangerTimeline = document.getElementById('arranger-timeline-container');
         if (!arrangerTimeline) return;
-        
+
         arrangerTimeline.querySelectorAll('.arranger-cell').forEach(cell => {
             cell.classList.remove('loop-playing');
         });
-        
+
         const rows = arrangerTimeline.querySelectorAll('.arranger-row');
         rows.forEach(row => {
             const cellsContainer = row.querySelector('.arranger-cells');
@@ -8719,7 +8920,7 @@
         if (!slider) return;
 
         let dot = slider.parentNode.querySelector('.lfo-dot');
-        
+
         let paramName = '';
         if (sliderSelector === '.level-knob') paramName = 'level';
         else if (sliderSelector === '.filtr-cutoff') paramName = 'filter';
@@ -8749,18 +8950,18 @@
         }
 
         dot.style.display = 'block';
-        
+
         const sliderWidth = slider.offsetWidth;
         const sliderHeight = slider.offsetHeight;
         const sliderLeft = slider.offsetLeft;
         const sliderTop = slider.offsetTop;
 
-        const isKnob = slider.classList.contains('fx-knob') || 
-                       slider.classList.contains('fx-mini-knob') || 
-                       slider.classList.contains('pan-knob') || 
-                       slider.classList.contains('macro-knob') || 
-                       slider.classList.contains('fx-macro-knob') ||
-                       slider.classList.contains('level-knob');
+        const isKnob = slider.classList.contains('fx-knob') ||
+            slider.classList.contains('fx-mini-knob') ||
+            slider.classList.contains('pan-knob') ||
+            slider.classList.contains('macro-knob') ||
+            slider.classList.contains('fx-macro-knob') ||
+            slider.classList.contains('level-knob');
 
         let dotLeft, dotTop;
         if (isKnob) {
@@ -8789,8 +8990,8 @@
             if (slot.src === 'lfo4' && !globalModulators.lfo4.enabled) return false;
             if (slot.src === 'env1' || slot.src === 'env2') return false; // Envelopes are disabled
 
-            return slot.trackId === trackId.toString() && 
-                   slot.param === paramName;
+            return slot.trackId === trackId.toString() &&
+                slot.param === paramName;
         });
     }
 
@@ -8876,9 +9077,10 @@
             min: 0,
             max: 100,
             step: 1,
-            defaultVal: 100,
-            value: 100
+            defaultVal: 91,
+            value: 91
         });
+        masterVolSlider.value = 91;
     }
 
     // --- Initialize MIDI and Modulators ---

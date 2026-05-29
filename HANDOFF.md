@@ -117,3 +117,16 @@ We have successfully implemented the visual redesign phases and the Track FX Dra
 *   **Codebase Cleanup (Completed)**:
     *   Deleted the untracked visual screenshot `playhead_test.png` from the repository root directory.
     *   Verified git status has no remaining untracked or stray files.
+*   **Pitch Modulation Mitigation & Reverb Warmth (Completed)**:
+    *   Reduced Tape Delay maximum wow/flutter depth parameter to 0.5% (value 5) on the UI knob to make it very subtle at maximum.
+    *   Changed fallback wow depth values to 0% (value 0) in the track state, loadProject, pasteTrackBtn, and knob initializations. Double-clicking the knob now resets it to 0.0% (completely off).
+    *   Updated the track HTML template default label of wow depth from 0.2% to 0.0% to reflect the initial state.
+    *   Applied a 1-pole low-pass filter (running average) to the Spring Reverb impulse response generator, removing high-frequency comb-filter ringing (metallic pitchiness) and yielding a warm, premium plate/spring reverb tail.
+    *   Added wow rate, wow depth, pre-delay, and damping filter parameters to project JSON save/load, copyTrackBtn/pasteTrackBtn, and copyBtn/pasteBtn event handlers for full state replication.
+    *   Verified JavaScript syntax via `node -c` (successfully passed with zero compiler warnings).
+*   **FX Drawer Reset Button (Completed)**:
+    *   Added a Reset button next to the Copy/Paste buttons in the FX Drawer header template in `app.js`.
+    *   Wired a click handler to return all 10 FX toggle buttons to defaults, reset all shape/sync dropdown selectors, reset all 6 EQ sliders to 0 dB, loop and reset all 31 sliders and knobs in the drawer, and reset all creative macros and front-panel channel strip knobs (Tone: 50, Delay Mix: 0%, Reverb Mix: 0%, Filter: 0, Resonance: 0) to default values.
+    *   Updates both the track state variables and Web Audio DSP nodes instantly upon reset.
+    *   Includes a visual click feedback animation that shows "Reset!" in red for 1 second.
+    *   Checked JavaScript syntax correctness via `node -c`.

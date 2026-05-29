@@ -499,6 +499,31 @@
   - [x] Verify generated audio matches requested BPM and aligns with the tempo grid
 - [x] Codebase Cleanup:
   - [x] Remove stray/untracked file `playhead_test.png` from the repository root
+- [x] Master Limiter Recalibration and Low-End Distortion Fixes:
+  - [x] Uncouple master fader from limiter threshold by fixing the threshold to `-1.0 dB` in `getMasterFaderParams()`
+  - [x] Ensure 0 dB post-gain (value 1.0) on `masterMakeup` in `ensureAudioCtx()`
+  - [x] Ensure 0 dB post-gain (value 1.0) on `offlineMakeup` in `OfflineAudioContext`
+  - [x] Set master limiter knee to `8.0` dB and release time to `0.25`s (250ms) in both live and offline contexts
+  - [x] Keep master fader default/startup knob value at `91` in `app.js`
+  - [x] Call all FX bypass and update functions during track creation in `addTrackRow()` to initialize bypassed states correctly
+  - [x] Show master volume section by default in `index.html`
+  - [x] Change default tape wow depth to `0%` (`0.0`) and disable the chirped sweep in the reverb impulse response to remove pitch modulation artifacts
+  - [x] Verify that master volume fader operates cleanly without adding low-end distortion during playback or mixdown rendering
+
+- [x] Remove/Lessen Pitch Manipulation in Tape Delay and Spring Reverb:
+  - [x] Reduce maximum wow depth from 2.0% to 0.5% in the Tape Delay UI knob
+  - [x] Change fallback defaults from 2 (0.2%) to 0 (0%) for wow depth in loadProject, pasteTrackBtn, and knob options
+  - [x] Update track HTML template to set default wow depth readout to 0.0%
+  - [x] Implement warm low-pass filtered impulse response (1-pole running average) for Spring Reverb
+  - [x] Serialize wow rate, wow depth, pre-delay, and damp in saveProject and loadProject
+  - [x] Update copyBtn and pasteBtn to include wow rate, wow depth, pre-delay, and damp in FX copy/paste
+
+- [x] Implement Reset Button for the FX Drawer:
+  - [x] Add Reset button HTML inside the `.fx-clipboard-btns` container in `app.js`
+  - [x] Implement the reset click handler in `app.js` to reset track FX state, toggles, sliders, knobs, and macro states to defaults
+  - [x] Verify JavaScript syntax via `node -c`
+  - [x] Manually verify in the browser that clicking the Reset button resets all detailed FX, front panel knobs, and their audio signals to default values
+
 
 
 

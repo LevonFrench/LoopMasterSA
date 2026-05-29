@@ -802,9 +802,41 @@ We verified the redesigned track mixer strip:
 2. **Preserve Headroom**: Passed `truncate_output_to_duration = False` so that the model returns the complete padded length, which is then processed normally.
 3. **Verification**: Checked Python compilation, terminated the old server task, and successfully launched the restarted backend server.
 
-### 69. Codebase Cleanup (2026-05-29)
-1. **Untracked File Deletion**: Removed the stray screenshot `playhead_test.png` from the repository root.
-2. **Verifying Git Status**: Confirmed that `git status` lists no other untracked or stray files.
+### 70. Master Limiter Calibration, Startup FX Bypass, and Pitch Modulation Fixes (2026-05-29)
+1. **Uncouple Master Fader from Limiter Threshold**:
+   - Fixed the master limiter threshold to a constant safety ceiling of `-1.0 dB` (brickwall safety to prevent digital clipping) in `getMasterFaderParams()`.
+   - Mapped the master volume fader (`masterVolumeNode`) to pure decibel volume attenuation from `-40.0 dB` (at slider = 1) to `0.0 dB` (at slider = 100) without modifying the limiter's threshold or squashing the dynamic range.
+   - Synchronized the master volume slider rotation and decibel readout to default to `91` (`-3.6 dB` headroom) on page load.
+2. **Remove Master Post-Gain (0 dB Makeup Gain)**:
+   - Configured both the live `AudioContext` and the `OfflineAudioContext` mixdown engines to use exactly `1.0` (0 dB) post-limiter makeup gain (`masterMakeup.gain`), removing all post-limiter boosts.
+3. **Smooth Limiter Settings**:
+   - Set the master limiter knee to a soft knee (`8.0` dB) and its release time to `0.25`s (250ms) in both the live context and the offline mixdown context. This prevents cycle-by-cycle waveform tracking on bass frequencies, eliminating low-end distortion under limiting.
+4. **Initialize Track FX Bypass States**:
+   - Added explicit calls to all DSP bypass and parameter update helper functions (`updateFiltrBypass`, `updateEqBypass`, `updateScreamBypass`, `updateAelapseBypass`, `updateTremoloBypass`, `updateGateBypass`, `updateGateFrequency`, `updateGateWidth`, `updateTunaChorusBypass`, `updateTunaPhaserBypass`, `updateTunaBitcrusherBypass`, and `updateTunaTempoSync`) at the end of track row creation in `addTrackRow()`.
+   - This ensures that all FX blocks start in their correct default bypassed states (Dry = 1.0, Wet = 0.0), resolving the issue where the creative Gate and EQ blocks were partially active and distorting/phasing the audio by default on startup.
+5. **Display Master Section on Startup**:
+   - Removed `style="display: none;"` from the `#master-meter-section` in `index.html` to ensure the master fader and level readout are visible immediately when the page loads, allowing the user to turn down the master volume before starting playback.
+6. **Remove FX Pitch Modulation**:
+   - **Tape Delay**: Changed the default wow/flutter depth (`aelapseDelayWowDepth`) from `0.002` to `0.0` (0%) in the track state, Web Audio node creation, and UI knobs to remove default pitch wobble.
+   - **Spring Reverb**: Removed the chirped sine wave sweep (`springChirp`) from `createSpringImpulseResponse()`, generating the impulse response using pure, smooth white noise decay, completely removing any pitch sweep artifacts.
+### 71. Pitch Modulation Mitigation & Advanced Reverb Warmth (2026-05-29)
+1. **Reduced Tape Delay Wow Depth Max**: Reduced the max wow/flutter depth from 2.0% (value 20) to 0.5% (value 5) on the Tape Delay knob, making the modulation extremely subtle even at maximum.
+2. **Zeroed Wow/Flutter Defaults & Fallbacks**: Changed defaults and fallbacks to 0% (value 0) in track state, loadProject, pasteTrackBtn, and knob initializations. Double-clicking the knob resets it to 0.0% (completely off).
+3. **Updated Track UI HTML Template**: Changed the default HTML label of wow depth from 0.2% to 0.0% to match the initial state.
+4. **Low-pass Filtered Spring Reverb Impulse**: Replaced raw white noise in the impulse generator with 1-pole low-pass filtered noise decay (running average). This removes the high-frequency comb-filter ringing (metallic pitchy sound) and yields a warm, premium plate/spring reverb tail.
+5. **Serialized & Synchronized FX Parameters**: Added wow rate, wow depth, pre-delay, and damping filter parameters to project JSON save/load, copyTrackBtn/pasteTrackBtn, and copyBtn/pasteBtn event handlers for full state replication.
+6. **Verification**: Checked JavaScript syntax using `node -c` (compiles cleanly).
+
+### 72. FX Reset Button Implementation (2026-05-29)
+1. **Reset Button UI Added**: Added a Reset button next to the Copy/Paste clipboard controls in the FX Drawer header template in `app.js`.
+2. **Reset Click Handler Wired**:
+   - **Toggles & Bypasses**: Returns all 10 FX toggle buttons (Filter, Scream, EQ, Delay, Reverb, Chorus, Phaser, Bitcrusher, Tremolo, Gate) to their default bypass/active status, styling, and updates the Web Audio graph.
+   - **Dropdowns**: Resets all shape/sync dropdown selectors to standard values (e.g. lowpass, sine, square, Free).
+   - **EQ gains**: Sets all 6 EQ sliders back to 0 dB and resets the audio filter gains.
+   - **Detailed FX Sliders/Knobs**: Loops through all 31 sliders and knobs in the drawer, setting their default values and dispatching input events.
+   - **Creative macros & front panel knobs**: Resets all Group B creative macros and Group A front-panel channel strip knobs (Tone: 50, Delay Mix: 0%, Reverb Mix: 0%, Filter: 0, Resonance: 0) and calls their apply functions to restore normal audio routing instantly.
+3. **Reset Feedback Animation**: Animates the button text to show "Reset!" in red on click and fades back after 1 second.
+4. **Verification**: Checked JavaScript syntax via `node -c` (compiles cleanly).
 
 
 

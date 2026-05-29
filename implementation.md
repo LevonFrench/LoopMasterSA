@@ -599,4 +599,70 @@ We resolved the issue where the track FX drawer opened by default and could not 
 - **Result**: The text prompt `Length: X seconds` now matches the `seconds_total: X` conditioning tensor exactly, preserving correct tempo generation while still capturing the 2.0s loop decay tail. This completely eliminates the tempo-stretching/BPM drifting issues in generated loops.
 
 ## Completed Work: Codebase Cleanup (2026-05-29)
-- **Untracked File Removal**: Deleted the stray screenshot `playhead_test.png` from the workspace root directory to ensure version control hygiene.
+- **Untracked File Removal**: Deleted the stray screenshot `playhead_test.png` from the workspace root directory to ensure version control hygiene.
+
+## Proposed Plan: Master Limiter Recalibration and Low-End Distortion Fixes
+### Problem Statement
+- **Level Discrepancies**: The master fader was dynamically modulating the limiter's compression threshold rather than acting as a clean monitoring output volume control. Furthermore, the physical `masterMakeup` gain node was set to 1.0 (0 dB) instead of the user-requested target ceiling, forcing the fader node to attenuate heavily to compensate for the dynamic threshold changes.
+- **Low-End Distortion**: Under limiting, low frequencies (bass and sub-bass) suffered from severe harmonic distortion. This is a classic symptom of a hard knee (0.0 dB) combined with too short a release time (100ms), which allows the compressor to track individual cycles of low-frequency waveforms.
+- **Unbypassed Track FX on Startup**: When a track is created, several FX blocks (specifically the creative Gate and EQ) were not initialized to their bypassed states. In particular, the `gateWetGainNode` was left at its default gain value of `1.0`, meaning that the LFO-modulated wet gate path was fully open and mixed with the dry path at 100% volume by default. This caused volume doubling, phasing, and severe distortion on the low end.
+
+### Proposed Changes
+1. **Uncouple Master Fader from Limiter Threshold**:
+   - Fix the master limiter threshold to a constant `-1.0 dB` (as a safety brickwall to prevent digital clipping).
+   - Update `getMasterFaderParams(sliderVal)` to return a constant `-1.0 dB` threshold, and calculate `volumeGain` using a standard decibel attenuation mapping from `-40.0 dB` (at slider = 1) to `0.0 dB` (at slider = 100) without any makeup gain offsets.
+   - Keep the master fader knob's default/startup value at `91` in `app.js` (giving it a clean default headroom of `-3.6 dB`).
+2. **No Post-Gain (0 dB Makeup Gain)**:
+   - In both the live audio context `ensureAudioCtx()` and the offline mixdown renderer `OfflineAudioContext`, set the post-limiter `masterMakeup` gain node value to exactly `1.0` (0 dB / unity gain).
+3. **Smooth Limiter Settings to Prevent Distortion**:
+   - In both `ensureAudioCtx()` and `OfflineAudioContext`, change the limiter's knee to a soft knee (`8.0` dB) to smooth any transient limiting.
+   - Change the limiter's release time from `0.1`s (100ms) to `0.25`s (250ms) to prevent tracking low-frequency cycles and eliminate audible distortion on the low end.
+4. **Initialize All Track FX Bypass States**:
+   - At the end of track creation in `addTrackRow()`, call all bypass and parameter update helper functions:
+     - `updateFiltrBypass(track)`
+     - `updateEqBypass(track)`
+     - `updateScreamBypass(track)`
+     - `updateTunaChorusBypass(track)`
+     - `updateTunaPhaserBypass(track)`
+     - `updateTunaBitcrusherBypass(track)`
+     - `updateAelapseBypass(track)`
+     - `updateTremoloBypass(track)`
+     - `updateGateBypass(track)`
+     - `updateGateFrequency(track)`
+     - `updateGateWidth(track)`
+     - `updateTunaTempoSync(track)`
+   - This ensures that all FX nodes start in their correct default bypassed states (Dry = 1.0, Wet = 0.0) upon track creation, completely eliminating startup distortion.
+5. **Display Master Section by Default**:
+   - Remove `style="display: none;"` from `#master-meter-section` in `index.html` so that the master fader and metering layout are visible on startup, allowing the user to turn down the master volume before starting playback.
+6. **Remove/Lessen Pitch Modulation in FX (Delay and Reverb)**:
+   - **Tape Delay**: Change the default wow/flutter depth (`aelapseDelayWowDepth`) from `0.002` (2%) to `0.0` (0%) in the track state, the Web Audio node creation, and the UI fader configuration. This removes all default pitch wobble from the delay, while still allowing users to adjust it if desired.
+   - **Spring Reverb**: Remove the chirped sine wave sweep (`springChirp`) from `createSpringImpulseResponse()`, generating the impulse response using pure, smooth white noise decay. This completely eliminates any pitch sweep artifacts from the reverb.
+
+### Verification Plan
+- **Track Creation Sound Quality**: Verify that newly generated track rows play back cleanly without any low-end phasing distortion or volume modulation when creative FX are disabled.
+- **Waveform Inspection**: Confirm in the browser that playback of bass-heavy prompts is clean, clear, and free of low-end distortion.
+- **Offline WAV Check**: Render a mixdown WAV file, play it, and verify that the bounced file contains no harmonic distortion and is limited to exactly 0 dB peak output ceiling.
+- **Fader Parameter Tracking**: Confirm that dragging the master volume fader down attenuates the output volume smoothly without altering the limiter threshold or squashing the dynamic range.
+
+## Completed Design: Pitch Modulation Removal and Mitigation (Session 2026-05-29)
+
+We have addressed the user's request to remove/lessen pitch manipulation in the Tape Delay and Spring Reverb:
+1. **Tape Delay LFO Wobble Mitigation**:
+   - **Reduced Maximum Wow Depth**: Decreased the maximum wow depth from `2.0%` (value 20) to `0.5%` (value 5) to ensure that even at maximum setting, the pitch wobble remains extremely subtle.
+   - **Zeroed Default & Fallbacks**: Changed the fallback value and default value in `pasteTrackBtn`, `loadProject`, and `initKnob` to `0.0%` (value 0). Double-clicking the wow depth knob now resets it to 0% (disabled).
+   - **HTML Template Update**: Updated the track HTML template default readout for wow depth from `0.2%` to `0.0%` to align with the new default state.
+2. **Spring Reverb Metallic Pitchiness Removal**:
+   - **Low-pass Filtered Impulse Response**: Replaced the raw white noise in the impulse response generator with a warm, low-pass filtered noise decay (using a 1-pole running average filter). This removes the harsh, high-frequency comb-filter "ringing" that makes the reverb sound metallic or pitchy, replacing it with a smooth, warm reverb tail.
+3. **FX Parameter Save/Load & Copy/Paste Serialization**:
+   - Extended the copy/paste handlers and JSON project save/load schemas to fully serialize and restore the wow rate, wow depth, pre-delay, and damping filter parameters across tracks.
+
+## Proposed Design: Reset Button for the FX Drawer (Session 2026-05-29)
+
+To allow users to instantly return all creative track effects and macros to default states, we will introduce an FX Reset button:
+1. **HTML Template Update**: Add a `<button class="fx-reset-btn" ...>Reset</button>` inside the `.fx-clipboard-btns` container in the FX Drawer template inside `app.js`.
+2. **Reset Logic**:
+   - Define a listener on the reset button.
+   - Reset all front-panel mixer FX knobs (Tone: 50, DMX: 0, RMX: 0, Filter: 0, Reso: 0) and update their corresponding audio nodes and rotations.
+   - Reset all 16 creative macro group parameters (`space`, `drive`, etc.) inside the drawer to their default settings.
+   - Set all 10 detailed FX toggle buttons and section bypasses to their default bypassed/active states.
+   - Reset all detailed parameter knobs and sliders inside the drawer back to their defaults (e.g., EQ Gains = 0, Delay Mix = 0, Reverb Mix = 0, Reverb Size = 2.0s, etc.) and trigger input events to rebuild/update the Web Audio API DSP nodes instantly.
