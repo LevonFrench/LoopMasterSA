@@ -350,3 +350,36 @@
   - [x] Set model `gen_duration` to match exactly the target duration, eliminating the 2.0s padding offset that caused prompt conditioning mismatch.
   - [x] Keep backend sample padding for continuation/remix mode inputs to prevent silent gaps while keeping generation duration bounds exact.
   - [x] Verify loop alignment and tempo adherence across different tempos.
+- [x] Implement defaults calibration, Save/Load, Recording, and Favorites:
+  - [x] Refine mask overlap ranges (0.3s) for continuation, response, and inpaint modes in app_server.py
+  - [x] Implement PyTorch-based resampled crossfade boundary blending in app_server.py
+  - [x] Implement Project Save to JSON (.lproj) file format in app.js
+  - [x] Implement Project Load from JSON file and restore track/global states in app.js
+  - [x] Implement Record Mode track parameter changes logging on boundaries in app.js
+  - [x] Implement Favorites Library bar interface and prompt injection in app.js
+- [x] Reconstruct missing project audio files from generation metadata:
+  - [x] Save full generation metadata and parent track relations in `.lproj` project files
+  - [x] Add missing file loading detection in `loadVariantAudio` and tracking in `loadProject`
+  - [x] Display warning banner at the top of the tracks container when files are missing
+  - [x] Implement sequential reconstruction logic in `remakeMissingAudio` supporting parent-child dependencies
+  - [x] Add styling for the warning banner in `app.css`
+  - [x] Verify syntax and run tests for reconstruction code in active session (2026-05-28)
+  - [x] Resolve `termios` module import crash on Windows in `sa3_mlx.py` by lazy-loading the module in `_arrow_pick`
+  - [x] Skip Apple-Silicon-only MLX CLI tests on Windows in `test_all_configs.py` via pytest skipmark\n- [x] Evaluate howler.js suitability for LoopMaster SA3 custom routing and scheduling.
+- [x] Research open-source GitHub libraries for Web Audio API audio engine and DSP FX.
+- [x] Evaluate Chowdhury DSP's ChowTape pedal model integration constraints.
+- [x] Run complete stable-audio-3 pytest suite and verify that all 76 unit tests pass on Windows.\n\n- [x] Integrate Tuna.js effects (Chorus, Phaser, Bitcrusher) with BPM Sync:
+  - [x] Implement Tuna.js script loading in index.html
+  - [x] Initialize track-level Tuna instances and serialize serial routing in app.js
+  - [x] Insert Chorus, Phaser, and Bitcrusher UI sections into FX drawer HTML template
+  - [x] Implement LFO rate tempo-sync equations and BPM change scaling handlers (including 4/1, 8/1, 16/1, 32/1 subdivisions)
+  - [x] Wire UI controls, bypass toggles, and dynamic class/value updates
+  - [x] Replicate Tuna effects routing in OfflineAudioContext mixdown renderer
+  - [x] Add Tuna targets (Chorus Rate/Depth/Mix, Phaser Rate/Depth/Mix, Crusher Bits/NormFreq) to Modulation Matrix and tick loop sweeps
+  - [x] Integrate Tuna configurations into Save/Load project serialization
+  - [x] Integrate Tuna configurations into Copy/Paste track and FX clipboard buffers
+  - [x] Verify JavaScript syntax and test playback/render functionality
+- [x] Clean up codebase by removing stray PNG screenshot files from the root directory
+- [x] Update `.gitignore` to include `.ogg` and `.zip` outputs
+- [x] Update wiki knowledge base (`Home.md` and `User-Guide.md`) to document BF16 mode, Tuna.js effects, Valentine/Favorites removal, and current controls
+- [x] Fix the silent trailing gap on the waveform display by limiting rendering to active loop duration

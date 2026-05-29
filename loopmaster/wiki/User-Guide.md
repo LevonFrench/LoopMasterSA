@@ -7,7 +7,11 @@ Everything you need to know to use LoopMaster SA3.
 ## Setup & Launch
 
 1. Run `.\run_server.bat` from the project root
-2. Pick a model (Medium for quality, Small for speed)
+2. Pick a model choice from the interactive menu:
+   - **Option 1**: Medium Model (Official - FP32 Precision, High VRAM, GPU)
+   - **Option 2**: Small Music Model (Lightweight, CPU/GPU)
+   - **Option 3**: Small SFX Model (Sound Effects only)
+   - **Option 4**: Medium Model (Optimized - BF16 Precision, Low VRAM, GPU)
 3. Open [http://localhost:7861](http://localhost:7861)
 
 You need Python 3.10+, a CUDA GPU (optional but recommended), and the SA3 model weights downloaded. See the [README](../../README.md) for full setup instructions.
@@ -73,18 +77,20 @@ Every track row has a mixer strip on the left:
 |---------|-------------|
 | **S** | Solo — mutes everything except soloed tracks |
 | **M** | Mute — silences this track |
-| **Lock** | Freezes all controls for this row (amber border) |
-| **FX** | Opens/closes the effects drawer |
-| **Volume** | Track gain (0–100%) |
-| **Pan** | Stereo position. Drag vertical, double-click to center. |
+| **FX** | Opens/closes the track effects drawer |
+| **MOD** | Toggles the global modulators panel drawer |
+| **Copy** | Copies all volume, panning, mute, and FX configurations to clipboard |
+| **Paste** | Pastes clipboard configuration (blocked if track is locked) |
+| **Regen** | Regenerates unlocked variant cards in this row |
 | **Delete** | Removes the track row |
-| **Reverse** | Flips the audio backward in-place |
-| **Meters** | Real-time RMS loudness + peak + peak hold |
+| **Volume** | Track gain (0–100%, defaults to 50%) |
+| **Pan** | Stereo position. Drag vertical, double-click to center. |
+| **Meters** | Real-time vertical RMS loudness + peak + peak hold |
 
 ### Mixer Macro Knobs
 A row of small knobs on each mixer strip for quick FX access:
 
-**Flt** (Filter cutoff), **Res** (Resonance), **DFb** (Delay feedback), **DMx** (Delay mix), **RSz** (Reverb size), **RMx** (Reverb mix), **S/C** (Scream/Crush)
+**Flt** (Filter cutoff), **Res** (Resonance), **Tone** (EQ tone shape), **DMx** (Delay mix), **RMx** (Reverb mix)
 
 Drag vertically to adjust. Double-click to reset.
 
@@ -144,12 +150,22 @@ Resonant distortion with taming control:
 - **Scream**: Drive intensity + resonance (0–100%)
 - **Mix**: Dry/wet blend
 
-### Valentine — Saturation & Compression
-Parallel saturator and pumping compressor:
-- **Drive**: Waveshaper intensity (1x–10x)
-- **Thresh**: Compressor threshold (-40dB to 0dB)
-- **Ratio**: Compression ratio (1:1 to 20:1)
-- **Mix**: Parallel blend
+### Tuna Chorus — Stereo Chorus
+Lush bucket-brigade style chorus:
+- **Rate**: Sync to tempo or free-running (0.01Hz–8Hz)
+- **Depth**: Chorus modulation depth (0–100%)
+- **Feedback**: Feedback level (0–95%)
+
+### Tuna Phaser — Multi-stage Phaser
+Rich sweep phaser:
+- **Rate**: Sync to tempo or free-running (0.01Hz–8Hz)
+- **Depth**: Sweep depth (0–100%)
+- **Feedback**: Feedback level (0–100%)
+
+### Tuna Bitcrusher — Digital Decimation
+Sample rate and bit depth reduction:
+- **Bits**: Bit resolution (1–16 bits)
+- **NormFreq**: Sampling frequency down-sampling (0.001–1.0)
 
 ### Ælapse — Tape Delay & Spring Reverb
 Time and space effects:
@@ -167,7 +183,7 @@ The FX drawer includes macro knobs that control multiple parameters at once:
 | Macro | What it sweeps |
 |-------|---------------|
 | **Space** | Reverb mix + delay mix + reverb size → dry to washed |
-| **Drive** | Valentine drive + saturation + scream → clean to destroyed |
+| **Drive** | Scream distortion drive → clean to heavy drive |
 | **Tone** | Luftikus EQ → dark to bright |
 | **Filter** | Filtr cutoff + mix → lowpass (left) to off (center) to highpass (right) |
 | **Reso** | Filter resonance peak |

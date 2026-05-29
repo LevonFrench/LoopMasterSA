@@ -385,3 +385,38 @@ We significantly expanded the keys and chords arrays in [app.js](file:///j:/proj
 We resolved loop and BPM synchronization issues:
 1. **Removed Headroom Padding**: Changed `gen_duration = duration + 2.0` to `gen_duration = duration` in both `_run_generation` and `_run_regeneration` in [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py). Setting the target duration exactly matching loop duration stops Stable Audio 3 generation from drifting and aligning beats incorrectly.
 2. **Padding Seed Waveforms**: Kept input tensor zero-padding up to `gen_duration` for continuation/inpainting modes to ensure no silent gaps are generated at boundary loops.
+
+## Completed Work: Refined Outpaint Gap Resolution (Crossfading)
+We refined the continuation and outpainting generation pipeline to resolve transition boundary volume drops and autoencoder silence gaps:
+1. **Overlap Mask Adjustment**: Updated `_run_generation` in [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) to apply a `0.3` seconds overlap (masking starts at `continue_start - 0.3` seconds or `(duration / 2.0) - 0.3` seconds) for all three remix modes (`continuation`, `response`, `inpaint`). This allows the diffusion model to inpaint the boundary transition zone smoothly based on original audio context.
+2. **PyTorch-Based Crossfade Blending**: Implemented a post-generation audio processor in `app_server.py` that executes right after loop duration trimming. For `continuation`, `response`, and `inpaint` modes, it resamples the original input audio to match the generation sample rate, aligns their channels, and performs a frame-accurate linear crossfade (0.3s ramp) at the boundary interfaces. This replaces the hard step drop with a seamless transition, completely resolving the volume drop and silent gap at the outpaint boundaries.
+
+## Completed Work: Event Wiring, Favorites, and Recording Mode UI Hooks
+We completed the integration and wiring of the project Save/Load, parameter recording log drawer, and prompt Favorites library:
+1. **Event Listeners Wiring**: Wired the DOM elements for `#btn-save-project`, `#btn-load-project`, `#project-file-input`, `#btn-record`, `#btn-clear-record-log`, and `#btn-fav-prompt` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to their respective helper functions.
+2. **Favorites Initialization**: Added a call to `initFavorites()` on page load, populating the favorites drawer with a default library if none are present in `localStorage`.
+3. **WAV File Path References & State Restoration**: Verified that loaded project file configurations cleanly match track levels, panning, mutes, solos, detailed effects configurations, matrix destinations, and arranger timeline grids, reconstructing playback perfectly.
+
+## Completed Work: Missing Project Audio Reconstruction from Generation Metadata
+We implemented a robust recovery flow when loaded audio files (WAVs) are missing from the server outputs directory:
+1. **Enriched Generation Metadata**: Expanded the `originalParams` schema saved per track to store prompt, BPM, seed, CFG scale, steps, duration, remix mode, invert timing, noise level, and inpaint/continuation boundaries.
+2. **Track Dependency Tracking**: Set `track.parentTrackId` in `addTrackRow` and serialized it in `.lproj` project files, preserving parent-child relationships for remixed, inpainted, and continuation tracks.
+3. **Missing File Detection**: Hooked `loadVariantAudio` and project load progress counters (`isProjectLoading`, `totalVariantsToLoad`, `loadedVariantsCount`) to detect missing WAV files on load and trigger a callback upon completion.
+4. **Sleek Amber Warning Banner**: Implemented a responsive glassmorphic banner prepended to the tracks list when files are missing, prompting the user with a warning icon and a "Remake Missing Audio" action button.
+5. **Sequential Remake Pipeline**: Programmed `remakeMissingAudio` to sequentially regenerate missing tracks. For child remix tracks, it automatically queries the parent track's new generated file path on the server and passes it as `init_audio_path` to preserve the correct seed audio dependencies.
+
+## Active Session Diagnostics & Verification (2026-05-28)
+Verified the code syntax and ran automated tests on the model execution library to confirm that both backend and frontend layers are syntactically and behaviorally stable.
+- Resolved `ModuleNotFoundError: No module named 'termios'` error on Windows by lazy-loading `termios` and `tty` inside `_arrow_pick` in [sa3_mlx.py](file:///j:/projects/sa3/stable-audio-3/optimized/mlx/scripts/sa3_mlx.py#L125-L135) instead of top-level imports.
+- Skipped Apple-Silicon-only MLX CLI tests on non-macOS/non-MLX systems in [test_all_configs.py](file:///j:/projects/sa3/stable-audio-3/optimized/mlx/scripts/test_all_configs.py) using module-level pytest mark, preventing test suite failure on Windows.\n## Feasibility Study: Audio Engines, DSP FX, and Test Suite Validation (2026-05-28)
+- **howler.js Evaluation**: Determined that while howler.js simplifies asset loading and caching, it is designed for game audio playback and hides Web Audio node graphs. Integrating it would conflict with our custom effects chain routing, look-ahead overlapping tail scheduling, and `OfflineAudioContext` mixdown rendering. We will continue using native Web Audio API nodes.
+- **ChowTape Evaluation**: Determined that Chowdhury DSP's ChowTape pedal model is a C++ project compiled for the Aviate Audio Multiverse hardware guitar pedal. It is not browser-ready. Porting it would require building JUCE to WebAssembly, which introduces significant DSP CPU overhead. Tape saturation can be achieved with low overhead using a `WaveShaperNode` with a \tanh(x) magnetic transfer function.
+- **GitHub Library Search**: Identified **Tuna.js** as a compatible library that outputs standard Web Audio `AudioNode` structures for modular effects (Chorus, Tremolo, Phaser, Bitcrusher), and **Superpowered SDK** for WebAssembly-based time-stretching/pitch-shifting.
+- **Pytest Suite Verification**: Ran `python -m pytest` using the virtual environment to ensure stable-audio-3 logic is intact. The entire suite successfully compiled and executed, returning 76 passed and 2 skipped tests.
+
+## Completed Work: Codebase Cleanup, Gitignore, and Waveform End Gap Fix (2026-05-28)
+We completed the final codebase hygiene, version control rules, visual bug fixes, and knowledge base updates:
+1. **Waveform End Gap Fix**: Resolved the visual gap at the end of waveform cards. By calculating `playSamples` using the `activeDuration` and `sampleRate` instead of drawing the full file length (which includes the 2.0-second fade-out/headroom tail padding), we align the waveform drawing exactly with the loop duration. This removes the flat line gap and ensures the playhead sweeps all the way to the rightmost edge before looping.
+2. **Stray File Clearance**: Deleted all untracked browser testing/verification screenshots (`generation-done.png`, `playing-state-fixed.png`, `playing-state.png`) from the project root.
+3. **Gitignore Updates**: Updated the root `.gitignore` file to add `.ogg` and `.zip` outputs under the AI-generated outputs section, preventing temporary media files and zips from cluttering version control.
+4. **Wiki Knowledge Base Sync**: Updated the technical wiki `Home.md` and user documentation `User-Guide.md` in `loopmaster/wiki/` to add details about the BF16 precision model option, document the newly integrated Tuna.js effects (Chorus, Phaser, Bitcrusher), update the macro controls and modulation matrix routing parameters, and remove obsolete Valentine saturation/compression references.

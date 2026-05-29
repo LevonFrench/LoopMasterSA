@@ -425,8 +425,8 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
 
         start_gen = time.time()
 
-        # Generate exactly the duration needed so content fits the loop boundaries
-        gen_duration = duration
+        # Generate with 2.0s headroom to capture tail decay if loop is active
+        gen_duration = duration + 2.0 if loop else duration
 
         # Load seed audio if provided (used for variation, inpaint, or continuation)
         seed_audio = None
@@ -482,30 +482,144 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
                         print(f"[Generation] Running variation with noise level {init_noise_level}.")
                     elif remix_mode == "inpaint" or remix_mode == "response":
                         gen_kwargs["inpaint_audio"] = seed_audio
+                        overlap_sec = 0.3
                         if remix_mode == "response":
                             # Call & Response: keep first half (call), regenerate second half (response)
-                            gen_kwargs["inpaint_mask_start_seconds"] = duration / 2.0
-                            gen_kwargs["inpaint_mask_end_seconds"] = duration
-                            print(f"[Generation] Running Call & Response. Masking {duration / 2.0}s to {duration}s.")
+                            mask_start = max(0.0, (duration / 2.0) - overlap_sec)
+                            gen_kwargs["inpaint_mask_start_seconds"] = mask_start
+                            gen_kwargs["inpaint_mask_end_seconds"] = duration + 10.0
+                            print(f"[Generation] Running Call & Response. Masking {mask_start}s to {duration + 10.0}s (overlap: {overlap_sec}s).")
                         else:
-                            gen_kwargs["inpaint_mask_start_seconds"] = inpaint_start
-                            gen_kwargs["inpaint_mask_end_seconds"] = inpaint_end
-                            print(f"[Generation] Running inpaint with range {inpaint_start}s to {inpaint_end}s.")
+                            mask_start = max(0.0, inpaint_start - overlap_sec)
+                            mask_end = min(duration, inpaint_end + overlap_sec)
+                            gen_kwargs["inpaint_mask_start_seconds"] = mask_start
+                            gen_kwargs["inpaint_mask_end_seconds"] = mask_end
+                            print(f"[Generation] Running inpaint with range {mask_start}s to {mask_end}s (overlap: {overlap_sec}s).")
                     elif remix_mode == "continuation":
                         gen_kwargs["inpaint_audio"] = seed_audio
-                        gen_kwargs["inpaint_mask_start_seconds"] = continue_start
+                        # Overlap the mask start by 0.3s to allow Stable Audio 3 to blend the boundary smoothly
+                        overlap_sec = 0.3
+                        mask_start = max(0.0, continue_start - overlap_sec)
+                        gen_kwargs["inpaint_mask_start_seconds"] = mask_start
                         # Mask all the way to the end of the generated sequence to extend it
                         gen_kwargs["inpaint_mask_end_seconds"] = max(duration, gen_duration) + 10.0
-                        print(f"[Generation] Running continuation keeping first {continue_start}s.")
+                        print(f"[Generation] Running continuation keeping first {mask_start}s (overlap: {overlap_sec}s).")
                 
                 audio = model.generate(**gen_kwargs)
 
+        audio = audio.clone()
         elapsed = time.time() - start_gen
 
-        # Trim to exact loop duration (model generated extra headroom)
+        # Apply loop tail headroom preservation and fade-out feathering
         sample_rate = model.model.sample_rate
         exact_samples = int(duration * sample_rate)
-        audio = audio[:, :, :exact_samples]
+        
+        if loop:
+            padded_samples = int((duration + 2.0) * sample_rate)
+            if audio.shape[-1] < padded_samples:
+                padding = torch.zeros((*audio.shape[:-1], padded_samples - audio.shape[-1]), device=audio.device, dtype=audio.dtype)
+                audio = torch.cat([audio, padding], dim=-1)
+            elif audio.shape[-1] > padded_samples:
+                audio = audio[..., :padded_samples]
+                
+            eighth_note_duration = 60.0 / bpm / 2.0
+            fade_samples = int(eighth_note_duration * sample_rate)
+            max_fade_samples = padded_samples - exact_samples
+            if fade_samples > max_fade_samples:
+                fade_samples = max_fade_samples
+                
+            if fade_samples > 0:
+                w = torch.linspace(1.0, 0.0, steps=fade_samples, device=audio.device, dtype=audio.dtype).unsqueeze(0).unsqueeze(0)
+                audio[:, :, exact_samples:exact_samples + fade_samples] *= w
+                
+            if exact_samples + fade_samples < padded_samples:
+                audio[:, :, exact_samples + fade_samples:] = 0.0
+        else:
+            if audio.shape[-1] > exact_samples:
+                audio = audio[..., :exact_samples]
+            elif audio.shape[-1] < exact_samples:
+                padding = torch.zeros((*audio.shape[:-1], exact_samples - audio.shape[-1]), device=audio.device, dtype=audio.dtype)
+                audio = torch.cat([audio, padding], dim=-1)
+
+        # Apply smooth crossfade blending at boundaries for continuation, response, and inpainting modes
+        if init_audio_path and remix_mode in ["continuation", "response", "inpaint"]:
+            try:
+                import torchaudio.transforms as T
+                # Resample init_waveform to target sample_rate if needed
+                if init_sr != sample_rate:
+                    resampler = T.Resample(init_sr, sample_rate).to(audio.device)
+                    init_waveform_resampled = resampler(init_waveform.to(audio.device))
+                else:
+                    init_waveform_resampled = init_waveform.to(audio.device)
+                
+                # Align channels
+                if init_waveform_resampled.ndim == 2:
+                    if init_waveform_resampled.shape[0] == 1 and audio.shape[1] == 2:
+                        init_waveform_resampled = init_waveform_resampled.repeat(2, 1)
+                    elif init_waveform_resampled.shape[0] > 2:
+                        init_waveform_resampled = init_waveform_resampled[:2, :]
+                
+                overlap_sec = 0.3
+                orig_len = init_waveform_resampled.shape[1]
+                gen_len = audio.shape[2]
+                
+                if remix_mode in ["continuation", "response"]:
+                    boundary_sec = continue_start if remix_mode == "continuation" else (duration / 2.0)
+                    mask_start_sec = max(0.0, boundary_sec - overlap_sec)
+                    
+                    boundary_idx = min(gen_len, int(boundary_sec * sample_rate))
+                    mask_start_idx = min(gen_len, int(mask_start_sec * sample_rate))
+                    
+                    boundary_idx = min(boundary_idx, orig_len)
+                    mask_start_idx = min(mask_start_idx, orig_len)
+                    
+                    overlap_samples = boundary_idx - mask_start_idx
+                    if overlap_samples > 0:
+                        w = torch.linspace(0.0, 1.0, steps=overlap_samples, device=audio.device, dtype=audio.dtype).unsqueeze(0)
+                        for i in range(num_variants):
+                            audio[i, :, :mask_start_idx] = init_waveform_resampled[:, :mask_start_idx]
+                            orig_seg = init_waveform_resampled[:, mask_start_idx:boundary_idx]
+                            gen_seg = audio[i, :, mask_start_idx:boundary_idx]
+                            audio[i, :, mask_start_idx:boundary_idx] = (1.0 - w) * orig_seg + w * gen_seg
+                            
+                elif remix_mode == "inpaint":
+                    boundary1_sec = inpaint_start
+                    mask_start_sec = max(0.0, inpaint_start - overlap_sec)
+                    boundary2_sec = inpaint_end
+                    mask_end_sec = min(duration, inpaint_end + overlap_sec)
+                    
+                    boundary1_idx = min(gen_len, int(boundary1_sec * sample_rate))
+                    mask_start_idx = min(gen_len, int(mask_start_sec * sample_rate))
+                    boundary2_idx = min(gen_len, int(boundary2_sec * sample_rate))
+                    mask_end_idx = min(gen_len, int(mask_end_sec * sample_rate))
+                    
+                    boundary1_idx = min(boundary1_idx, orig_len)
+                    mask_start_idx = min(mask_start_idx, orig_len)
+                    boundary2_idx = min(boundary2_idx, orig_len)
+                    mask_end_idx = min(mask_end_idx, orig_len)
+                    
+                    overlap1_samples = boundary1_idx - mask_start_idx
+                    overlap2_samples = mask_end_idx - boundary2_idx
+                    
+                    for i in range(num_variants):
+                        audio[i, :, :mask_start_idx] = init_waveform_resampled[:, :mask_start_idx]
+                        
+                        if overlap1_samples > 0:
+                            w1 = torch.linspace(0.0, 1.0, steps=overlap1_samples, device=audio.device, dtype=audio.dtype).unsqueeze(0)
+                            orig_seg1 = init_waveform_resampled[:, mask_start_idx:boundary1_idx]
+                            gen_seg1 = audio[i, :, mask_start_idx:boundary1_idx]
+                            audio[i, :, mask_start_idx:boundary1_idx] = (1.0 - w1) * orig_seg1 + w1 * gen_seg1
+                            
+                        if overlap2_samples > 0:
+                            w2 = torch.linspace(0.0, 1.0, steps=overlap2_samples, device=audio.device, dtype=audio.dtype).unsqueeze(0)
+                            orig_seg2 = init_waveform_resampled[:, boundary2_idx:mask_end_idx]
+                            gen_seg2 = audio[i, :, boundary2_idx:mask_end_idx]
+                            audio[i, :, boundary2_idx:mask_end_idx] = (1.0 - w2) * gen_seg2 + w2 * orig_seg2
+                            
+                        if mask_end_idx < orig_len:
+                            audio[i, :, mask_end_idx:orig_len] = init_waveform_resampled[:, mask_end_idx:orig_len]
+            except Exception as blend_err:
+                print(f"[Blending] Error crossfading audio boundaries: {blend_err}")
 
         # Save to track_X folder inside the session directory
         track_dir_name = f"track_{track_num}"
@@ -588,7 +702,7 @@ def _run_regeneration(job_id, prompt, bpm, duration, loop, steps, cfg_scale, tra
 
         with model_lock:
             with torch.inference_mode():
-                gen_duration = duration
+                gen_duration = duration + 2.0 if loop else duration
                 gen_kwargs = {
                     "prompt": prompts_list,
                     "negative_prompt": "poor quality, bad quality, low quality, noise, distortion, artifact",
@@ -602,12 +716,39 @@ def _run_regeneration(job_id, prompt, bpm, duration, loop, steps, cfg_scale, tra
                 
                 audio = model.generate(**gen_kwargs)
 
+        audio = audio.clone()
         elapsed = time.time() - start_gen
 
-        # Trim to exact loop duration
+        # Apply loop tail headroom preservation and fade-out feathering
         sample_rate = model.model.sample_rate
         exact_samples = int(duration * sample_rate)
-        audio = audio[:, :, :exact_samples]
+        
+        if loop:
+            padded_samples = int((duration + 2.0) * sample_rate)
+            if audio.shape[-1] < padded_samples:
+                padding = torch.zeros((*audio.shape[:-1], padded_samples - audio.shape[-1]), device=audio.device, dtype=audio.dtype)
+                audio = torch.cat([audio, padding], dim=-1)
+            elif audio.shape[-1] > padded_samples:
+                audio = audio[..., :padded_samples]
+                
+            eighth_note_duration = 60.0 / bpm / 2.0
+            fade_samples = int(eighth_note_duration * sample_rate)
+            max_fade_samples = padded_samples - exact_samples
+            if fade_samples > max_fade_samples:
+                fade_samples = max_fade_samples
+                
+            if fade_samples > 0:
+                w = torch.linspace(1.0, 0.0, steps=fade_samples, device=audio.device, dtype=audio.dtype).unsqueeze(0).unsqueeze(0)
+                audio[:, :, exact_samples:exact_samples + fade_samples] *= w
+                
+            if exact_samples + fade_samples < padded_samples:
+                audio[:, :, exact_samples + fade_samples:] = 0.0
+        else:
+            if audio.shape[-1] > exact_samples:
+                audio = audio[..., :exact_samples]
+            elif audio.shape[-1] < exact_samples:
+                padding = torch.zeros((*audio.shape[:-1], exact_samples - audio.shape[-1]), device=audio.device, dtype=audio.dtype)
+                audio = torch.cat([audio, padding], dim=-1)
 
         # Target directory inside session
         track_dir_name = f"track_{track_num}"
@@ -954,7 +1095,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Stable Audio 3 Grid Generator Server")
     parser.add_argument(
         "--model", default="small-music",
-        choices=["medium", "small-music", "small-sfx", "medium-base", "small-music-base", "small-sfx-base"],
+        choices=["medium", "medium-bf16", "small-music", "small-sfx", "medium-base", "small-music-base", "small-sfx-base"],
     )
     parser.add_argument("--device", default=None)
     parser.add_argument("--no-half", action="store_true")

@@ -47,8 +47,12 @@ optimized/
 **/*.wav
 *.mp3
 **/*.mp3
+*.ogg
+**/*.ogg
 *.flac
 **/*.flac
+*.zip
+**/*.zip
 
 # Local AI workspace metadata
 .claude

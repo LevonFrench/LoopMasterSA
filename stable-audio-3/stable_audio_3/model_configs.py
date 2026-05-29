@@ -8,6 +8,7 @@ class ModelConfig:
     repo_id: str
     config_path: str
     ckpt_path: str
+    config_repo_id: str = None
 
     def resolve(self):
         """Download files from HuggingFace Hub or load from local models/ directory if present."""
@@ -22,7 +23,8 @@ class ModelConfig:
             print(f"[Local Model] Found local files in {local_dir}. Using them directly.")
             return local_config, local_ckpt
 
-        local_config = hf_hub_download(repo_id=self.repo_id, filename=self.config_path)
+        cfg_repo = self.config_repo_id if self.config_repo_id else self.repo_id
+        local_config = hf_hub_download(repo_id=cfg_repo, filename=self.config_path)
         local_ckpt = hf_hub_download(repo_id=self.repo_id, filename=self.ckpt_path)
         return local_config, local_ckpt
 
@@ -107,6 +109,12 @@ models: dict[str, ModelConfig] = {
         "model_config.json",
         "model.safetensors",
     ),
+    "medium-bf16": ModelConfig(
+        "dummy9996/stable-audio-3-bf16-comfyui",
+        "model_config.json",
+        "model.safetensors",
+        config_repo_id="stabilityai/stable-audio-3-medium",
+    ),
     "medium-base": ModelConfig(
         "stabilityai/stable-audio-3-medium-base",
         "model_config.json",
@@ -119,7 +127,10 @@ _small_stable_audio_3: tuple[ModelConfig, ...] = (
     models["small-music"],
     models["small-sfx"],
 )
-_medium_stable_audio_3: tuple[ModelConfig, ...] = (models["medium"],)
+_medium_stable_audio_3: tuple[ModelConfig, ...] = (
+    models["medium"],
+    models["medium-bf16"],
+)
 
 ae_models: dict[str, AutoencoderModelConfig] = {
     "same-s": AutoencoderModelConfig(

@@ -85,9 +85,11 @@ Source Buffer
   → Filtr (BiquadFilterNode)
   → Luftikus EQ (6× BiquadFilterNode)
   → Scream (WaveShaperNode + BiquadFilterNode)
+  → Tuna Chorus (tuna.js Chorus node)
+  → Tuna Phaser (tuna.js Phaser node)
+  → Tuna Bitcrusher (tuna.js Bitcrusher node)
   → Ælapse Delay (DelayNode + feedback loop + LFO)
   → Ælapse Reverb (ConvolverNode)
-  → Track Compressor (DynamicsCompressorNode)
   → StereoPannerNode
   → GainNode (volume)
   → AnalyserNode (metering)
@@ -101,19 +103,12 @@ Source Buffer
 ### Master Limiter Settings
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
-| Threshold | -11 dB | Brickwall ceiling |
+| Threshold | Dynamic (0 to -30 dB) | Coordinated with master volume fader |
 | Knee | 0 | Hard knee |
 | Ratio | 20:1 | Limiter behavior |
 | Attack | 3 ms | Fast transient catch |
 | Release | 100 ms | Natural decay |
-| Makeup Gain | +11 dB | Restores loudness |
-
-### Per-Track Compressor
-| Parameter | Value |
-|-----------|-------|
-| Threshold | -6 dB |
-| Ratio | 5:1 |
-| Attack | 10 ms |
+| Makeup Gain | Dynamic (+0 to +30 dB) | Auto-compensated post-limiting gain |
 
 ### Metering
 Three-layer horizontal canvas meters per track and master:
@@ -141,6 +136,11 @@ Three-layer horizontal canvas meters per track and master:
 - Pre-filter `BiquadFilterNode` (lowpass, 200Hz–16kHz) for harshness control
 - Q/drive coupled to single "Scream" parameter
 
+### Tuna.js Effects (Chorus, Phaser, Bitcrusher)
+- **Chorus**: Stereo chorus with adjustable Rate (free 0.01-8Hz or tempo-synced), Depth (0-1), and Feedback (0-0.95).
+- **Phaser**: Multi-stage phaser with adjustable Rate (free or tempo-synced), Depth (0-1), and Feedback (0-1).
+- **Bitcrusher**: Lo-fi decimation effect with adjustable Bits resolution (1-16) and normalized frequency sampling (0.001-1.0).
+
 ### Ælapse (Unified Controls)
 - **Delay Mix (DMx)**: Single macro control that caps delay mix at 75% wet. As DMx is increased, feedback (`DFb`) is automatically scaled up proportionally from 0% to 95%. LFO (2Hz) modulates delay time by ±2ms for tape wow/flutter.
 - **Reverb Mix (RMx)**: Single macro control that caps reverb mix at 80% wet. As RMx is increased, reverb size (`RSz`) automatically scales up from 0.5s to 5.0s, rebuilding the convolver impulse response on the fly.
@@ -160,9 +160,9 @@ LoopMaster SA3 features a global modulation engine containing four independent L
 ### Modulation Matrix
 - **Slots**: 8 independent routing paths.
 - **Routing parameters**:
-  - **Source**: LFO 1, LFO 2, LFO 3, or LFO 4 (Envelopes disabled).
+  - **Source**: LFO 1, LFO 2, LFO 3, or LFO 4.
   - **Destination**: Any active track channel (T1, T2, etc.) or Master bus.
-  - **Target Parameter**: Volume (`level`), Pan (`pan`), Filter (`filter`), Saturation/Compression (`satComp`), Space (`space`), and Drive (`drive`).
+  - **Target Parameter**: Volume (`level`), Pan (`pan`), Filter (`filter`), Space (`space`), Drive (`drive`), Chorus Rate (`chorusRate`), Chorus Depth (`chorusDepth`), Chorus Feedback (`chorusFeedback`), Phaser Rate (`phaserRate`), Phaser Depth (`phaserDepth`), Phaser Feedback (`phaserFeedback`), Crusher Bits (`crusherBits`), and Crusher Norm Frequency (`crusherNormfreq`).
   - **Depth**: ±100% bipolar modulation depth.
 - **Bypassing**: Global "Byp" toggle checkbox in the Matrix container bypasses all matrix slots simultaneously.
 - **Modulation Indicators**: Sliders on mapped parameters display real-time animated indicator dots mapping active modulation values.
@@ -189,14 +189,16 @@ All tracks share a single `AudioContext.currentTime` reference. Loop boundaries 
 ## File Structure
 
 ```
-loopmaster-app/
-├── app_server.py          # Flask routes, SA3 inference, WAV post-processing
-├── generate_variants.py   # CLI prompt generator helper
-└── static/
-    ├── index.html         # Layout and controls
-    ├── app.js             # Audio engine, FX, UI logic (~157KB)
-    ├── app.css            # Dark theme, responsive grid (~46KB)
-    └── outputs/           # Generated WAV files (gitignored)
+loopmaster/
+└── loopmaster-app/
+    ├── app_server.py          # Flask routes, SA3 inference, WAV post-processing
+    ├── generate_variants.py   # CLI prompt generator helper
+    └── static/
+        ├── index.html         # Layout and controls
+        ├── app.js             # Audio engine, FX, UI logic (~336KB)
+        ├── app.css            # Dark theme, responsive grid (~46KB)
+        ├── tuna.js            # Tuna.js DSP library
+        └── outputs/           # Generated WAV files (gitignored)
 ```
 
 ---
@@ -207,26 +209,29 @@ loopmaster-app/
 |-----------|--------|
 | SA3 Model | [Stability AI](https://stability.ai/) |
 | Luftikus EQ | [lkjbdsp/Luftikus](https://github.com/lkjbdsp/lkjb-plugins/tree/master/Luftikus) |
-| Valentine | [tote-bag-labs/valentine](https://github.com/tote-bag-labs/valentine) |
 | Ælapse | [smiarx/aelapse](https://github.com/smiarx/aelapse) |
 | Scream | [Cure-Audio/Scream](https://github.com/Cure-Audio/Scream) |
 | Filtr | [tiagolr/filtr](https://github.com/tiagolr/filtr) |
+| Tuna.js | [Dinahmoe/tuna](https://github.com/Dinahmoe/tuna) |
 
 ---
 
-## Known Issues & Diagnostics (Session 2026-05-27)
+## Release Notes & Updates (Session 2026-05-28)
 
-During runtime testing and code analysis, several technical issues were identified for subsequent resolution:
+Several key improvements were successfully implemented:
 
-### 1. Transport Bar Playback Duration Mismatch
-- **Issue**: The transport panel's duration element (`#t-duration`) is statically updated once on BPM changes to `globalDuration` (e.g. 8s at 120bpm). When an outpainted/remixed loop with a duration of 16s or 32s is playing, the playhead dynamically sweeps up to 16s/32s, causing the time display to show out-of-bound values like `0:11.5 / 0:08.0`.
-- **Planned Fix**: Dynamically update `tDuration.textContent = formatTime(activeDuration)` inside the `updatePlayheads()` loop so that the total duration readout is always synchronized with the active playback loop's duration.
+### 1. Bfloat16 (BF16) Precision Mode Support
+- **Feature**: Added a memory-optimized **BF16 precision mode** option for the Stable Audio 3 Medium model (`dummy9996/stable-audio-3-bf16-comfyui`), dramatically reducing VRAM usage.
+- **Precision Toggle**: Kept the pure **FP32 mode** option for high-end systems (launching with `--no-half` via option `[1]`), while offering BF16 via option `[4]` in the launcher (`run_server.bat`).
 
-### 2. Missing Transport Stop/Rewind Button
-- **Issue**: The "Stop All" button was previously removed from `index.html` to save layout space, leaving only the Play/Pause button. Consequently, when Arranger Mode is disabled, the user has no way to reset the playhead position back to `0:00.0` without waiting for the loop to finish or toggling arranger view.
-- **Planned Fix**: Add the Stop button (`#btn-stop-all`) back to `index.html` as a standard transport button (class `.btn-transport`, id `btn-stop-all`), styled as a square icon button next to the Play/Pause button. Update `app.js` to manage the disabled state of `btnStopAll` in sync with `btnPlayPause`.
+### 2. Tuna.js Effects & BPM Sync Integration
+- **Feature**: Integrated **Tuna.js** into the per-track channel DSP strip, adding premium Chorus, Phaser, and Bitcrusher effects.
+- **Sync Logic**: Connected LFO modulation rates to tempo-sync beat divisions, adjusting rates automatically on global BPM shifts.
 
-### 3. Outpaint Loop Regeneration Truncation
-- **Issue**: The `/api/regenerate` endpoint in `app_server.py` hardcodes the regeneration length to `960.0 / bpm` (8 seconds). When a user attempts to regenerate unlocked slots in an outpainted track (which is 16s or 32s), the regenerated audio is truncated to 8 seconds.
-- **Planned Fix**: Modify `/api/regenerate` in `app_server.py` to parse and accept the `duration` parameter from client requests (defaulting to `960.0 / bpm`) and pass it into the model execution thread.
+### 3. Waveform End Gap Fix
+- **Issue**: Waveform canvases showed a silent flat line at the rightmost 20% due to the 2-second loop tail headroom padding in the WAV file.
+- **Fix**: Truncated drawing samples to only match the active loop duration, aligning visual peaks with the playhead and playback loop perfectly.
+
+### 4. Valentine & Favorites Bar Removal
+- **Refinement**: Removed the Valentine saturation/compression section and the favorites bar to keep the UI clean, lightweight, and focused.
 
