@@ -837,10 +837,34 @@ We verified the redesigned track mixer strip:
    - **Creative macros & front panel knobs**: Resets all Group B creative macros and Group A front-panel channel strip knobs (Tone: 50, Delay Mix: 0%, Reverb Mix: 0%, Filter: 0, Resonance: 0) and calls their apply functions to restore normal audio routing instantly.
 3. **Reset Feedback Animation**: Animates the button text to show "Reset!" in red on click and fades back after 1 second.
 4. **Verification**: Checked JavaScript syntax via `node -c` (compiles cleanly).
+### 73. Upgrade of gstack and Codex Skill Integration (2026-05-29)
+1. **Version Upgrade**: Upgraded the global `gstack` installation from `v0.11.1.0` to `v1.52.0.0` inside `C:\Users\hotgh\.gemini\config\skills\gstack` to bring in latest features (such as `/autoplan`, `/cso`, `/retro`, etc.).
+2. **Git Bash Execution**: Set up core.autocrlf to false, pulled changes from main, and built the browse binary and other utilities using Node/Bun through the Git Bash shell environment to bypass Windows symlink creation constraints.
+3. **Skill Link Registration**: Registered the complete specialized skill set for the Codex CLI environment under `C:\Users\hotgh\.codex\skills` and verified auto-discover bindings.
+4. **Cache Cleared**: Wrote the upgraded version marker in the `~/.gstack` state directory to track update history.
 
+### 74. QA-Only Systematic Testing & Telemetry Logging (2026-05-29)
+1. **Interactive Testing Pipeline**:
+   - Set up a Playwright command chain via `browse chain < json_file` to preserve session state between commands on Windows.
+   - Resolved path validation and numerical wait parameters in the browser commands.
+2. **Feature Exploration & Evidence**:
+   - **Generation**: Generated a random prompt (`suspenseful celesta epic crescendo in A dorian`) and successfully verified audio card variant rendering upon job completion.
+   - **FX Drawer**: Expanded the collapsible FX section and validated LP/HP filters, EQ, Scream Dist, and Tuna.js control knobs.
+   - **Global Modulators**: Opened the Global Modulators panel and verified LFOs and the Mod Matrix slots.
+   - **Arranger / Song Mode**: Activated "Song Mode" and verified layout rendering of the loop timeline grid.
+   - **Deprecation Audit**: Scanned console logs and verified zero exceptions/errors. Captured and logged 5 standard deprecation warnings related to `ScriptProcessorNode` usage in Tuna.js.
+3. **QA Outcomes Saved**:
+   - Local: [qa-report-127-0-0-1-7861-2026-05-29.md](file:///J:/projects/sa3/.gstack/qa-reports/qa-report-127-0-0-1-7861-2026-05-29.md) with a computed health score of **100/100**.
+   - Project: [hotgh-main-test-outcome-2026-05-29T03-06.md](file:///C:/Users/hotgh/.gstack/projects/LevonFrench-LoopMasterSA/hotgh-main-test-outcome-2026-05-29T03-06.md).
 
+### 75. Dedicated Mood Button & Standalone Instrument Word Boundary Swapping (2026-05-29)
+1. **Mood Button UI Addition**: Inserted a dedicated "Mood" prompt variation button in the header bar of [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html) next to the "Chord" button, using a clean vector SVG smiley face icon to align with Feather/anti-emoji design guidelines.
+2. **Mood Cycle Logic**: Implemented `changeMoodOnly()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to detect the current prompt's active mood (sorting the moods by length descending to match larger moods first) and swap it with a fresh random mood, or prepend the mood to the beginning of the prompt if none is present.
+3. **Standalone Instrument Word Boundaries**: Implemented `findInstrumentInPrompt(prompt, pool)` inside [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) which checks for instrument matches using case-insensitive regex word boundaries (`\b`). It dynamically adds `"drums"`, `"bass"`, and `"lead"` to the search pool to prevent fallback prompt overwrites when clicking "Inst" or "Style" with standalone rhythmic/bass designations.
+4. **Listener Wiring**: Hooked the `#btn-change-mood` click listener to trigger `changeMoodOnly()`.
 
-
-
-
-
+### 76. Repository Cleanup, Verification, Bloat Check, and Distribution Push (2026-05-29)
+1. **Workspace File System Cleanup**: Run `git clean -fdn` to confirm there are no untracked or dangling cache files/directories in the project that could pollute commits.
+2. **Compilation and Syntax Checks**: Validated Python code compilation on `stable_audio_3/model.py` and `loopmaster-app/app_server.py` using `python -m py_compile`, and verified JavaScript syntax for `static/app.js` using `node -c`. All checks passed.
+3. **Bloat Analysis**: Analyzed the workspace for large files (over 10MB) to ensure model checkpoints and site-packages remain correctly ignored in `.gitignore`, preventing repository bloat. Tracked files are all lightweight (under 1MB).
+4. **Git Stage and Commit**: Prepared the changes to code and documentation assets, committing the updates to the local git index.

@@ -235,3 +235,15 @@ Several key improvements were successfully implemented:
 ### 4. Valentine & Favorites Bar Removal
 - **Refinement**: Removed the Valentine saturation/compression section and the favorites bar to keep the UI clean, lightweight, and focused.
 
+---
+
+## Future Opportunities
+
+### Server-Side Mixdown via `web-audio-api`
+**Library**: `j:\projects\sa3\web-audio-api` — pure JS Web Audio API for Node.js (MIT, no native deps).
+
+**Opportunity**: Move the `OfflineAudioContext` bounce/export (currently at `app.js:7573-8157`) from the browser to a Node.js sidecar process. The API surface is identical — `createGain()`, `createDynamicsCompressor()`, `createConvolver()`, `startRendering()` — so the code ports nearly 1:1.
+
+**Benefits**: Non-blocking export (server renders, returns download link), batch/headless export without browser, deterministic output across platforms.
+
+**Status**: Shelved (2026-05-29). Revisit when export/bounce becomes a bottleneck or headless workflows are needed.

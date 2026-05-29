@@ -896,6 +896,33 @@ def load_model(model_name, device=None, no_half=False):
     )
     print(f"Model loaded in {time.time() - start:.2f}s")
 
+def warmup_model():
+    """Run a single dummy generation to trigger torch.compile graph compilation
+    and CUDA kernel autotuning before any user request hits the server."""
+    global model, first_generation_completed
+    if model is None or str(model.device) != "cuda":
+        print("Skipping warmup (no CUDA device).")
+        return
+    print("Running warmup generation to compile DiT graph…")
+    start = time.time()
+    try:
+        with torch.inference_mode():
+            _ = model.generate(
+                prompt="warmup test tone",
+                duration=2.0,
+                steps=2,
+                cfg_scale=1.0,
+                batch_size=1,
+                seed=42,
+                duration_padding_sec=0.0,
+                truncate_output_to_duration=True,
+            )
+        first_generation_completed = True
+        print(f"Warmup completed in {time.time() - start:.1f}s. DiT graph compiled.")
+    except Exception as e:
+        print(f"Warmup failed (non-fatal): {e}")
+
+
 # ---------------------------------------------------------------------------
 # Flask App Setup & Routes
 # ---------------------------------------------------------------------------
@@ -1167,6 +1194,7 @@ if __name__ == "__main__":
     set_verbose(args.verbose)
 
     load_model(args.model, args.device, args.no_half)
+    warmup_model()
 
     print(f"\n  [OK] Grid Generator running at http://127.0.0.1:{args.port}\n")
     app.run(host=args.host, port=args.port, debug=False, threaded=True)

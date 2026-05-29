@@ -26,6 +26,10 @@ class StableAudioModel:
         torch.backends.cudnn.allow_tf32 = True
         torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = True
         torch.backends.cudnn.benchmark = True
+        # Enable all SDPA backends so F.scaled_dot_product_attention picks the fastest
+        torch.backends.cuda.enable_flash_sdp(True)
+        torch.backends.cuda.enable_mem_efficient_sdp(True)
+        torch.backends.cuda.enable_math_sdp(True)
 
     @staticmethod
     def from_pretrained(model_name, device=None, model_half=True):
@@ -64,7 +68,7 @@ class StableAudioModel:
         if device == "cuda" and hasattr(torch, "compile"):
             try:
                 print("Compiling DiT (Diffusion Transformer) model using torch.compile...")
-                model.model = torch.compile(model.model, mode="reduce-overhead")
+                model.model = torch.compile(model.model, mode="reduce-overhead", dynamic=False)
                 print("Model compilation scheduled.")
             except Exception as compile_err:
                 print(f"Compilation notice: {compile_err}. Continuing with standard uncompiled inference.")

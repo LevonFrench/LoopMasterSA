@@ -21,6 +21,7 @@
     const btnRandomPrompt = document.getElementById('btn-random-prompt');
     const btnRandomInKey = document.getElementById('btn-random-in-key');
     const btnChangeChord = document.getElementById('btn-change-chord');
+    const btnChangeMood = document.getElementById('btn-change-mood');
     const btnChangeStyle = document.getElementById('btn-change-style');
     const btnChangeInstrument = document.getElementById('btn-change-instrument');
     const btnChangeAccent = document.getElementById('btn-change-accent');
@@ -279,7 +280,7 @@
 
     function ensureAudioCtx() {
         if (!audioCtx) {
-            audioCtx = new AudioContext();
+            audioCtx = new AudioContext({ latencyHint: 'playback' });
 
             // Create master nodes
             masterGain = audioCtx.createGain();
@@ -5211,6 +5212,10 @@
                             track.variants.forEach((v, vi) => v.el.classList.toggle('is-queued', vi === i));
                         }
                     }
+                } else if (splitEnabled && !isLeftHalf && isPlaying && (track._pendingVariant === i || (i === track.selectedVariant && track._pendingVariant === -1))) {
+                    // Split ON + right half + this card is queued = unqueue it
+                    track._pendingVariant = null;
+                    cardEl.classList.remove('is-queued');
                 } else {
                     // Default or right half = instant switch/toggle
                     selectVariant(track, i);
@@ -6338,6 +6343,26 @@
         promptInput.focus();
     }
 
+    function findInstrumentInPrompt(prompt, poolToSearch) {
+        let searchList = [...poolToSearch];
+        ['drums', 'bass', 'lead'].forEach(item => {
+            if (!searchList.some(x => x.toLowerCase() === item)) {
+                searchList.push(item);
+            }
+        });
+        searchList.sort((a, b) => b.length - a.length);
+
+        const lowercasePrompt = prompt.toLowerCase();
+        for (const inst of searchList) {
+            const escaped = inst.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+            if (regex.test(lowercasePrompt)) {
+                return inst;
+            }
+        }
+        return null;
+    }
+
     function changeStyleOnly() {
         const currentPrompt = promptInput.value.trim();
         const isPureRandom = Math.random() < 0.25;
@@ -6355,20 +6380,9 @@
             genreMoods = genre.moods;
         }
 
-        let matchedInstrument = null;
-        for (const inst of genreInstruments) {
-            if (currentPrompt.toLowerCase().includes(inst.toLowerCase())) {
-                matchedInstrument = inst;
-                break;
-            }
-        }
+        let matchedInstrument = findInstrumentInPrompt(currentPrompt, genreInstruments);
         if (!matchedInstrument && !isPureRandom) {
-            for (const inst of instruments) {
-                if (currentPrompt.toLowerCase().includes(inst.toLowerCase())) {
-                    matchedInstrument = inst;
-                    break;
-                }
-            }
+            matchedInstrument = findInstrumentInPrompt(currentPrompt, instruments);
         }
 
         const inMatch = currentPrompt.match(/\bin\s+/i);
@@ -6377,7 +6391,7 @@
 
         if (matchedInstrument && markerMatch) {
             const instEscaped = matchedInstrument.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            const regex = new RegExp(`(${instEscaped}\\s+)(.*?\\s+)(in|playing\\b)`, 'i');
+            const regex = new RegExp(`(\\b${instEscaped}\\b\\s+)(.*?\\s+)(in|playing\\b)`, 'i');
 
             if (regex.test(currentPrompt)) {
                 const newPrompt = currentPrompt.replace(regex, `$1${newStyle} $3`);
@@ -6411,35 +6425,14 @@
         let genreStyles = styles;
 
         if (isPureRandom) {
-            const sortedInstruments = [...instruments].sort((a, b) => b.length - a.length);
-            for (const inst of sortedInstruments) {
-                const index = currentPrompt.toLowerCase().indexOf(inst.toLowerCase());
-                if (index !== -1) {
-                    matchedInstrument = inst;
-                    break;
-                }
-            }
+            matchedInstrument = findInstrumentInPrompt(currentPrompt, instruments);
             pool = instruments;
         } else {
             const genreKey = detectGenre(currentPrompt);
             const genre = genres[genreKey];
-            const sortedInstruments = [...genre.instruments].sort((a, b) => b.length - a.length);
-            for (const inst of sortedInstruments) {
-                const index = currentPrompt.toLowerCase().indexOf(inst.toLowerCase());
-                if (index !== -1) {
-                    matchedInstrument = inst;
-                    break;
-                }
-            }
+            matchedInstrument = findInstrumentInPrompt(currentPrompt, genre.instruments);
             if (!matchedInstrument) {
-                const globalSorted = [...instruments].sort((a, b) => b.length - a.length);
-                for (const inst of globalSorted) {
-                    const index = currentPrompt.toLowerCase().indexOf(inst.toLowerCase());
-                    if (index !== -1) {
-                        matchedInstrument = inst;
-                        break;
-                    }
-                }
+                matchedInstrument = findInstrumentInPrompt(currentPrompt, instruments);
             }
             pool = genre.instruments;
             genreMoods = genre.moods;
@@ -6459,7 +6452,7 @@
         const newInstrument = finalPool[Math.floor(Math.random() * finalPool.length)];
 
         if (matchedInstrument) {
-            const regex = new RegExp(matchedInstrument.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i');
+            const regex = new RegExp(`\\b${matchedInstrument.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
             const newPrompt = currentPrompt.replace(regex, newInstrument);
             promptInput.value = newPrompt;
             promptInput.focus();
@@ -6476,6 +6469,49 @@
         const generated = `${mood} ${newInstrument} ${style} ${transitionWord} ${currentKeyOrChord.value}`;
 
         promptInput.value = generated;
+        promptInput.focus();
+    }
+
+    function changeMoodOnly() {
+        const currentPrompt = promptInput.value.trim();
+        const isPureRandom = Math.random() < 0.25;
+
+        let genreMoods = moods;
+        if (!isPureRandom) {
+            const genreKey = detectGenre(currentPrompt);
+            const genre = genres[genreKey];
+            genreMoods = genre.moods;
+        }
+
+        let matchedMood = null;
+        const sortedMoods = [...moods].sort((a, b) => b.length - a.length);
+        for (const mood of sortedMoods) {
+            const regex = new RegExp(`\\b${mood}\\b`, 'i');
+            if (regex.test(currentPrompt)) {
+                matchedMood = mood;
+                break;
+            }
+        }
+
+        const excluded = matchedMood ? [matchedMood.toLowerCase()] : [];
+        const filteredMoods = genreMoods.filter(m => !excluded.includes(m.toLowerCase()));
+        const finalPool = filteredMoods.length > 0 ? filteredMoods : genreMoods;
+        const newMood = finalPool[Math.floor(Math.random() * finalPool.length)];
+
+        if (matchedMood) {
+            const escaped = matchedMood.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+            const newPrompt = currentPrompt.replace(regex, newMood);
+            promptInput.value = newPrompt;
+            promptInput.focus();
+            return;
+        }
+
+        if (currentPrompt.length === 0) {
+            promptInput.value = newMood;
+        } else {
+            promptInput.value = `${newMood} ${currentPrompt}`;
+        }
         promptInput.focus();
     }
 
@@ -6506,6 +6542,10 @@
 
     if (btnChangeChord) {
         btnChangeChord.addEventListener('click', changeChordOnly);
+    }
+
+    if (btnChangeMood) {
+        btnChangeMood.addEventListener('click', changeMoodOnly);
     }
 
     if (btnChangeStyle) {

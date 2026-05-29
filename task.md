@@ -523,8 +523,26 @@
   - [x] Implement the reset click handler in `app.js` to reset track FX state, toggles, sliders, knobs, and macro states to defaults
   - [x] Verify JavaScript syntax via `node -c`
   - [x] Manually verify in the browser that clicking the Reset button resets all detailed FX, front panel knobs, and their audio signals to default values
-
-
-
-
+- [x] Upgrade gstack global install from v0.11.1.0 to v1.52.0.0 and register Codex skills.
+- [x] Run Systematic QA-Only testing (2026-05-29):
+  - [x] Establish browser chain pipeline with `browse chain < json_file` to preserve session state on Windows.
+  - [x] Resolve path verification and numeric wait command constraints in playrunner.
+  - [x] Navigate landing page, click random prompt generator, and trigger audio generation.
+  - [x] Wait for audio card variants to successfully populate in the HTML DOM.
+  - [x] Open collapsible FX Drawer and verify layout of LP/HP filters, EQ, Scream Dist, and Tuna.js modules.
+  - [x] Open Global Modulators panel and verify LFO / Mod Matrix configurations.
+  - [x] Toggle Song Mode / Arranger panel and verify rendering of loop timelines.
+  - [x] Audit browser console for JavaScript exceptions and links for dead URLs.
+- [x] Add dedicated "Mood" prompt variation button to the UI control bar (2026-05-29):
+  - [x] Insert "Mood" button with a custom vector SVG smiley face icon in `index.html`
+  - [x] Declare DOM selector constant `btnChangeMood` in `app.js`
+  - [x] Implement helper function `findInstrumentInPrompt(prompt, pool)` utilizing word boundary regexes
+  - [x] Refactor `changeStyleOnly()` and `changeInstrumentOnly()` to use `findInstrumentInPrompt()`
+  - [x] Implement `changeMoodOnly()` in `app.js` to cycle/replace active moods using regex or prepend if missing
+  - [x] Bind event listener for `#btn-change-mood` to trigger `changeMoodOnly()`
+- [x] Workspace Cleanup, Error and Bloat Check, and Repository Push (2026-05-29):
+  - [x] Run environment-wide check for untracked/stale temporary files and directories
+  - [x] Perform syntax and compilation validation check on all modified Python/JS source files
+  - [x] Analyze codebase tracking and build artifact directories for size bloat
+  - [x] Stage all modified assets, create Git commit, and push to origin/main remote repository
 

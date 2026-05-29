@@ -665,4 +665,29 @@ To allow users to instantly return all creative track effects and macros to defa
    - Reset all front-panel mixer FX knobs (Tone: 50, DMX: 0, RMX: 0, Filter: 0, Reso: 0) and update their corresponding audio nodes and rotations.
    - Reset all 16 creative macro group parameters (`space`, `drive`, etc.) inside the drawer to their default settings.
    - Set all 10 detailed FX toggle buttons and section bypasses to their default bypassed/active states.
-   - Reset all detailed parameter knobs and sliders inside the drawer back to their defaults (e.g., EQ Gains = 0, Delay Mix = 0, Reverb Mix = 0, Reverb Size = 2.0s, etc.) and trigger input events to rebuild/update the Web Audio API DSP nodes instantly.
+   - Reset all detailed parameter knobs and sliders inside the drawer back to their defaults (e.g., EQ Gains = 0, Delay Mix = 0, Reverb Mix = 0, Reverb Size = 2.0s, etc.) and trigger input events to rebuild/update the Web Audio API DSP nodes instantly.
+
+## Completed QA-Only Systematic Testing (Session 2026-05-29)
+
+A systematic QA-only browser test has been executed on the live application at `http://127.0.0.1:7861`:
+1. **Interactive Flow**: Generated audio loop variants successfully using the random prompt builder and Stable Audio 3 generator backend.
+2. **Component Validation**: Collapsed and expanded the detailed FX Drawer, Global Modulators, and Song Arranger panels, taking automated snapshots at each stage.
+3. **Outcome**: The web application achieved a perfect **100/100** health score under our rubric. Zero runtime exceptions/errors were logged, and all custom DSP and fader-to-knob UI changes operate with high stability.
+
+## Completed Design: Mood Button and Word Boundary Instrument Swapping (Session 2026-05-29)
+
+We have implemented the following enhancements to prompt control and generation logic:
+1. **Mood Button Integration**: Added a dedicated `<button id="btn-change-mood" ...>` element to the prompt inline button bar in [index.html](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/index.html). The button is styled as a modern pill button with a custom vector SVG smiley face icon matching the Feather/anti-emoji design guidelines.
+2. **Mood Swap Logic (`changeMoodOnly`)**: Added `changeMoodOnly()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) which scans the current prompt for existing moods (using a descending-length-sorted match to prevent prefix issues), swaps it in place with a different genre-appropriate random mood, or prepends it if no mood is present.
+3. **Word Boundary & Standalone Instrument Swapping**: Added `findInstrumentInPrompt()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to resolve the fallback overwrite issue. It checks for instrument matches using case-insensitive regex word boundary checks (`\b`) and dynamically adds standalone terms `"drums"`, `"bass"`, and `"lead"` to the search pool.
+4. **Listener Bindings**: Bound click events for `#btn-change-mood` to trigger the in-place mood cycling.
+
+## Completed Housekeeping: File System Cleanup, Validation, and Push (Session 2026-05-29)
+
+We performed final repository auditing, cleanups, error checking, and code push:
+1. **Dangling/Stale Files Check**: Verified using `git clean -fdn` that there are no untracked, dangling, or garbage temporary files remaining in the repository.
+2. **Syntax/Error Validation**: Checked all modified source files (`stable_audio_3/model.py`, `app_server.py`, and `static/app.js`) for Python/JS syntax validity and code correctness. All files compiled cleanly without errors.
+3. **Bloat Analysis**: Audited files over 10MB to ensure large model weights (`.safetensors`) and virtualenv files (`.venv`) are correctly ignored via `.gitignore`, keeping the repository footprint minimal and clean.
+4. **Local Commits & Push**: Staged all modifications and pushed all staged changes to the remote repository.
+
+
