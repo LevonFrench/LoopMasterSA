@@ -414,9 +414,36 @@ Verified the code syntax and ran automated tests on the model execution library 
 - **GitHub Library Search**: Identified **Tuna.js** as a compatible library that outputs standard Web Audio `AudioNode` structures for modular effects (Chorus, Tremolo, Phaser, Bitcrusher), and **Superpowered SDK** for WebAssembly-based time-stretching/pitch-shifting.
 - **Pytest Suite Verification**: Ran `python -m pytest` using the virtual environment to ensure stable-audio-3 logic is intact. The entire suite successfully compiled and executed, returning 76 passed and 2 skipped tests.
 
-## Completed Work: Codebase Cleanup, Gitignore, and Waveform End Gap Fix (2026-05-28)
-We completed the final codebase hygiene, version control rules, visual bug fixes, and knowledge base updates:
-1. **Waveform End Gap Fix**: Resolved the visual gap at the end of waveform cards. By calculating `playSamples` using the `activeDuration` and `sampleRate` instead of drawing the full file length (which includes the 2.0-second fade-out/headroom tail padding), we align the waveform drawing exactly with the loop duration. This removes the flat line gap and ensures the playhead sweeps all the way to the rightmost edge before looping.
-2. **Stray File Clearance**: Deleted all untracked browser testing/verification screenshots (`generation-done.png`, `playing-state-fixed.png`, `playing-state.png`) from the project root.
-3. **Gitignore Updates**: Updated the root `.gitignore` file to add `.ogg` and `.zip` outputs under the AI-generated outputs section, preventing temporary media files and zips from cluttering version control.
 4. **Wiki Knowledge Base Sync**: Updated the technical wiki `Home.md` and user documentation `User-Guide.md` in `loopmaster/wiki/` to add details about the BF16 precision model option, document the newly integrated Tuna.js effects (Chorus, Phaser, Bitcrusher), update the macro controls and modulation matrix routing parameters, and remove obsolete Valentine saturation/compression references.
+
+## Completed Work: UI/UX Analysis and Redesign Proposal (2026-05-29)
+We performed a thorough analysis of the LoopMaster SA3 user interface and drafted a comprehensive redesign proposal using the rules and assets inside the newly cloned `ui-ux-pro-max-skill` repository:
+1. **OLED Dark Mode**: Proposed a true black (`#07070C`) and midnight surface (`#0F0F18`) theme color palette, optimized for dark studio environments and power efficiency.
+2. **Glassmorphism**: Defined translucent panels and hover overlay triggers to hide complex actions (Outpaint, Delete, Lock) on audio cards when not actively needed.
+3. **Typography pairing**: Recommended replacing default styling with Google Fonts' `Righteous`/`Space Grotesk` (for headings/logo) and `Poppins` (for body labels).
+4. **Pro Audio Rotary Dials**: Outlined a layout shift replacing track row sliders with SVG/CSS-based circular knobs for Volume, Pan, and Macro controls.
+5. **Eurorack modular aesthetics**: Recommended modeling LFO drawers like synthesizer rack modules with blinking phase LEDs and animated signal routing feeds in the Modulation Matrix.
+6. **Proposal Artifact**: Created the [design_system_proposal.md](file:///C:/Users/hotgh/.gemini/antigravity-ide/brain/477bc4b9-2ec1-494c-8d27-15edca22582b/design_system_proposal.md) artifact to document the full redesign roadmap.
+
+## Completed Work: UI/UX Redesign Implementation - Phase 1 & 2 (2026-05-29)
+Following automatic user approval of the redesign plan, we implemented the following visual updates:
+1. **OLED Cinematic Dark Theme & typography**:
+   - Replaced fonts by importing Google Fonts' `Poppins`, `Righteous`, and `Space Mono` in `app.css`.
+   - Set the sans-serif font to `Poppins`, and monospace to `Space Mono`.
+   - Updated `:root` tokens in `app.css` to adopt the custom cinematic OLED palette (`#07070C` base background, `#0F0F18` surfaces, translucent HSL-tailored card backings).
+   - Replaced the radial gradient background in `body::before` with a premium 3-blob ambient glow composition.
+   - Updated `.app-title` in `app.css` to use `Righteous` with uppercase styling and adjusted spacing.
+2. **Breathing Lock Animation**:
+   - Added `@keyframes lock-breath` to `app.css` which slowly oscillates card shadows and border opacities.
+   - Tied this breathing animation to `.audio-card.card-is-locked` to highlight locked segments.
+3. **Card Hover Action Overlay (Frosted glass shields)**:
+   - Restructured the card template in `app.js` to place action buttons (`Remix`, `Reverse`, `Lock`, `Delete`, `2x`, `4x`) inside a dedicated `.card-hover-overlay` block.
+   - Added styling in `app.css` setting the overlay absolute positioned, hidden by default (`opacity: 0`), and fading in with backdrop blur (`blur(6px)`) when hovering over the card.
+4. **Syntax Error Resolution**:
+   - Located and removed a duplicate template literal closer ``;`` on line 2440 in `app.js` that was breaking client-side script compilation, confirming syntactic correctness via Node CLI.
+
+## Completed FX Redesign: Track FX Drawer Rotary Knobs (Completed)
+- **HTML Grid Layout & CSS**: Swapped standard linear input ranges in the FX drawer with custom circular knobs (`.fx-knob` and `.fx-mini-knob` divs) formatted as a 6x2 grid inside `app.css`. The Macro Controls panel is positioned as the first slot of the second row.
+- **Split Delay/Reverb Toggles**: Replaced the unified "Ælapse" block with independent "Tape Delay" and "Spring Reverb" send channels. Tapping their bypass buttons toggles their respective AudioNode sends via dry/wet gain routing.
+- **Offline WAV Renderer Sync**: Updated the `OfflineAudioContext` build pipeline inside `runRenderMix` to process Tuna nodes (Chorus, Phaser, Bitcrusher) and independent delay/reverb bypass paths.
+- **Copy/Paste & Save/Load Integration**: Updated track and FX copy/paste setting buffers, track serialization routines, and project save/load schemas to support split delay/reverb bypasses and Chorus, Phaser, and Bitcrusher mix values. Verified syntax check using Node CLI.

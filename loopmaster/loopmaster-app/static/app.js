@@ -1394,17 +1394,11 @@
 
     function updateAelapseBypass(track) {
         const ctx = ensureAudioCtx();
-        if (track.aelapseEnabled) {
-            const delayMix = track.aelapseDelayMix;
-            const reverbMix = track.aelapseReverbMix;
-            track.aelapseDelayGainNode.gain.setTargetAtTime(delayMix, ctx.currentTime, 0.01);
-            track.aelapseReverbGainNode.gain.setTargetAtTime(reverbMix, ctx.currentTime, 0.01);
-            track.aelapseDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
-        } else {
-            track.aelapseDelayGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
-            track.aelapseReverbGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
-            track.aelapseDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
-        }
+        const delayMix = track.aelapseDelayEnabled ? track.aelapseDelayMix : 0.0;
+        const reverbMix = track.aelapseReverbEnabled ? track.aelapseReverbMix : 0.0;
+        track.aelapseDelayGainNode.gain.setTargetAtTime(delayMix, ctx.currentTime, 0.01);
+        track.aelapseReverbGainNode.gain.setTargetAtTime(reverbMix, ctx.currentTime, 0.01);
+        track.aelapseDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
     }
 
     function updateFiltrBypass(track) {
@@ -1432,20 +1426,38 @@
     }
 
     function updateTunaChorusBypass(track) {
-        if (track.tunaChorusNode) {
-            track.tunaChorusNode.bypass = !track.tunaChorusEnabled;
+        const ctx = ensureAudioCtx();
+        if (track.tunaChorusEnabled) {
+            const mix = track.tunaChorusMix;
+            track.tunaChorusDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
+            track.tunaChorusWetGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+        } else {
+            track.tunaChorusDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+            track.tunaChorusWetGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
         }
     }
 
     function updateTunaPhaserBypass(track) {
-        if (track.tunaPhaserNode) {
-            track.tunaPhaserNode.bypass = !track.tunaPhaserEnabled;
+        const ctx = ensureAudioCtx();
+        if (track.tunaPhaserEnabled) {
+            const mix = track.tunaPhaserMix;
+            track.tunaPhaserDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
+            track.tunaPhaserWetGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+        } else {
+            track.tunaPhaserDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+            track.tunaPhaserWetGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
         }
     }
 
     function updateTunaBitcrusherBypass(track) {
-        if (track.tunaBitcrusherNode) {
-            track.tunaBitcrusherNode.bypass = !track.tunaBitcrusherEnabled;
+        const ctx = ensureAudioCtx();
+        if (track.tunaBitcrusherEnabled) {
+            const mix = track.tunaBitcrusherMix;
+            track.tunaBitcrusherDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
+            track.tunaBitcrusherWetGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+        } else {
+            track.tunaBitcrusherDryGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
+            track.tunaBitcrusherWetGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
         }
     }
 
@@ -1530,6 +1542,95 @@
                 }
             }
         }
+    }
+
+    function initKnob(knobEl, onChange, options = {}) {
+        const min = options.min !== undefined ? options.min : 0;
+        const max = options.max !== undefined ? options.max : 100;
+        const step = options.step !== undefined ? options.step : 1;
+        const defaultVal = options.defaultVal !== undefined ? options.defaultVal : min;
+        let value = options.value !== undefined ? options.value : defaultVal;
+        const sensitivity = options.sensitivity || 0.005;
+
+        function updateKnobRotation(val) {
+            const fraction = (val - min) / (max - min);
+            const deg = -135 + fraction * 270;
+            const indicator = knobEl.querySelector('.knob-indicator, .macro-knob-indicator, .pan-knob-indicator, .mini-knob-indicator');
+            if (indicator) {
+                indicator.style.transform = `rotate(${deg}deg)`;
+            }
+        }
+
+        // Set initial rotation
+        updateKnobRotation(value);
+
+        // Define .value property on the DOM element
+        Object.defineProperty(knobEl, 'value', {
+            get: () => value,
+            set: (val) => {
+                const parsed = parseFloat(val);
+                if (isNaN(parsed)) return;
+                value = Math.max(min, Math.min(max, parsed));
+                updateKnobRotation(value);
+                onChange(value);
+            },
+            configurable: true
+        });
+
+        let dragging = false;
+        let startY = 0;
+        let startVal = 0;
+
+        knobEl.addEventListener('mousedown', (e) => {
+            if (knobEl.disabled) return;
+            if (knobEl.closest('.track-wrapper')?.classList.contains('track-locked')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            dragging = true;
+            startY = e.clientY;
+            startVal = value;
+            document.body.style.cursor = 'ns-resize';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const deltaY = startY - e.clientY;
+            const range = max - min;
+            const valDelta = deltaY * sensitivity * range;
+            let newVal = startVal + valDelta;
+            if (step > 0) {
+                newVal = Math.round(newVal / step) * step;
+            }
+            newVal = Math.max(min, Math.min(max, newVal));
+            
+            value = newVal;
+            updateKnobRotation(value);
+            onChange(value);
+            knobEl.dispatchEvent(new Event('input'));
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (dragging) {
+                dragging = false;
+                document.body.style.cursor = '';
+            }
+        });
+
+        knobEl.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            if (knobEl.disabled) return;
+            if (knobEl.closest('.track-wrapper')?.classList.contains('track-locked')) return;
+            value = defaultVal;
+            updateKnobRotation(value);
+            onChange(value);
+            knobEl.dispatchEvent(new Event('input'));
+        });
+
+        knobEl.addEventListener('input', () => {
+            updateKnobRotation(value);
+        });
+
+        return knobEl;
     }
 
     function updateTrackLockState(track) {
@@ -1681,25 +1782,54 @@
             feedback: 0.2,
             delay: 0.0045,
             depth: 0.7,
-            bypass: true
+            bypass: false // always process internally
         });
+        const tunaChorusDryGain = ctx.createGain();
+        tunaChorusDryGain.gain.value = 0.5;
+        const tunaChorusWetGain = ctx.createGain();
+        tunaChorusWetGain.gain.value = 0.5;
+        const tunaChorusSum = ctx.createGain();
+
+        screamSum.connect(tunaChorusDryGain);
+        tunaChorusDryGain.connect(tunaChorusSum);
+        screamSum.connect(tunaChorusNode.input);
+        tunaChorusNode.output.connect(tunaChorusWetGain);
+        tunaChorusWetGain.connect(tunaChorusSum);
 
         const tunaPhaserNode = new tunaInstance.Phaser({
             rate: 1.2,
             feedback: 0.2,
             depth: 0.6,
-            bypass: true
+            bypass: false // always process internally
         });
+        const tunaPhaserDryGain = ctx.createGain();
+        tunaPhaserDryGain.gain.value = 0.5;
+        const tunaPhaserWetGain = ctx.createGain();
+        tunaPhaserWetGain.gain.value = 0.5;
+        const tunaPhaserSum = ctx.createGain();
+
+        tunaChorusSum.connect(tunaPhaserDryGain);
+        tunaPhaserDryGain.connect(tunaPhaserSum);
+        tunaChorusSum.connect(tunaPhaserNode.input);
+        tunaPhaserNode.output.connect(tunaPhaserWetGain);
+        tunaPhaserWetGain.connect(tunaPhaserSum);
 
         const tunaBitcrusherNode = new tunaInstance.Bitcrusher({
-            bits: 16,
-            normfreq: 1.0,
-            bypass: true
+            bits: 8,
+            normfreq: 0.1,
+            bypass: false // always process internally
         });
+        const tunaBitcrusherDryGain = ctx.createGain();
+        tunaBitcrusherDryGain.gain.value = 0.5;
+        const tunaBitcrusherWetGain = ctx.createGain();
+        tunaBitcrusherWetGain.gain.value = 0.5;
+        const tunaBitcrusherSum = ctx.createGain();
 
-        screamSum.connect(tunaChorusNode.input);
-        tunaChorusNode.output.connect(tunaPhaserNode.input);
-        tunaPhaserNode.output.connect(tunaBitcrusherNode.input);
+        tunaPhaserSum.connect(tunaBitcrusherDryGain);
+        tunaBitcrusherDryGain.connect(tunaBitcrusherSum);
+        tunaPhaserSum.connect(tunaBitcrusherNode.input);
+        tunaBitcrusherNode.output.connect(tunaBitcrusherWetGain);
+        tunaBitcrusherWetGain.connect(tunaBitcrusherSum);
 
         // 4. DSP Chain Stage C: Aelapse Delay & Spring Reverb (SEND EFFECT setup)
         const aelapseDryGain = ctx.createGain();
@@ -1732,16 +1862,16 @@
         
         const sendSumGain = ctx.createGain();
         
-        tunaBitcrusherNode.output.connect(aelapseDryGain);
+        tunaBitcrusherSum.connect(aelapseDryGain);
         aelapseDryGain.connect(sendSumGain);
         
-        tunaBitcrusherNode.output.connect(aelapseDelay);
+        tunaBitcrusherSum.connect(aelapseDelay);
         aelapseDelay.connect(aelapseFeedbackNode);
         aelapseFeedbackNode.connect(aelapseDelay);
         aelapseDelay.connect(aelapseDelayGain);
         aelapseDelayGain.connect(sendSumGain);
         
-        tunaBitcrusherNode.output.connect(aelapseReverb);
+        tunaBitcrusherSum.connect(aelapseReverb);
         aelapseReverb.connect(aelapseReverbGain);
         aelapseReverbGain.connect(sendSumGain);
 
@@ -1783,7 +1913,8 @@
             filtrEnabled: false,
             screamEnabled: false,
             eqEnabled: true,
-            aelapseEnabled: true,
+            aelapseDelayEnabled: true,
+            aelapseReverbEnabled: true,
             filtrDryGainNode: filtrDryGain,
             filtrWetGainNode: filtrWetGain,
             filtrFilterNode: filtrFilter,
@@ -1799,8 +1930,19 @@
             aelapseFeedbackNode: aelapseFeedbackNode,
             
             tunaChorusNode,
+            tunaChorusDryGainNode: tunaChorusDryGain,
+            tunaChorusWetGainNode: tunaChorusWetGain,
+            tunaChorusSumNode: tunaChorusSum,
+
             tunaPhaserNode,
+            tunaPhaserDryGainNode: tunaPhaserDryGain,
+            tunaPhaserWetGainNode: tunaPhaserWetGain,
+            tunaPhaserSumNode: tunaPhaserSum,
+
             tunaBitcrusherNode,
+            tunaBitcrusherDryGainNode: tunaBitcrusherDryGain,
+            tunaBitcrusherWetGainNode: tunaBitcrusherWetGain,
+            tunaBitcrusherSumNode: tunaBitcrusherSum,
             
             // FX state values for offline rendering
             filtrType: 'lowpass',
@@ -1837,6 +1979,7 @@
             tunaBitcrusherEnabled: false,
             tunaBitcrusherBits: 8,
             tunaBitcrusherNormfreq: 0.1,
+            tunaBitcrusherMix: 0.5,
 
             scheduledSourceNodes: [],
             nextScheduleTime: null
@@ -1904,137 +2047,388 @@
         fxDrawerEl.className = 'fx-drawer';
         fxDrawerEl.style.display = 'none';
         fxDrawerEl.innerHTML = `
-            <div class="fx-section macros-section">
-                <div class="fx-section-title" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                    <span>Macro Controls</span>
-                    <div class="fx-clipboard-btns" style="display: flex; gap: 6px;">
-                        <button class="fx-copy-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Copy FX Settings">Copy FX</button>
-                        <button class="fx-paste-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Paste FX Settings">Paste FX</button>
-                    </div>
-                </div>
-                <div class="fx-macro-knobs-row">
-                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="space" title="Space: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Space</span></div>
-                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="drive" title="Drive: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Drive</span></div>
-                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="tone" title="Tone: Flat"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Tone</span></div>
-                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="filter" title="Filter: Off"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Filter</span></div>
-                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="reso" title="Reso: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Reso</span></div>
-                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="delay" title="Delay: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Delay</span></div>
-                    <div class="macro-knob-group"><div class="fx-macro-knob" data-macro="crush" title="Crush: 0%"><div class="macro-knob-indicator"></div></div><span class="macro-knob-label">Crush</span></div>
-                </div>
-            </div>
+            <!-- Row 1 -->
+            <!-- 1. Filtr Filter -->
             <div class="fx-section filtr-section">
                 <div class="fx-section-title">
                     <span>Filtr Filter</span>
-                    <button class="fx-toggle-btn filtr-toggle" type="button">Off</button>
+                    <div class="mini-knob-group" title="Mix: 100%">
+                        <div class="fx-mini-knob filtr-mix" title="Filter Mix">
+                            <div class="mini-knob-indicator"></div>
+                        </div>
+                        <span class="mini-knob-val filtr-mix-val">100%</span>
+                        <button class="fx-toggle-btn filtr-toggle" type="button">Off</button>
+                    </div>
                 </div>
-                <div class="fx-controls-grid">
-                    <div class="fx-control-row"><label>Type</label><select class="filtr-type" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;"><option value="lowpass">LP</option><option value="bandpass">BP</option><option value="highpass">HP</option><option value="notch">Notch</option></select></div>
-                    <div class="fx-control-row"><label>Cutoff</label><input type="range" class="filtr-cutoff" min="20" max="20000" value="20000" step="1"><span class="filtr-cutoff-val">20kHz</span></div>
-                    <div class="fx-control-row"><label>Reso</label><input type="range" class="filtr-reso" min="1" max="250" value="7" step="1"><span class="filtr-reso-val">0.7</span></div>
-                    <div class="fx-control-row"><label>Mix</label><input type="range" class="filtr-mix" min="0" max="100" value="100" step="1"><span class="filtr-mix-val">100%</span></div>
+                <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
+                    <select class="filtr-type" style="width: 100%; height: 20px; font-size: 0.65rem; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-input); border-radius: 3px;">
+                        <option value="lowpass">LP</option>
+                        <option value="bandpass">BP</option>
+                        <option value="highpass">HP</option>
+                        <option value="notch">Notch</option>
+                    </select>
+                    <div class="fx-controls-grid">
+                        <div class="fx-knob-group">
+                            <span class="fx-knob-label">Cutoff</span>
+                            <div class="fx-knob filtr-cutoff" title="Cutoff">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="fx-knob-value filtr-cutoff-val">20kHz</span>
+                        </div>
+                        <div class="fx-knob-group">
+                            <span class="fx-knob-label">Reso</span>
+                            <div class="fx-knob filtr-reso" title="Resonance">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="fx-knob-value filtr-reso-val">0.7</span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="fx-section scream-section">
-                <div class="fx-section-title">
-                    <span>Scream Distortion</span>
-                    <button class="fx-toggle-btn scream-toggle" type="button">Off</button>
-                </div>
-                <div class="fx-controls-grid">
-                    <div class="fx-control-row"><label>Cutoff</label><input type="range" class="scream-cutoff" min="200" max="16000" value="8000" step="1"><span class="scream-cutoff-val">8.0kHz</span></div>
-                    <div class="fx-control-row"><label>Scream</label><input type="range" class="scream-amount" min="0" max="100" value="0" step="1"><span class="scream-amount-val">0%</span></div>
-                    <div class="fx-control-row"><label>Mix</label><input type="range" class="scream-mix" min="0" max="100" value="100" step="1"><span class="scream-mix-val">100%</span></div>
-                </div>
-            </div>
+
+            <!-- 2. Luftikus EQ -->
             <div class="fx-section eq-section">
                 <div class="fx-section-title">
-                    <span>Luftikus Analog EQ</span>
+                    <span>Luftikus EQ</span>
                     <button class="fx-toggle-btn eq-toggle" type="button">On</button>
                 </div>
-                <div class="fx-controls-grid eq-sliders-grid">
-                    <div class="fx-control-row"><label>10 Hz</label><input type="range" class="eq-slider" data-band="0" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
-                    <div class="fx-control-row"><label>40 Hz</label><input type="range" class="eq-slider" data-band="1" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
-                    <div class="fx-control-row"><label>160 Hz</label><input type="range" class="eq-slider" data-band="2" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
-                    <div class="fx-control-row"><label>640 Hz</label><input type="range" class="eq-slider" data-band="3" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
-                    <div class="fx-control-row"><label>2.5 kHz</label><input type="range" class="eq-slider" data-band="4" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
-                    <div class="fx-control-row"><label>Air Band</label><input type="range" class="eq-slider" data-band="5" min="-12" max="12" value="0" step="0.5"><span class="eq-val">0.0dB</span></div>
+                <div class="eq-knobs-grid">
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">10Hz</span>
+                        <div class="fx-knob eq-slider" data-band="0" title="10 Hz Gain">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value eq-val">0.0dB</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">40Hz</span>
+                        <div class="fx-knob eq-slider" data-band="1" title="40 Hz Gain">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value eq-val">0.0dB</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">160Hz</span>
+                        <div class="fx-knob eq-slider" data-band="2" title="160 Hz Gain">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value eq-val">0.0dB</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">640Hz</span>
+                        <div class="fx-knob eq-slider" data-band="3" title="640 Hz Gain">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value eq-val">0.0dB</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">2.5k</span>
+                        <div class="fx-knob eq-slider" data-band="4" title="2.5 kHz Gain">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value eq-val">0.0dB</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Air</span>
+                        <div class="fx-knob eq-slider" data-band="5" title="Air Band Gain">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value eq-val">0.0dB</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="fx-section aelapse-section">
+            <!-- 3. Scream Distortion -->
+            <div class="fx-section scream-section">
                 <div class="fx-section-title">
-                    <span>Ælapse Tape Delay & Spring Reverb</span>
-                    <button class="fx-toggle-btn aelapse-toggle" type="button">On</button>
+                    <span>Scream Dist</span>
+                    <div class="mini-knob-group" title="Mix: 100%">
+                        <div class="fx-mini-knob scream-mix" title="Scream Mix">
+                            <div class="mini-knob-indicator"></div>
+                        </div>
+                        <span class="mini-knob-val scream-mix-val">100%</span>
+                        <button class="fx-toggle-btn scream-toggle" type="button">Off</button>
+                    </div>
                 </div>
                 <div class="fx-controls-grid">
-                    <div class="fx-control-row"><label>Sync</label><input type="range" class="aelapse-sync" min="0" max="8" value="2" step="1"><span class="aelapse-sync-val">1/8</span></div>
-                    <div class="fx-control-row"><label>Delay Mix</label><input type="range" class="aelapse-mix" min="0" max="100" value="0" step="5"><span class="aelapse-mix-val">0%</span></div>
-                    <div class="fx-control-row"><label>Reverb Mix</label><input type="range" class="aelapse-reverb-mix" min="0" max="100" value="0" step="5"><span class="aelapse-reverb-val">0%</span></div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Cutoff</span>
+                        <div class="fx-knob scream-cutoff" title="Scream Cutoff">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value scream-cutoff-val">8.0kHz</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Scream</span>
+                        <div class="fx-knob scream-amount" title="Scream Amount">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value scream-amount-val">0%</span>
+                    </div>
                 </div>
             </div>
 
+            <!-- 4. Tuna Chorus -->
             <div class="fx-section chorus-section is-bypassed">
                 <div class="fx-section-title">
                     <span>Tuna Chorus</span>
-                    <button class="fx-toggle-btn chorus-toggle is-off" type="button">Off</button>
-                </div>
-                <div class="fx-controls-grid">
-                    <div class="fx-control-row">
-                        <label>Sync</label>
-                        <select class="chorus-rate-sync" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;">
-                            <option value="Free">Free</option>
-                            <option value="4/1">4/1</option>
-                            <option value="8/1">8/1</option>
-                            <option value="16/1">16/1</option>
-                            <option value="32/1">32/1</option>
-                            <option value="1/1">1/1</option>
-                            <option value="1/2">1/2</option>
-                            <option value="1/4">1/4</option>
-                            <option value="1/8">1/8</option>
-                            <option value="1/16">1/16</option>
-                        </select>
+                    <div class="mini-knob-group" title="Mix: 50%">
+                        <div class="fx-mini-knob chorus-mix" title="Chorus Mix">
+                            <div class="mini-knob-indicator"></div>
+                        </div>
+                        <span class="mini-knob-val chorus-mix-val">50%</span>
+                        <button class="fx-toggle-btn chorus-toggle is-off" type="button">Off</button>
                     </div>
-                    <div class="fx-control-row"><label>Rate</label><input type="range" class="chorus-rate" min="0.01" max="8.0" value="1.5" step="0.01"><span class="chorus-rate-val">1.5Hz</span></div>
-                    <div class="fx-control-row"><label>Depth</label><input type="range" class="chorus-depth" min="0" max="100" value="70" step="1"><span class="chorus-depth-val">70%</span></div>
-                    <div class="fx-control-row"><label>Feedback</label><input type="range" class="chorus-feedback" min="0" max="95" value="20" step="1"><span class="chorus-feedback-val">20%</span></div>
+                </div>
+                <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
+                    <select class="chorus-rate-sync" style="width: 100%; height: 20px; font-size: 0.65rem; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-input); border-radius: 3px;">
+                        <option value="Free">Free</option>
+                        <option value="4/1">4/1</option>
+                        <option value="8/1">8/1</option>
+                        <option value="16/1">16/1</option>
+                        <option value="32/1">32/1</option>
+                        <option value="1/1">1/1</option>
+                        <option value="1/2">1/2</option>
+                        <option value="1/4">1/4</option>
+                        <option value="1/8">1/8</option>
+                        <option value="1/16">1/16</option>
+                    </select>
+                    <div class="chorus-knobs-grid">
+                        <div class="fx-knob-group">
+                            <span class="fx-knob-label">Rate</span>
+                            <div class="fx-knob chorus-rate" title="Chorus Rate">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="fx-knob-value chorus-rate-val">1.5Hz</span>
+                        </div>
+                        <div class="fx-knob-group">
+                            <span class="fx-knob-label">Depth</span>
+                            <div class="fx-knob chorus-depth" title="Chorus Depth">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="fx-knob-value chorus-depth-val">70%</span>
+                        </div>
+                        <div class="fx-knob-group">
+                            <span class="fx-knob-label">Feedbk</span>
+                            <div class="fx-knob chorus-feedback" title="Chorus Feedback">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="fx-knob-value chorus-feedback-val">20%</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
+            <!-- 5. Tuna Phaser -->
             <div class="fx-section phaser-section is-bypassed">
                 <div class="fx-section-title">
                     <span>Tuna Phaser</span>
-                    <button class="fx-toggle-btn phaser-toggle is-off" type="button">Off</button>
-                </div>
-                <div class="fx-controls-grid">
-                    <div class="fx-control-row">
-                        <label>Sync</label>
-                        <select class="phaser-rate-sync" style="flex:1; height:20px; font-size:0.65rem; background:var(--bg-input); color:var(--text-primary); border:1px solid var(--border-input); border-radius:3px;">
-                            <option value="Free">Free</option>
-                            <option value="4/1">4/1</option>
-                            <option value="8/1">8/1</option>
-                            <option value="16/1">16/1</option>
-                            <option value="32/1">32/1</option>
-                            <option value="1/1">1/1</option>
-                            <option value="1/2">1/2</option>
-                            <option value="1/4">1/4</option>
-                            <option value="1/8">1/8</option>
-                            <option value="1/16">1/16</option>
-                        </select>
+                    <div class="mini-knob-group" title="Mix: 50%">
+                        <div class="fx-mini-knob phaser-mix" title="Phaser Mix">
+                            <div class="mini-knob-indicator"></div>
+                        </div>
+                        <span class="mini-knob-val phaser-mix-val">50%</span>
+                        <button class="fx-toggle-btn phaser-toggle is-off" type="button">Off</button>
                     </div>
-                    <div class="fx-control-row"><label>Rate</label><input type="range" class="phaser-rate" min="0.01" max="8.0" value="1.2" step="0.01"><span class="phaser-rate-val">1.2Hz</span></div>
-                    <div class="fx-control-row"><label>Depth</label><input type="range" class="phaser-depth" min="0" max="100" value="60" step="1"><span class="phaser-depth-val">60%</span></div>
-                    <div class="fx-control-row"><label>Feedback</label><input type="range" class="phaser-feedback" min="0" max="90" value="20" step="1"><span class="phaser-feedback-val">20%</span></div>
+                </div>
+                <div style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
+                    <select class="phaser-rate-sync" style="width: 100%; height: 20px; font-size: 0.65rem; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-input); border-radius: 3px;">
+                        <option value="Free">Free</option>
+                        <option value="4/1">4/1</option>
+                        <option value="8/1">8/1</option>
+                        <option value="16/1">16/1</option>
+                        <option value="32/1">32/1</option>
+                        <option value="1/1">1/1</option>
+                        <option value="1/2">1/2</option>
+                        <option value="1/4">1/4</option>
+                        <option value="1/8">1/8</option>
+                        <option value="1/16">1/16</option>
+                    </select>
+                    <div class="chorus-knobs-grid">
+                        <div class="fx-knob-group">
+                            <span class="fx-knob-label">Rate</span>
+                            <div class="fx-knob phaser-rate" title="Phaser Rate">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="fx-knob-value phaser-rate-val">1.2Hz</span>
+                        </div>
+                        <div class="fx-knob-group">
+                            <span class="fx-knob-label">Depth</span>
+                            <div class="fx-knob phaser-depth" title="Phaser Depth">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="fx-knob-value phaser-depth-val">60%</span>
+                        </div>
+                        <div class="fx-knob-group">
+                            <span class="fx-knob-label">Feedbk</span>
+                            <div class="fx-knob phaser-feedback" title="Phaser Feedback">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="fx-knob-value phaser-feedback-val">20%</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
+            <!-- 6. Tuna Bitcrusher -->
             <div class="fx-section crusher-section is-bypassed">
                 <div class="fx-section-title">
-                    <span>Tuna Crusher</span>
-                    <button class="fx-toggle-btn crusher-toggle is-off" type="button">Off</button>
+                    <span>Tuna Crush</span>
+                    <div class="mini-knob-group" title="Mix: 50%">
+                        <div class="fx-mini-knob crusher-mix" title="Crusher Mix">
+                            <div class="mini-knob-indicator"></div>
+                        </div>
+                        <span class="mini-knob-val crusher-mix-val">50%</span>
+                        <button class="fx-toggle-btn crusher-toggle is-off" type="button">Off</button>
+                    </div>
                 </div>
                 <div class="fx-controls-grid">
-                    <div class="fx-control-row"><label>Bits</label><input type="range" class="crusher-bits" min="1" max="16" value="8" step="1"><span class="crusher-bits-val">8 bits</span></div>
-                    <div class="fx-control-row"><label>Freq Div</label><input type="range" class="crusher-normfreq" min="0.001" max="1.0" value="0.1" step="0.001"><span class="crusher-normfreq-val">0.10</span></div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Bits</span>
+                        <div class="fx-knob crusher-bits" title="Crusher Bits">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value crusher-bits-val">8 bits</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Freq Div</span>
+                        <div class="fx-knob crusher-normfreq" title="Crusher Frequency Division">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value crusher-normfreq-val">0.10</span>
+                    </div>
                 </div>
+            </div>
+
+            <!-- Row 2 -->
+            <!-- 7. Macro Controls -->
+            <div class="fx-section macros-section">
+                <div class="fx-section-title" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span>Macros</span>
+                    <div class="fx-clipboard-btns" style="display: flex; gap: 6px;">
+                        <button class="fx-copy-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Copy FX Settings">Copy</button>
+                        <button class="fx-paste-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Paste FX Settings">Paste</button>
+                    </div>
+                </div>
+                <div class="macros-knobs-grid">
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Space</span>
+                        <div class="fx-macro-knob" data-macro="space" title="Space: 0%">
+                            <div class="macro-knob-indicator"></div>
+                        </div>
+                        <span class="macro-knob-label">Space</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Drive</span>
+                        <div class="fx-macro-knob" data-macro="drive" title="Drive: 0%">
+                            <div class="macro-knob-indicator"></div>
+                        </div>
+                        <span class="macro-knob-label">Drive</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Tone</span>
+                        <div class="fx-macro-knob" data-macro="tone" title="Tone: Flat">
+                            <div class="macro-knob-indicator"></div>
+                        </div>
+                        <span class="macro-knob-label">Tone</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Filter</span>
+                        <div class="fx-macro-knob" data-macro="filter" title="Filter: Off">
+                            <div class="macro-knob-indicator"></div>
+                        </div>
+                        <span class="macro-knob-label">Filter</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Reso</span>
+                        <div class="fx-macro-knob" data-macro="reso" title="Reso: 0%">
+                            <div class="macro-knob-indicator"></div>
+                        </div>
+                        <span class="macro-knob-label">Reso</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Delay</span>
+                        <div class="fx-macro-knob" data-macro="delay" title="Delay: 0%">
+                            <div class="macro-knob-indicator"></div>
+                        </div>
+                        <span class="macro-knob-label">Delay</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Feedbk</span>
+                        <div class="fx-macro-knob" data-macro="feedback" title="Feedback: 0%">
+                            <div class="macro-knob-indicator"></div>
+                        </div>
+                        <span class="macro-knob-label">Feedbk</span>
+                    </div>
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Crush</span>
+                        <div class="fx-macro-knob" data-macro="crush" title="Crush: 0%">
+                            <div class="macro-knob-indicator"></div>
+                        </div>
+                        <span class="macro-knob-label">Crush</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 8. Tape Delay -->
+            <div class="fx-section delay-section">
+                <div class="fx-section-title">
+                    <span>Tape Delay</span>
+                    <div class="mini-knob-group" title="Mix: 0%">
+                        <div class="fx-mini-knob aelapse-mix" title="Delay Mix">
+                            <div class="mini-knob-indicator"></div>
+                        </div>
+                        <span class="mini-knob-val aelapse-mix-val">0%</span>
+                        <button class="fx-toggle-btn aelapse-delay-toggle" type="button">On</button>
+                    </div>
+                </div>
+                <div class="fx-controls-grid" style="grid-template-columns: 1fr;">
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Sync</span>
+                        <div class="fx-knob aelapse-sync" title="Delay Tempo Sync">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value aelapse-sync-val">1/8</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 9. Spring Reverb -->
+            <div class="fx-section reverb-section">
+                <div class="fx-section-title">
+                    <span>Spring Rev</span>
+                    <div class="mini-knob-group" title="Mix: 0%">
+                        <div class="fx-mini-knob aelapse-reverb-mix" title="Reverb Mix">
+                            <div class="mini-knob-indicator"></div>
+                        </div>
+                        <span class="mini-knob-val aelapse-reverb-val">0%</span>
+                        <button class="fx-toggle-btn aelapse-reverb-toggle" type="button">On</button>
+                    </div>
+                </div>
+                <div class="fx-controls-grid" style="grid-template-columns: 1fr;">
+                    <div class="fx-knob-group">
+                        <span class="fx-knob-label">Size</span>
+                        <div class="fx-knob aelapse-reverb-size" title="Reverb Size">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="fx-knob-value aelapse-reverb-size-val">2.0s</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 10. Empty Slot -->
+            <div class="fx-section empty-slot">
+                <div style="font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);">Empty Slot</div>
+            </div>
+
+            <!-- 11. Empty Slot -->
+            <div class="fx-section empty-slot">
+                <div style="font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);">Empty Slot</div>
+            </div>
+
+            <!-- 12. Empty Slot -->
+            <div class="fx-section empty-slot">
+                <div style="font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);">Empty Slot</div>
             </div>
         `;
 
@@ -2112,7 +2506,8 @@
                         filtrEnabled: track.filtrEnabled,
                         screamEnabled: track.screamEnabled,
                         eqEnabled: track.eqEnabled,
-                        aelapseEnabled: track.aelapseEnabled,
+                        aelapseDelayEnabled: track.aelapseDelayEnabled,
+                        aelapseReverbEnabled: track.aelapseReverbEnabled,
                         
                         filtrType: fxDrawerEl.querySelector('.filtr-type').value,
                         filtrCutoff: fxDrawerEl.querySelector('.filtr-cutoff').value,
@@ -2128,22 +2523,26 @@
                         aelapseSync: fxDrawerEl.querySelector('.aelapse-sync').value,
                         aelapseMix: fxDrawerEl.querySelector('.aelapse-mix').value,
                         aelapseReverbMix: fxDrawerEl.querySelector('.aelapse-reverb-mix').value,
+                        aelapseReverbSize: fxDrawerEl.querySelector('.aelapse-reverb-size').value,
 
                         tunaChorusEnabled: track.tunaChorusEnabled,
                         tunaChorusRateSync: fxDrawerEl.querySelector('.chorus-rate-sync').value,
                         tunaChorusRate: fxDrawerEl.querySelector('.chorus-rate').value,
                         tunaChorusDepth: fxDrawerEl.querySelector('.chorus-depth').value,
                         tunaChorusFeedback: fxDrawerEl.querySelector('.chorus-feedback').value,
+                        tunaChorusMix: fxDrawerEl.querySelector('.chorus-mix').value,
 
                         tunaPhaserEnabled: track.tunaPhaserEnabled,
                         tunaPhaserRateSync: fxDrawerEl.querySelector('.phaser-rate-sync').value,
                         tunaPhaserRate: fxDrawerEl.querySelector('.phaser-rate').value,
                         tunaPhaserDepth: fxDrawerEl.querySelector('.phaser-depth').value,
                         tunaPhaserFeedback: fxDrawerEl.querySelector('.phaser-feedback').value,
+                        tunaPhaserMix: fxDrawerEl.querySelector('.phaser-mix').value,
 
                         tunaBitcrusherEnabled: track.tunaBitcrusherEnabled,
                         tunaBitcrusherBits: fxDrawerEl.querySelector('.crusher-bits').value,
                         tunaBitcrusherNormfreq: fxDrawerEl.querySelector('.crusher-normfreq').value,
+                        tunaBitcrusherMix: fxDrawerEl.querySelector('.crusher-mix').value,
 
                         macros: {
                             space: fxMacroState.space ? fxMacroState.space.value : 0,
@@ -2152,6 +2551,7 @@
                             filter: fxMacroState.filter ? fxMacroState.filter.value : 50,
                             reso: fxMacroState.reso ? fxMacroState.reso.value : 0,
                             delay: fxMacroState.delay ? fxMacroState.delay.value : 0,
+                            feedback: fxMacroState.feedback ? fxMacroState.feedback.value : 0,
                             crush: fxMacroState.crush ? fxMacroState.crush.value : 0,
                         }
                     }
@@ -2234,15 +2634,29 @@
                     screamSection.classList.toggle('is-bypassed', !track.screamEnabled);
                 }
                 updateScreamBypass(track);
-                track.aelapseEnabled = fx.aelapseEnabled;
-                const aeToggleBtn = fxDrawerEl.querySelector('.aelapse-toggle');
-                if (aeToggleBtn) {
-                    aeToggleBtn.textContent = track.aelapseEnabled ? 'On' : 'Bypass';
-                    aeToggleBtn.classList.toggle('is-off', !track.aelapseEnabled);
+
+                // Split delay
+                track.aelapseDelayEnabled = fx.aelapseDelayEnabled;
+                const aeDelayToggleBtn = fxDrawerEl.querySelector('.aelapse-delay-toggle');
+                if (aeDelayToggleBtn) {
+                    aeDelayToggleBtn.textContent = track.aelapseDelayEnabled ? 'On' : 'Off';
+                    aeDelayToggleBtn.classList.toggle('is-off', !track.aelapseDelayEnabled);
                 }
-                const aeSection = fxDrawerEl.querySelector('.aelapse-section');
-                if (aeSection) {
-                    aeSection.classList.toggle('is-bypassed', !track.aelapseEnabled);
+                const delaySection = fxDrawerEl.querySelector('.delay-section');
+                if (delaySection) {
+                    delaySection.classList.toggle('is-bypassed', !track.aelapseDelayEnabled);
+                }
+
+                // Split Reverb
+                track.aelapseReverbEnabled = fx.aelapseReverbEnabled;
+                const aeReverbToggleBtn = fxDrawerEl.querySelector('.aelapse-reverb-toggle');
+                if (aeReverbToggleBtn) {
+                    aeReverbToggleBtn.textContent = track.aelapseReverbEnabled ? 'On' : 'Off';
+                    aeReverbToggleBtn.classList.toggle('is-off', !track.aelapseReverbEnabled);
+                }
+                const reverbSection = fxDrawerEl.querySelector('.reverb-section');
+                if (reverbSection) {
+                    reverbSection.classList.toggle('is-bypassed', !track.aelapseReverbEnabled);
                 }
                 updateAelapseBypass(track);
 
@@ -2298,16 +2712,20 @@
                     '.aelapse-sync': fx.aelapseSync,
                     '.aelapse-mix': fx.aelapseMix,
                     '.aelapse-reverb-mix': fx.aelapseReverbMix,
+                    '.aelapse-reverb-size': fx.aelapseReverbSize,
                     '.chorus-rate-sync': fx.tunaChorusRateSync,
                     '.chorus-rate': fx.tunaChorusRate,
                     '.chorus-depth': fx.tunaChorusDepth,
                     '.chorus-feedback': fx.tunaChorusFeedback,
+                    '.chorus-mix': fx.tunaChorusMix,
                     '.phaser-rate-sync': fx.tunaPhaserRateSync,
                     '.phaser-rate': fx.tunaPhaserRate,
                     '.phaser-depth': fx.tunaPhaserDepth,
                     '.phaser-feedback': fx.tunaPhaserFeedback,
+                    '.phaser-mix': fx.tunaPhaserMix,
                     '.crusher-bits': fx.tunaBitcrusherBits,
                     '.crusher-normfreq': fx.tunaBitcrusherNormfreq,
+                    '.crusher-mix': fx.tunaBitcrusherMix,
                 };
 
                 for (const selector in sliders) {
@@ -2577,21 +2995,18 @@
                         }
                         eqSlidersList.forEach((slider, b) => {
                             slider.value = bandGains[b];
-                            slider.dispatchEvent(new Event('input'));
                         });
                     }
                 } else if (param === 'dlyMix') {
                     const slider = track.wrapper.querySelector('.aelapse-mix');
                     if (slider) {
                         slider.value = value;
-                        slider.dispatchEvent(new Event('input'));
                     }
                     knobEl.title = `Delay: ${Math.round(value * 0.75)}%`;
                 } else if (param === 'revMix') {
                     const slider = track.wrapper.querySelector('.aelapse-reverb-mix');
                     if (slider) {
                         slider.value = value;
-                        slider.dispatchEvent(new Event('input'));
                     }
                     knobEl.title = `Reverb: ${Math.round(value * 0.80)}%`;
                 }
@@ -2654,14 +3069,20 @@
         track.__aelapseFbNode = aelapseFeedbackNode;
 
         // 10. Wire FX drawer slider event listeners
+        // 10. Wire FX drawer parameter knobs
         const eqSliders = fxDrawerEl.querySelectorAll('.eq-slider');
         const eqVals = fxDrawerEl.querySelectorAll('.eq-val');
         eqSliders.forEach((slider, b) => {
-            slider.addEventListener('input', () => {
-                const val = parseFloat(slider.value);
+            initKnob(slider, (val) => {
                 eqVals[b].textContent = (val >= 0 ? '+' : '') + val.toFixed(1) + 'dB';
                 track.eqGains[b] = val;
                 eqFilters[b].gain.value = val;
+            }, {
+                min: -12,
+                max: 12,
+                step: 0.1,
+                defaultVal: 0,
+                value: track.eqGains[b]
             });
         });
 
@@ -2674,121 +3095,173 @@
 
         const filtrCutoffSlider = fxDrawerEl.querySelector('.filtr-cutoff');
         const filtrCutoffVal = fxDrawerEl.querySelector('.filtr-cutoff-val');
-        filtrCutoffSlider.addEventListener('input', () => {
-            const val = parseFloat(filtrCutoffSlider.value);
+        initKnob(filtrCutoffSlider, (val) => {
             filtrCutoffVal.textContent = val >= 1000 ? (val / 1000).toFixed(1) + 'kHz' : val + 'Hz';
             track.filtrCutoff = val;
             filtrFilter.frequency.value = val;
+        }, {
+            min: 20,
+            max: 20000,
+            step: 1,
+            defaultVal: 20000,
+            value: track.filtrCutoff
         });
 
         const filtrResoSlider = fxDrawerEl.querySelector('.filtr-reso');
         const filtrResoVal = fxDrawerEl.querySelector('.filtr-reso-val');
-        filtrResoSlider.addEventListener('input', () => {
-            const val = parseFloat(filtrResoSlider.value) / 10;
-            filtrResoVal.textContent = val.toFixed(1);
-            track.filtrResonance = val;
-            filtrFilter.Q.value = val;
+        initKnob(filtrResoSlider, (val) => {
+            const q = val / 10;
+            filtrResoVal.textContent = q.toFixed(1);
+            track.filtrResonance = q;
+            filtrFilter.Q.value = q;
+        }, {
+            min: 1,
+            max: 250,
+            step: 1,
+            defaultVal: 7,
+            value: Math.round(track.filtrResonance * 10)
         });
 
         const filtrMixSlider = fxDrawerEl.querySelector('.filtr-mix');
         const filtrMixVal = fxDrawerEl.querySelector('.filtr-mix-val');
-        filtrMixSlider.addEventListener('input', () => {
-            const pct = parseFloat(filtrMixSlider.value) / 100;
-            filtrMixVal.textContent = filtrMixSlider.value + '%';
+        initKnob(filtrMixSlider, (val) => {
+            const pct = val / 100;
+            filtrMixVal.textContent = val + '%';
             track.filtrMix = pct;
             updateFiltrBypass(track);
+        }, {
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultVal: 100,
+            value: Math.round(track.filtrMix * 100)
         });
 
         // Wire Scream controls
         const screamCutoffSlider = fxDrawerEl.querySelector('.scream-cutoff');
         const screamCutoffVal = fxDrawerEl.querySelector('.scream-cutoff-val');
-        screamCutoffSlider.addEventListener('input', () => {
-            const val = parseFloat(screamCutoffSlider.value);
+        initKnob(screamCutoffSlider, (val) => {
             screamCutoffVal.textContent = val >= 1000 ? (val / 1000).toFixed(1) + 'kHz' : val + 'Hz';
             track.screamCutoff = val;
             screamFilter.frequency.value = val;
+        }, {
+            min: 20,
+            max: 20000,
+            step: 1,
+            defaultVal: 8000,
+            value: track.screamCutoff
         });
 
         const screamAmountSlider = fxDrawerEl.querySelector('.scream-amount');
         const screamAmountVal = fxDrawerEl.querySelector('.scream-amount-val');
-        screamAmountSlider.addEventListener('input', () => {
-            const pct = parseFloat(screamAmountSlider.value);
-            screamAmountVal.textContent = pct + '%';
-            // Map 0-100% to Q 0.707-25 and drive 5-80
-            const q = 0.707 + (24.293 * pct / 100);
-            const drive = 5 + (75 * pct / 100);
+        initKnob(screamAmountSlider, (val) => {
+            screamAmountVal.textContent = val + '%';
+            const q = 0.707 + (24.293 * val / 100);
+            const drive = 5 + (75 * val / 100);
             track.screamAmount = q;
             track.screamDriveAmount = drive;
             screamFilter.Q.value = q;
             screamShaper.curve = makeDistortionCurve(drive);
+        }, {
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultVal: 0,
+            value: Math.round(((track.screamAmount - 0.707) / 24.293) * 100)
         });
 
         const screamMixSlider = fxDrawerEl.querySelector('.scream-mix');
         const screamMixVal = fxDrawerEl.querySelector('.scream-mix-val');
-        screamMixSlider.addEventListener('input', () => {
-            const pct = parseFloat(screamMixSlider.value) / 100;
-            screamMixVal.textContent = screamMixSlider.value + '%';
+        initKnob(screamMixSlider, (val) => {
+            const pct = val / 100;
+            screamMixVal.textContent = val + '%';
             track.screamMix = pct;
             updateScreamBypass(track);
+        }, {
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultVal: 100,
+            value: Math.round(track.screamMix * 100)
         });
 
-
-
+        // Wire Aelapse delay/reverb controls
         const aeMix = fxDrawerEl.querySelector('.aelapse-mix');
         const aeMixVal = fxDrawerEl.querySelector('.aelapse-mix-val');
-        aeMix.addEventListener('input', () => {
-            const pct = parseFloat(aeMix.value) / 100;
-            const mix = pct * 0.75; // cap delay mix at 75%
-            const feedback = pct * 0.95; // slowly increase feedback along with mix
-
+        initKnob(aeMix, (val) => {
+            const pct = val / 100;
+            const mix = pct * 0.75;
+            const feedback = pct * 0.95;
             track.aelapseDelayMix = mix;
             track.aelapseFeedback = feedback;
-
             track.aelapseDelayGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
             track.aelapseFeedbackNode.gain.setTargetAtTime(feedback, ctx.currentTime, 0.01);
-
             const displayMix = Math.round(mix * 100);
             const displayFb = Math.round(feedback * 100);
             aeMixVal.textContent = `${displayMix}% (Fb: ${displayFb}%)`;
-            
             updateAelapseBypass(track);
+        }, {
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultVal: 0,
+            value: Math.round((track.aelapseDelayMix / 0.75) * 100)
         });
 
         const aeReverbMix = fxDrawerEl.querySelector('.aelapse-reverb-mix');
         const aeReverbVal = fxDrawerEl.querySelector('.aelapse-reverb-val');
-        aeReverbMix.addEventListener('input', () => {
-            const pct = parseFloat(aeReverbMix.value) / 100;
-            const mix = pct * 0.80; // cap reverb mix at 80%
-            const size = 0.5 + pct * 4.5; // slowly increase size from 0.5s to 5.0s
-
+        initKnob(aeReverbMix, (val) => {
+            const pct = val / 100;
+            const mix = pct * 0.80;
             track.aelapseReverbMix = mix;
-            track.aelapseReverbSize = size;
-
             track.aelapseReverbGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
+            const displayMix = Math.round(mix * 100);
+            aeReverbVal.textContent = `${displayMix}%`;
+            updateAelapseBypass(track);
+        }, {
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultVal: 0,
+            value: Math.round((track.aelapseReverbMix / 0.80) * 100)
+        });
+
+        const aeReverbSize = fxDrawerEl.querySelector('.aelapse-reverb-size');
+        const aeReverbSizeVal = fxDrawerEl.querySelector('.aelapse-reverb-size-val');
+        initKnob(aeReverbSize, (val) => {
+            track.aelapseReverbSize = val;
+            aeReverbSizeVal.textContent = val.toFixed(1) + 's';
             try {
-                track.aelapseReverbNode.buffer = createSpringImpulseResponse(ctx, size, 2.5);
+                track.aelapseReverbNode.buffer = createSpringImpulseResponse(ctx, val, 2.5);
             } catch (err) {
                 console.error('Failed to update convolver buffer:', err);
             }
-
-            const displayMix = Math.round(mix * 100);
-            aeReverbVal.textContent = `${displayMix}% (Size: ${size.toFixed(1)}s)`;
-
-            updateAelapseBypass(track);
+        }, {
+            min: 0.5,
+            max: 5.0,
+            step: 0.1,
+            defaultVal: 2.0,
+            value: track.aelapseReverbSize
         });
 
         const aeSync = fxDrawerEl.querySelector('.aelapse-sync');
         const aeSyncVal = fxDrawerEl.querySelector('.aelapse-sync-val');
         const syncLabels = ['1/16', '1/8T', '1/8', 'd8th', '1/4', 'd1/4', '1/2', 'd1/2', '1/1'];
         const syncBeats = [0.25, 0.333, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0];
-        aeSync.addEventListener('input', () => {
-            const idx = parseInt(aeSync.value);
+        initKnob(aeSync, (val) => {
+            const idx = parseInt(val);
             track.delaySyncIndex = idx;
             aeSyncVal.textContent = syncLabels[idx];
             const bpm = parseInt(bpmInput.value) || 120;
             const delayTimeSec = (60.0 / bpm) * syncBeats[idx];
             track.aelapseDelayTime = delayTimeSec;
             track.aelapseDelayNode.delayTime.setValueAtTime(delayTimeSec, audioCtx.currentTime);
+        }, {
+            min: 0,
+            max: 8,
+            step: 1,
+            defaultVal: 3,
+            value: track.delaySyncIndex
         });
 
         // Wire Chorus controls
@@ -2800,37 +3273,67 @@
 
         const chorusRateSlider = fxDrawerEl.querySelector('.chorus-rate');
         const chorusRateVal = fxDrawerEl.querySelector('.chorus-rate-val');
-        chorusRateSlider.addEventListener('input', () => {
-            const val = parseFloat(chorusRateSlider.value);
+        initKnob(chorusRateSlider, (val) => {
             chorusRateVal.textContent = val.toFixed(2) + 'Hz';
             track.tunaChorusRate = val;
             if (track.tunaChorusRateSync === 'Free' && track.tunaChorusNode) {
                 track.tunaChorusNode.rate = val;
             }
+        }, {
+            min: 0.01,
+            max: 20.0,
+            step: 0.01,
+            defaultVal: 1.5,
+            value: track.tunaChorusRate
         });
 
         const chorusDepthSlider = fxDrawerEl.querySelector('.chorus-depth');
         const chorusDepthVal = fxDrawerEl.querySelector('.chorus-depth-val');
-        chorusDepthSlider.addEventListener('input', () => {
-            const val = parseFloat(chorusDepthSlider.value);
+        initKnob(chorusDepthSlider, (val) => {
             chorusDepthVal.textContent = val + '%';
             const mappedVal = val / 100.0;
             track.tunaChorusDepth = mappedVal;
             if (track.tunaChorusNode) {
                 track.tunaChorusNode.depth = mappedVal;
             }
+        }, {
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultVal: 70,
+            value: Math.round(track.tunaChorusDepth * 100)
         });
 
         const chorusFeedbackSlider = fxDrawerEl.querySelector('.chorus-feedback');
         const chorusFeedbackVal = fxDrawerEl.querySelector('.chorus-feedback-val');
-        chorusFeedbackSlider.addEventListener('input', () => {
-            const val = parseFloat(chorusFeedbackSlider.value);
+        initKnob(chorusFeedbackSlider, (val) => {
             chorusFeedbackVal.textContent = val + '%';
             const mappedVal = val / 100.0;
             track.tunaChorusFeedback = mappedVal;
             if (track.tunaChorusNode) {
                 track.tunaChorusNode.feedback = mappedVal;
             }
+        }, {
+            min: 0,
+            max: 95,
+            step: 1,
+            defaultVal: 20,
+            value: Math.round(track.tunaChorusFeedback * 100)
+        });
+
+        const chorusMixSlider = fxDrawerEl.querySelector('.chorus-mix');
+        const chorusMixVal = fxDrawerEl.querySelector('.chorus-mix-val');
+        initKnob(chorusMixSlider, (val) => {
+            const pct = val / 100;
+            chorusMixVal.textContent = val + '%';
+            track.tunaChorusMix = pct;
+            updateTunaChorusBypass(track);
+        }, {
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultVal: 50,
+            value: Math.round(track.tunaChorusMix * 100)
         });
 
         // Wire Phaser controls
@@ -2842,72 +3345,141 @@
 
         const phaserRateSlider = fxDrawerEl.querySelector('.phaser-rate');
         const phaserRateVal = fxDrawerEl.querySelector('.phaser-rate-val');
-        phaserRateSlider.addEventListener('input', () => {
-            const val = parseFloat(phaserRateSlider.value);
+        initKnob(phaserRateSlider, (val) => {
             phaserRateVal.textContent = val.toFixed(2) + 'Hz';
             track.tunaPhaserRate = val;
             if (track.tunaPhaserRateSync === 'Free' && track.tunaPhaserNode) {
                 track.tunaPhaserNode.rate = val;
             }
+        }, {
+            min: 0.01,
+            max: 20.0,
+            step: 0.01,
+            defaultVal: 1.2,
+            value: track.tunaPhaserRate
         });
 
         const phaserDepthSlider = fxDrawerEl.querySelector('.phaser-depth');
         const phaserDepthVal = fxDrawerEl.querySelector('.phaser-depth-val');
-        phaserDepthSlider.addEventListener('input', () => {
-            const val = parseFloat(phaserDepthSlider.value);
+        initKnob(phaserDepthSlider, (val) => {
             phaserDepthVal.textContent = val + '%';
             const mappedVal = val / 100.0;
             track.tunaPhaserDepth = mappedVal;
             if (track.tunaPhaserNode) {
                 track.tunaPhaserNode.depth = mappedVal;
             }
+        }, {
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultVal: 60,
+            value: Math.round(track.tunaPhaserDepth * 100)
         });
 
         const phaserFeedbackSlider = fxDrawerEl.querySelector('.phaser-feedback');
         const phaserFeedbackVal = fxDrawerEl.querySelector('.phaser-feedback-val');
-        phaserFeedbackSlider.addEventListener('input', () => {
-            const val = parseFloat(phaserFeedbackSlider.value);
+        initKnob(phaserFeedbackSlider, (val) => {
             phaserFeedbackVal.textContent = val + '%';
             const mappedVal = val / 100.0;
             track.tunaPhaserFeedback = mappedVal;
             if (track.tunaPhaserNode) {
                 track.tunaPhaserNode.feedback = mappedVal;
             }
+        }, {
+            min: 0,
+            max: 95,
+            step: 1,
+            defaultVal: 20,
+            value: Math.round(track.tunaPhaserFeedback * 100)
+        });
+
+        const phaserMixSlider = fxDrawerEl.querySelector('.phaser-mix');
+        const phaserMixVal = fxDrawerEl.querySelector('.phaser-mix-val');
+        initKnob(phaserMixSlider, (val) => {
+            const pct = val / 100;
+            phaserMixVal.textContent = val + '%';
+            track.tunaPhaserMix = pct;
+            updateTunaPhaserBypass(track);
+        }, {
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultVal: 50,
+            value: Math.round(track.tunaPhaserMix * 100)
         });
 
         // Wire Crusher controls
         const crusherBitsSlider = fxDrawerEl.querySelector('.crusher-bits');
         const crusherBitsVal = fxDrawerEl.querySelector('.crusher-bits-val');
-        crusherBitsSlider.addEventListener('input', () => {
-            const val = parseInt(crusherBitsSlider.value);
+        initKnob(crusherBitsSlider, (val) => {
             crusherBitsVal.textContent = val + ' bits';
             track.tunaBitcrusherBits = val;
             if (track.tunaBitcrusherNode) {
                 track.tunaBitcrusherNode.bits = val;
             }
+        }, {
+            min: 1,
+            max: 16,
+            step: 1,
+            defaultVal: 8,
+            value: track.tunaBitcrusherBits
         });
 
         const crusherNormfreqSlider = fxDrawerEl.querySelector('.crusher-normfreq');
         const crusherNormfreqVal = fxDrawerEl.querySelector('.crusher-normfreq-val');
-        crusherNormfreqSlider.addEventListener('input', () => {
-            const val = parseFloat(crusherNormfreqSlider.value);
+        initKnob(crusherNormfreqSlider, (val) => {
             crusherNormfreqVal.textContent = val.toFixed(2);
             track.tunaBitcrusherNormfreq = val;
             if (track.tunaBitcrusherNode) {
                 track.tunaBitcrusherNode.normfreq = val;
             }
+        }, {
+            min: 0.01,
+            max: 1.0,
+            step: 0.01,
+            defaultVal: 0.1,
+            value: track.tunaBitcrusherNormfreq
         });
 
-        // 12. Wire FX Drawer Macro Knobs (Space, Drive, Tone)
+        const crusherMixSlider = fxDrawerEl.querySelector('.crusher-mix');
+        const crusherMixVal = fxDrawerEl.querySelector('.crusher-mix-val');
+        initKnob(crusherMixSlider, (val) => {
+            const pct = val / 100;
+            crusherMixVal.textContent = val + '%';
+            track.tunaBitcrusherMix = pct;
+            updateTunaBitcrusherBypass(track);
+        }, {
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultVal: 50,
+            value: Math.round(track.tunaBitcrusherMix * 100)
+        });
+
+        // 12. Wire FX Drawer Macro Knobs
         const fxMacroKnobs = fxDrawerEl.querySelectorAll('.fx-macro-knob');
-        // fxMacroState is declared at the top of createTrackRow
+        fxMacroKnobs.forEach(knobEl => {
+            const macroName = knobEl.dataset.macro;
+            const defaultVal = (macroName === 'tone' || macroName === 'filter') ? 50 : 0;
+            
+            initKnob(knobEl, (val) => {
+                applyFxMacro(macroName, val);
+            }, {
+                min: 0,
+                max: 100,
+                step: 1,
+                defaultVal: defaultVal,
+                value: defaultVal
+            });
+            
+            fxMacroState[macroName] = knobEl;
+        });
 
         function applyFxMacro(macroName, value) {
             const knobEl = fxDrawerEl.querySelector(`.fx-macro-knob[data-macro="${macroName}"]`);
             const indicator = knobEl.querySelector('.macro-knob-indicator');
 
             if (macroName === 'tone') {
-                // Tone is bipolar (0-100, 50 = center)
                 const deg = -135 + (value / 100) * 270;
                 indicator.style.transform = `rotate(${deg}deg)`;
                 if (value === 50) {
@@ -2917,7 +3489,6 @@
                 } else {
                     knobEl.title = 'Tone: Bright';
                 }
-                // Push to EQ sliders
                 const eqSlidersList = fxDrawerEl.querySelectorAll('.eq-slider');
                 if (eqSlidersList.length === 6) {
                     let bandGains = [0, 0, 0, 0, 0, 0];
@@ -2930,12 +3501,9 @@
                     }
                     eqSlidersList.forEach((slider, b) => {
                         slider.value = bandGains[b];
-                        slider.dispatchEvent(new Event('input'));
                     });
                 }
             } else if (macroName === 'filter') {
-                // Filter macro is bipolar: 0=off, <50=LP sweep, >50=HP sweep
-                const bipolarVal = (value / 100) * 200 - 100; // map 0-100 → -100..+100
                 const deg = -135 + (value / 100) * 270;
                 indicator.style.transform = `rotate(${deg}deg)`;
                 const ctx = ensureAudioCtx();
@@ -2969,7 +3537,6 @@
                     }
                 }
             } else {
-                // Unipolar 0-100 macros
                 const deg = -135 + (value / 100) * 270;
                 indicator.style.transform = `rotate(${deg}deg)`;
                 knobEl.title = `${macroName.charAt(0).toUpperCase() + macroName.slice(1)}: ${value}%`;
@@ -2977,30 +3544,57 @@
                 if (macroName === 'space') {
                     const delayMixSlider = fxDrawerEl.querySelector('.aelapse-mix');
                     const reverbMixSlider = fxDrawerEl.querySelector('.aelapse-reverb-mix');
-                    if (delayMixSlider) { delayMixSlider.value = value; delayMixSlider.dispatchEvent(new Event('input')); }
-                    if (reverbMixSlider) { reverbMixSlider.value = value; reverbMixSlider.dispatchEvent(new Event('input')); }
+                    if (delayMixSlider) { delayMixSlider.value = value; }
+                    if (reverbMixSlider) { reverbMixSlider.value = value; }
                 } else if (macroName === 'drive') {
                     const screamVal = Math.round(value * 0.6);
                     const screamAmtSlider = fxDrawerEl.querySelector('.scream-amount');
                     const screamMxSlider = fxDrawerEl.querySelector('.scream-mix');
-                    if (screamAmtSlider) { screamAmtSlider.value = screamVal; screamAmtSlider.dispatchEvent(new Event('input')); }
-                    if (screamMxSlider) { screamMxSlider.value = Math.max(screamVal, 100); screamMxSlider.dispatchEvent(new Event('input')); }
+                    if (screamAmtSlider) { screamAmtSlider.value = screamVal; }
+                    if (screamMxSlider) { screamMxSlider.value = Math.max(screamVal, 100); }
                     if (value > 0 && !track.screamEnabled) {
                         const screamToggle = fxDrawerEl.querySelector('.scream-toggle');
                         if (screamToggle) screamToggle.click();
                     }
                 } else if (macroName === 'reso') {
                     const resoSlider = fxDrawerEl.querySelector('.filtr-reso');
-                    if (resoSlider) { resoSlider.value = Math.round(1 + (249 * value / 100)); resoSlider.dispatchEvent(new Event('input')); }
+                    if (resoSlider) { resoSlider.value = Math.round(1 + (249 * value / 100)); }
                 } else if (macroName === 'delay') {
                     const delayMixSlider = fxDrawerEl.querySelector('.aelapse-mix');
-                    if (!track.aelapseEnabled && value > 0) {
-                        const toggle = fxDrawerEl.querySelector('.aelapse-toggle');
+                    if (!track.aelapseDelayEnabled && value > 0) {
+                        const toggle = fxDrawerEl.querySelector('.aelapse-delay-toggle');
                         if (toggle) toggle.click();
                     }
-                    if (delayMixSlider) { delayMixSlider.value = value; delayMixSlider.dispatchEvent(new Event('input')); }
+                    if (delayMixSlider) { delayMixSlider.value = value; }
+                } else if (macroName === 'feedback') {
+                    const delayMixSlider = fxDrawerEl.querySelector('.aelapse-mix');
+                    if (delayMixSlider) {
+                        const feedback = Math.round(value * 0.95);
+                        track.aelapseFeedback = feedback / 100;
+                        track.aelapseFeedbackNode.gain.setTargetAtTime(track.aelapseFeedback, ctx.currentTime, 0.01);
+                        const aeMixVal = fxDrawerEl.querySelector('.aelapse-mix-val');
+                        if (aeMixVal) {
+                            const mixPct = Math.round(track.aelapseDelayMix * 100);
+                            aeMixVal.textContent = `${mixPct}% (Fb: ${feedback}%)`;
+                        }
+                    }
+                    if (track.tunaChorusNode) {
+                        track.tunaChorusFeedback = value / 100;
+                        track.tunaChorusNode.feedback = track.tunaChorusFeedback;
+                        const chorusFbVal = fxDrawerEl.querySelector('.chorus-feedback-val');
+                        if (chorusFbVal) chorusFbVal.textContent = value + '%';
+                        const chorusFbKnob = fxDrawerEl.querySelector('.chorus-feedback');
+                        if (chorusFbKnob) chorusFbKnob.value = value;
+                    }
+                    if (track.tunaPhaserNode) {
+                        track.tunaPhaserFeedback = value / 100;
+                        track.tunaPhaserNode.feedback = track.tunaPhaserFeedback;
+                        const phaserFbVal = fxDrawerEl.querySelector('.phaser-feedback-val');
+                        if (phaserFbVal) phaserFbVal.textContent = value + '%';
+                        const phaserFbKnob = fxDrawerEl.querySelector('.phaser-feedback');
+                        if (phaserFbKnob) phaserFbKnob.value = value;
+                    }
                 } else if (macroName === 'crush') {
-                    // Crush: drives scream distortion cutoff down + amount up
                     const screamCutoffSlider = fxDrawerEl.querySelector('.scream-cutoff');
                     const screamAmtSlider = fxDrawerEl.querySelector('.scream-amount');
                     if (!track.screamEnabled && value > 0) {
@@ -3010,57 +3604,11 @@
                     if (screamCutoffSlider) {
                         const cutoff = Math.round(16000 - (15800 * value / 100));
                         screamCutoffSlider.value = cutoff;
-                        screamCutoffSlider.dispatchEvent(new Event('input'));
                     }
-                    if (screamAmtSlider) { screamAmtSlider.value = value; screamAmtSlider.dispatchEvent(new Event('input')); }
+                    if (screamAmtSlider) { screamAmtSlider.value = value; }
                 }
             }
         }
-
-        fxMacroKnobs.forEach(knobEl => {
-            const macroName = knobEl.dataset.macro;
-            const defaultVal = (macroName === 'tone' || macroName === 'filter') ? 50 : 0;
-            fxMacroState[macroName] = { value: defaultVal, dragging: false, startY: 0, startVal: 0 };
-
-            // Init indicator
-            const initDeg = -135 + (defaultVal / 100) * 270;
-            knobEl.querySelector('.macro-knob-indicator').style.transform = `rotate(${initDeg}deg)`;
-
-            knobEl.addEventListener('mousedown', (e) => {
-                if (track.locked) return;
-                e.preventDefault();
-                e.stopPropagation();
-                const st = fxMacroState[macroName];
-                st.dragging = true;
-                st.startY = e.clientY;
-                st.startVal = st.value;
-                document.body.style.cursor = 'ns-resize';
-            });
-
-            document.addEventListener('mousemove', (e) => {
-                const st = fxMacroState[macroName];
-                if (!st.dragging) return;
-                const delta = st.startY - e.clientY;
-                const newVal = Math.max(0, Math.min(100, st.startVal + delta));
-                st.value = newVal;
-                applyFxMacro(macroName, newVal);
-            });
-
-            document.addEventListener('mouseup', () => {
-                const st = fxMacroState[macroName];
-                if (st.dragging) {
-                    st.dragging = false;
-                    document.body.style.cursor = '';
-                }
-            });
-
-            knobEl.addEventListener('dblclick', (e) => {
-                e.stopPropagation();
-                if (track.locked) return;
-                fxMacroState[macroName].value = defaultVal;
-                applyFxMacro(macroName, defaultVal);
-            });
-        });
 
         // 13. Wire Bypass Switches
         const filtrToggleBtn = fxDrawerEl.querySelector('.filtr-toggle');
@@ -3096,14 +3644,25 @@
             updateScreamBypass(track);
         });
 
-        const aeToggleBtn = fxDrawerEl.querySelector('.aelapse-toggle');
-        const aeSection = fxDrawerEl.querySelector('.aelapse-section');
-        aeToggleBtn.addEventListener('click', (e) => {
+        const aeDelayToggleBtn = fxDrawerEl.querySelector('.aelapse-delay-toggle');
+        const delaySection = fxDrawerEl.querySelector('.delay-section');
+        aeDelayToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            track.aelapseEnabled = !track.aelapseEnabled;
-            aeToggleBtn.textContent = track.aelapseEnabled ? 'On' : 'Bypass';
-            aeToggleBtn.classList.toggle('is-off', !track.aelapseEnabled);
-            aeSection.classList.toggle('is-bypassed', !track.aelapseEnabled);
+            track.aelapseDelayEnabled = !track.aelapseDelayEnabled;
+            aeDelayToggleBtn.textContent = track.aelapseDelayEnabled ? 'On' : 'Off';
+            aeDelayToggleBtn.classList.toggle('is-off', !track.aelapseDelayEnabled);
+            delaySection.classList.toggle('is-bypassed', !track.aelapseDelayEnabled);
+            updateAelapseBypass(track);
+        });
+
+        const aeReverbToggleBtn = fxDrawerEl.querySelector('.aelapse-reverb-toggle');
+        const reverbSection = fxDrawerEl.querySelector('.reverb-section');
+        aeReverbToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            track.aelapseReverbEnabled = !track.aelapseReverbEnabled;
+            aeReverbToggleBtn.textContent = track.aelapseReverbEnabled ? 'On' : 'Off';
+            aeReverbToggleBtn.classList.toggle('is-off', !track.aelapseReverbEnabled);
+            reverbSection.classList.toggle('is-bypassed', !track.aelapseReverbEnabled);
             updateAelapseBypass(track);
         });
 
@@ -3151,7 +3710,8 @@
                     filtrEnabled: track.filtrEnabled,
                     screamEnabled: track.screamEnabled,
                     eqEnabled: track.eqEnabled,
-                    aelapseEnabled: track.aelapseEnabled,
+                    aelapseDelayEnabled: track.aelapseDelayEnabled,
+                    aelapseReverbEnabled: track.aelapseReverbEnabled,
                     
                     filtrType: fxDrawerEl.querySelector('.filtr-type').value,
                     filtrCutoff: fxDrawerEl.querySelector('.filtr-cutoff').value,
@@ -3167,22 +3727,26 @@
                     aelapseSync: fxDrawerEl.querySelector('.aelapse-sync').value,
                     aelapseMix: fxDrawerEl.querySelector('.aelapse-mix').value,
                     aelapseReverbMix: fxDrawerEl.querySelector('.aelapse-reverb-mix').value,
+                    aelapseReverbSize: fxDrawerEl.querySelector('.aelapse-reverb-size').value,
 
                     tunaChorusEnabled: track.tunaChorusEnabled,
                     tunaChorusRateSync: fxDrawerEl.querySelector('.chorus-rate-sync').value,
                     tunaChorusRate: fxDrawerEl.querySelector('.chorus-rate').value,
                     tunaChorusDepth: fxDrawerEl.querySelector('.chorus-depth').value,
                     tunaChorusFeedback: fxDrawerEl.querySelector('.chorus-feedback').value,
+                    tunaChorusMix: fxDrawerEl.querySelector('.chorus-mix').value,
 
                     tunaPhaserEnabled: track.tunaPhaserEnabled,
                     tunaPhaserRateSync: fxDrawerEl.querySelector('.phaser-rate-sync').value,
                     tunaPhaserRate: fxDrawerEl.querySelector('.phaser-rate').value,
                     tunaPhaserDepth: fxDrawerEl.querySelector('.phaser-depth').value,
                     tunaPhaserFeedback: fxDrawerEl.querySelector('.phaser-feedback').value,
+                    tunaPhaserMix: fxDrawerEl.querySelector('.phaser-mix').value,
 
                     tunaBitcrusherEnabled: track.tunaBitcrusherEnabled,
                     tunaBitcrusherBits: fxDrawerEl.querySelector('.crusher-bits').value,
                     tunaBitcrusherNormfreq: fxDrawerEl.querySelector('.crusher-normfreq').value,
+                    tunaBitcrusherMix: fxDrawerEl.querySelector('.crusher-mix').value,
 
                     macros: {
                         space: fxMacroState.space ? fxMacroState.space.value : 0,
@@ -3191,6 +3755,7 @@
                         filter: fxMacroState.filter ? fxMacroState.filter.value : 50,
                         reso: fxMacroState.reso ? fxMacroState.reso.value : 0,
                         delay: fxMacroState.delay ? fxMacroState.delay.value : 0,
+                        feedback: fxMacroState.feedback ? fxMacroState.feedback.value : 0,
                         crush: fxMacroState.crush ? fxMacroState.crush.value : 0,
                     }
                 };
@@ -3228,10 +3793,29 @@
                 screamSection.classList.toggle('is-bypassed', !track.screamEnabled);
                 updateScreamBypass(track);
 
-                track.aelapseEnabled = settings.aelapseEnabled;
-                aeToggleBtn.textContent = track.aelapseEnabled ? 'On' : 'Bypass';
-                aeToggleBtn.classList.toggle('is-off', !track.aelapseEnabled);
-                aeSection.classList.toggle('is-bypassed', !track.aelapseEnabled);
+                // Split delay
+                track.aelapseDelayEnabled = settings.aelapseDelayEnabled;
+                const aeDelayToggleBtn = fxDrawerEl.querySelector('.aelapse-delay-toggle');
+                if (aeDelayToggleBtn) {
+                    aeDelayToggleBtn.textContent = track.aelapseDelayEnabled ? 'On' : 'Off';
+                    aeDelayToggleBtn.classList.toggle('is-off', !track.aelapseDelayEnabled);
+                }
+                const delaySection = fxDrawerEl.querySelector('.delay-section');
+                if (delaySection) {
+                    delaySection.classList.toggle('is-bypassed', !track.aelapseDelayEnabled);
+                }
+
+                // Split Reverb
+                track.aelapseReverbEnabled = settings.aelapseReverbEnabled;
+                const aeReverbToggleBtn = fxDrawerEl.querySelector('.aelapse-reverb-toggle');
+                if (aeReverbToggleBtn) {
+                    aeReverbToggleBtn.textContent = track.aelapseReverbEnabled ? 'On' : 'Off';
+                    aeReverbToggleBtn.classList.toggle('is-off', !track.aelapseReverbEnabled);
+                }
+                const reverbSection = fxDrawerEl.querySelector('.reverb-section');
+                if (reverbSection) {
+                    reverbSection.classList.toggle('is-bypassed', !track.aelapseReverbEnabled);
+                }
                 updateAelapseBypass(track);
 
                 track.tunaChorusEnabled = settings.tunaChorusEnabled;
@@ -3286,16 +3870,20 @@
                     '.aelapse-sync': settings.aelapseSync,
                     '.aelapse-mix': settings.aelapseMix,
                     '.aelapse-reverb-mix': settings.aelapseReverbMix,
+                    '.aelapse-reverb-size': settings.aelapseReverbSize,
                     '.chorus-rate-sync': settings.tunaChorusRateSync,
                     '.chorus-rate': settings.tunaChorusRate,
                     '.chorus-depth': settings.tunaChorusDepth,
                     '.chorus-feedback': settings.tunaChorusFeedback,
+                    '.chorus-mix': settings.tunaChorusMix,
                     '.phaser-rate-sync': settings.tunaPhaserRateSync,
                     '.phaser-rate': settings.tunaPhaserRate,
                     '.phaser-depth': settings.tunaPhaserDepth,
                     '.phaser-feedback': settings.tunaPhaserFeedback,
+                    '.phaser-mix': settings.tunaPhaserMix,
                     '.crusher-bits': settings.tunaBitcrusherBits,
                     '.crusher-normfreq': settings.tunaBitcrusherNormfreq,
+                    '.crusher-mix': settings.tunaBitcrusherMix,
                 };
 
                 for (const selector in sliders) {
@@ -3345,7 +3933,14 @@
             cardEl.innerHTML = `
                 <div class="card-header">
                     <span class="card-title" title="${name}">${name}</span>
-                    <div style="display: flex; align-items: center; gap: 2px;">
+                    <span class="card-variant-num">#${i + 1}</span>
+                </div>
+                <div class="card-seek-bar">
+                    <canvas class="card-waveform"></canvas>
+                    <div class="card-progress-fill"></div>
+                    <div class="card-playhead"></div>
+                    <div class="card-split-line"></div>
+                    <div class="card-hover-overlay">
                         <button class="btn-use-init" title="Use as Remix Audio" type="button">Remix</button>
                         <button class="btn-reverse" title="Reverse" type="button">⇄</button>
                         <button class="btn-lock-variant" title="Lock Variant" type="button">
@@ -3356,14 +3951,7 @@
                         </button>
                         <button class="btn-outpaint-2" title="Outpaint to 2 loops (2x)" type="button">2x</button>
                         <button class="btn-outpaint-4" title="Outpaint to 4 loops (4x)" type="button">4x</button>
-                        <span class="card-variant-num">#${i + 1}</span>
                     </div>
-                </div>
-                <div class="card-seek-bar">
-                    <canvas class="card-waveform"></canvas>
-                    <div class="card-progress-fill"></div>
-                    <div class="card-playhead"></div>
-                    <div class="card-split-line"></div>
                 </div>
             `;
 
@@ -3623,7 +4211,8 @@
                     filtrEnabled: t.filtrEnabled,
                     screamEnabled: t.screamEnabled,
                     eqEnabled: t.eqEnabled,
-                    aelapseEnabled: t.aelapseEnabled,
+                    aelapseDelayEnabled: t.aelapseDelayEnabled,
+                    aelapseReverbEnabled: t.aelapseReverbEnabled,
                     
                     filtrType: fxDrawer.querySelector('.filtr-type')?.value || 'lowpass',
                     filtrCutoff: parseFloat(fxDrawer.querySelector('.filtr-cutoff')?.value) || 20000,
@@ -3639,22 +4228,26 @@
                     aelapseSync: fxDrawer.querySelector('.aelapse-sync')?.value || '1/4',
                     aelapseMix: parseFloat(fxDrawer.querySelector('.aelapse-mix')?.value) || 0,
                     aelapseReverbMix: parseFloat(fxDrawer.querySelector('.aelapse-reverb-mix')?.value) || 0,
+                    aelapseReverbSize: parseFloat(fxDrawer.querySelector('.aelapse-reverb-size')?.value) || 2.0,
                     
                     tunaChorusEnabled: t.tunaChorusEnabled,
                     tunaChorusRateSync: fxDrawer.querySelector('.chorus-rate-sync')?.value || 'Free',
                     tunaChorusRate: parseFloat(fxDrawer.querySelector('.chorus-rate')?.value) || 1.5,
                     tunaChorusDepth: parseFloat(fxDrawer.querySelector('.chorus-depth')?.value) || 70,
                     tunaChorusFeedback: parseFloat(fxDrawer.querySelector('.chorus-feedback')?.value) || 20,
+                    tunaChorusMix: parseFloat(fxDrawer.querySelector('.chorus-mix')?.value) || 50,
 
                     tunaPhaserEnabled: t.tunaPhaserEnabled,
                     tunaPhaserRateSync: fxDrawer.querySelector('.phaser-rate-sync')?.value || 'Free',
                     tunaPhaserRate: parseFloat(fxDrawer.querySelector('.phaser-rate')?.value) || 1.2,
                     tunaPhaserDepth: parseFloat(fxDrawer.querySelector('.phaser-depth')?.value) || 60,
                     tunaPhaserFeedback: parseFloat(fxDrawer.querySelector('.phaser-feedback')?.value) || 20,
+                    tunaPhaserMix: parseFloat(fxDrawer.querySelector('.phaser-mix')?.value) || 50,
 
                     tunaBitcrusherEnabled: t.tunaBitcrusherEnabled,
                     tunaBitcrusherBits: parseInt(fxDrawer.querySelector('.crusher-bits')?.value) || 8,
                     tunaBitcrusherNormfreq: parseFloat(fxDrawer.querySelector('.crusher-normfreq')?.value) || 0.1,
+                    tunaBitcrusherMix: parseFloat(fxDrawer.querySelector('.crusher-mix')?.value) || 50,
                 };
 
                 const macroValues = {};
@@ -3862,15 +4455,28 @@
                 
                 updateEqBypass(track);
 
-                track.aelapseEnabled = fx.aelapseEnabled;
-                const aelapseToggleBtn = fxDrawer.querySelector('.aelapse-toggle');
-                if (aelapseToggleBtn) {
-                    aelapseToggleBtn.textContent = track.aelapseEnabled ? 'On' : 'Bypass';
-                    aelapseToggleBtn.classList.toggle('is-off', !track.aelapseEnabled);
+                // Split Delay
+                track.aelapseDelayEnabled = fx.aelapseDelayEnabled !== undefined ? fx.aelapseDelayEnabled : true;
+                const aeDelayToggleBtn = fxDrawer.querySelector('.aelapse-delay-toggle');
+                if (aeDelayToggleBtn) {
+                    aeDelayToggleBtn.textContent = track.aelapseDelayEnabled ? 'On' : 'Off';
+                    aeDelayToggleBtn.classList.toggle('is-off', !track.aelapseDelayEnabled);
                 }
-                const aelapseSection = fxDrawer.querySelector('.aelapse-section');
-                if (aelapseSection) {
-                    aelapseSection.classList.toggle('is-bypassed', !track.aelapseEnabled);
+                const delaySection = fxDrawer.querySelector('.delay-section');
+                if (delaySection) {
+                    delaySection.classList.toggle('is-bypassed', !track.aelapseDelayEnabled);
+                }
+
+                // Split Reverb
+                track.aelapseReverbEnabled = fx.aelapseReverbEnabled !== undefined ? fx.aelapseReverbEnabled : true;
+                const aeReverbToggleBtn = fxDrawer.querySelector('.aelapse-reverb-toggle');
+                if (aeReverbToggleBtn) {
+                    aeReverbToggleBtn.textContent = track.aelapseReverbEnabled ? 'On' : 'Off';
+                    aeReverbToggleBtn.classList.toggle('is-off', !track.aelapseReverbEnabled);
+                }
+                const reverbSection = fxDrawer.querySelector('.reverb-section');
+                if (reverbSection) {
+                    reverbSection.classList.toggle('is-bypassed', !track.aelapseReverbEnabled);
                 }
                 
                 const aelapseSyncEl = fxDrawer.querySelector('.aelapse-sync');
@@ -3879,6 +4485,17 @@
                 if (aelapseMixEl) aelapseMixEl.value = fx.aelapseMix;
                 const aelapseReverbMixEl = fxDrawer.querySelector('.aelapse-reverb-mix');
                 if (aelapseReverbMixEl) aelapseReverbMixEl.value = fx.aelapseReverbMix;
+                const aelapseReverbSizeEl = fxDrawer.querySelector('.aelapse-reverb-size');
+                if (aelapseReverbSizeEl) aelapseReverbSizeEl.value = fx.aelapseReverbSize !== undefined ? fx.aelapseReverbSize : 2.0;
+
+                const chorusMixEl = fxDrawer.querySelector('.chorus-mix');
+                if (chorusMixEl) chorusMixEl.value = fx.tunaChorusMix !== undefined ? fx.tunaChorusMix : 50;
+
+                const phaserMixEl = fxDrawer.querySelector('.phaser-mix');
+                if (phaserMixEl) phaserMixEl.value = fx.tunaPhaserMix !== undefined ? fx.tunaPhaserMix : 50;
+
+                const crusherMixEl = fxDrawer.querySelector('.crusher-mix');
+                if (crusherMixEl) crusherMixEl.value = fx.tunaBitcrusherMix !== undefined ? fx.tunaBitcrusherMix : 50;
                 
                 updateAelapseBypass(track);
 
@@ -3953,6 +4570,14 @@
 
                 if (crusherBitsEl) crusherBitsEl.dispatchEvent(new Event('input'));
                 if (crusherNormfreqEl) crusherNormfreqEl.dispatchEvent(new Event('input'));
+
+                if (aelapseSyncEl) aelapseSyncEl.dispatchEvent(new Event('input'));
+                if (aelapseMixEl) aelapseMixEl.dispatchEvent(new Event('input'));
+                if (aelapseReverbMixEl) aelapseReverbMixEl.dispatchEvent(new Event('input'));
+                if (aelapseReverbSizeEl) aelapseReverbSizeEl.dispatchEvent(new Event('input'));
+                if (crusherMixEl) crusherMixEl.dispatchEvent(new Event('input'));
+                if (chorusMixEl) chorusMixEl.dispatchEvent(new Event('input'));
+                if (phaserMixEl) phaserMixEl.dispatchEvent(new Event('input'));
             }
 
             for (const key in tData.fxMacros) {
@@ -5783,49 +6408,150 @@
 
                     lastNode = screamSumNode;
                 }
+
+                // 2. Tuna DSP Nodes (Chorus, Phaser, Bitcrusher)
+                let offlineTunaChorus = null;
+                let offlineTunaPhaser = null;
+                let offlineTunaBitcrusher = null;
+
+                const tunaInstance = new Tuna(offlineCtx);
+
+                // Chorus
+                const chorusDry = offlineCtx.createGain();
+                const chorusWet = offlineCtx.createGain();
+                const chorusSum = offlineCtx.createGain();
+
+                const chorusMix = t.tunaChorusMix !== undefined ? t.tunaChorusMix : 0.5;
+                if (t.tunaChorusEnabled) {
+                    chorusDry.gain.value = 1.0 - chorusMix;
+                    chorusWet.gain.value = chorusMix;
+                } else {
+                    chorusDry.gain.value = 1.0;
+                    chorusWet.gain.value = 0.0;
+                }
+
+                const chorusNode = new tunaInstance.Chorus({
+                    rate: t.tunaChorusRate,
+                    feedback: t.tunaChorusFeedback,
+                    delay: 0.0045,
+                    depth: t.tunaChorusDepth,
+                    bypass: false
+                });
+                offlineTunaChorus = chorusNode;
+
+                lastNode.connect(chorusDry);
+                chorusDry.connect(chorusSum);
+                lastNode.connect(chorusNode.input);
+                chorusNode.output.connect(chorusWet);
+                chorusWet.connect(chorusSum);
+
+                lastNode = chorusSum;
+
+                // Phaser
+                const phaserDry = offlineCtx.createGain();
+                const phaserWet = offlineCtx.createGain();
+                const phaserSum = offlineCtx.createGain();
+
+                const phaserMix = t.tunaPhaserMix !== undefined ? t.tunaPhaserMix : 0.5;
+                if (t.tunaPhaserEnabled) {
+                    phaserDry.gain.value = 1.0 - phaserMix;
+                    phaserWet.gain.value = phaserMix;
+                } else {
+                    phaserDry.gain.value = 1.0;
+                    phaserWet.gain.value = 0.0;
+                }
+
+                const phaserNode = new tunaInstance.Phaser({
+                    rate: t.tunaPhaserRate,
+                    feedback: t.tunaPhaserFeedback,
+                    depth: t.tunaPhaserDepth,
+                    bypass: false
+                });
+                offlineTunaPhaser = phaserNode;
+
+                lastNode.connect(phaserDry);
+                phaserDry.connect(phaserSum);
+                lastNode.connect(phaserNode.input);
+                phaserNode.output.connect(phaserWet);
+                phaserWet.connect(phaserSum);
+
+                lastNode = phaserSum;
+
+                // Bitcrusher
+                const crusherDry = offlineCtx.createGain();
+                const crusherWet = offlineCtx.createGain();
+                const crusherSum = offlineCtx.createGain();
+
+                const crusherMix = t.tunaBitcrusherMix !== undefined ? t.tunaBitcrusherMix : 0.5;
+                if (t.tunaBitcrusherEnabled) {
+                    crusherDry.gain.value = 1.0 - crusherMix;
+                    crusherWet.gain.value = crusherMix;
+                } else {
+                    crusherDry.gain.value = 1.0;
+                    crusherWet.gain.value = 0.0;
+                }
+
+                const crusherNode = new tunaInstance.Bitcrusher({
+                    bits: t.tunaBitcrusherBits,
+                    normfreq: t.tunaBitcrusherNormfreq,
+                    bypass: false
+                });
+                offlineTunaBitcrusher = crusherNode;
+
+                lastNode.connect(crusherDry);
+                crusherDry.connect(crusherSum);
+                lastNode.connect(crusherNode.input);
+                crusherNode.output.connect(crusherWet);
+                crusherWet.connect(crusherSum);
+
+                lastNode = crusherSum;
+
                 // 3. Aelapse Delay & Reverb (SEND EFFECT — dry stays at 1.0)
                 let offlineAelapseDelayGain = null;
                 let offlineAelapseReverbGain = null;
-                if (t.aelapseEnabled) {
-                    const aelapseSum = offlineCtx.createGain();
-                    
-                    // Dry path — always 1.0 (send effect, not insert)
-                    const aelapseDry = offlineCtx.createGain();
-                    aelapseDry.gain.value = 1.0;
-                    lastNode.connect(aelapseDry);
-                    aelapseDry.connect(aelapseSum);
-                    
-                    // Delay send path
+                
+                const aelapseSum = offlineCtx.createGain();
+
+                // Dry path — always 1.0 (send effect, not insert)
+                const aelapseDry = offlineCtx.createGain();
+                aelapseDry.gain.value = 1.0;
+                lastNode.connect(aelapseDry);
+                aelapseDry.connect(aelapseSum);
+
+                // Delay send path
+                if (t.aelapseDelayEnabled && t.aelapseDelayMix > 0) {
                     const aelapseDelay = offlineCtx.createDelay(5.0);
                     aelapseDelay.delayTime.setValueAtTime(t.aelapseDelayTime, 0);
-                    
+
                     const aelapseFb = offlineCtx.createGain();
                     aelapseFb.gain.value = t.aelapseFeedback;
-                    
+
                     const aelapseDelayGain = offlineCtx.createGain();
                     aelapseDelayGain.gain.value = t.aelapseDelayMix;
                     offlineAelapseDelayGain = aelapseDelayGain;
-                    
+
                     lastNode.connect(aelapseDelay);
                     aelapseDelay.connect(aelapseFb);
                     aelapseFb.connect(aelapseDelay); // feedback loop
                     aelapseDelay.connect(aelapseDelayGain);
                     aelapseDelayGain.connect(aelapseSum);
-                    
-                    // Reverb send path
+                }
+
+                // Reverb send path
+                if (t.aelapseReverbEnabled && t.aelapseReverbMix > 0) {
                     const aelapseReverb = offlineCtx.createConvolver();
                     aelapseReverb.buffer = createSpringImpulseResponse(offlineCtx, t.aelapseReverbSize || 2.0, 2.5);
-                    
+
                     const aelapseReverbGain = offlineCtx.createGain();
                     aelapseReverbGain.gain.value = t.aelapseReverbMix;
                     offlineAelapseReverbGain = aelapseReverbGain;
-                    
+
                     lastNode.connect(aelapseReverb);
                     aelapseReverb.connect(aelapseReverbGain);
                     aelapseReverbGain.connect(aelapseSum);
-                    
-                    lastNode = aelapseSum;
                 }
+
+                lastNode = aelapseSum;
 
                 // --- PAN & LEVEL ---
                 const panner = offlineCtx.createStereoPanner();
@@ -6965,9 +7691,21 @@
         const sliderLeft = slider.offsetLeft;
         const sliderTop = slider.offsetTop;
 
-        const pct = Math.max(0, Math.min(1, normalizedVal));
-        const dotLeft = sliderLeft + 6 + pct * (sliderWidth - 12);
-        const dotTop = sliderTop + sliderHeight / 2;
+        const isKnob = slider.classList.contains('fx-knob') || 
+                       slider.classList.contains('fx-mini-knob') || 
+                       slider.classList.contains('pan-knob') || 
+                       slider.classList.contains('macro-knob') || 
+                       slider.classList.contains('fx-macro-knob');
+
+        let dotLeft, dotTop;
+        if (isKnob) {
+            dotLeft = sliderLeft + sliderWidth - 4;
+            dotTop = sliderTop - 2;
+        } else {
+            const pct = Math.max(0, Math.min(1, normalizedVal));
+            dotLeft = sliderLeft + 6 + pct * (sliderWidth - 12);
+            dotTop = sliderTop + sliderHeight / 2;
+        }
 
         dot.style.left = `${dotLeft}px`;
         dot.style.top = `${dotTop}px`;

@@ -1,25 +1,33 @@
-# Handoff: BF16 Option alongside FP32 Support
+# Handoff: LoopMaster SA3 Visual Redesign & FX Rotary Knobs Redesign Implemented (Phases 1-4)
 
-We have completed the implementation of the new memory-optimized **BF16 precision mode** option for the Stable Audio 3 Medium model, while maintaining a pure **FP32 mode** option for the RTX 3080.
+We have successfully implemented the visual redesign phases and the Track FX Drawer Rotary Knobs Redesign (Phases 1-4) using the templates, styling rules, and assets of the `ui-ux-pro-max-skill` repository.
 
-## Completed Tasks
+## Completed Work
 
-1. **Model Configuration Extension**:
-   - Modified [model_configs.py](file:///j:/projects/sa3/stable-audio-3/stable_audio_3/model_configs.py) to support resolving model configurations from a separate repository (`config_repo_id`). This allows the BF16 model to leverage the official config file.
-   - Added `medium-bf16` mapping pointing to `dummy9996/stable-audio-3-bf16-comfyui` for weights.
+1.  **OLED Cinematic Dark Theme & Typography (Phase 1)**:
+    *   Imported Google Fonts' `Poppins`, `Righteous`, and `Space Mono` in [app.css](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.css).
+    *   Updated the design variables in `:root` to map to custom true-black background levels (`#07070C`) and midnight surface divisions (`#0F0F18`).
+    *   Replaced the body background radial-gradient with a premium 3-blob ambient glow configuration.
+    *   Styled the logo title `.app-title` using the Righteous uppercase display font.
 
-2. **Backend CLI Arguments**:
-   - Updated [app_server.py](file:///j:/projects/sa3/loopmaster/loopmaster-app/app_server.py) to include `medium-bf16` as a valid model choice.
+2.  **Breathing Lock Glows**:
+    *   Added `@keyframes lock-breath` to animate locked card box shadows and borders.
+    *   Tied this animation to `.audio-card.card-is-locked` to give locked slots a dynamic amber breathing glow.
 
-3. **Launcher Updates**:
-   - Modified [run_server.bat](file:///j:/projects/sa3/run_server.bat) to add option `[4]` for the optimized BF16 model and option `[1]` for the official FP32 model (launching with `--no-half`).
+3.  **Frosted Glass Card Actions Overlay (Phase 2)**:
+    *   Updated the card HTML template in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to isolate control actions inside a dedicated `.card-hover-overlay` block.
+    *   Added styles in `app.css` to absolute-position the overlay, hide it by default (`opacity: 0`), and fade it in with a frosted glass backdrop filter (`blur(6px)`) when hovering over the card.
 
-## Verification & Status
-- The changes are ready to run.
-- When running option `[4]`, if the BF16 checkpoint is not locally cached, it will fetch it automatically from Hugging Face (~4.6 GB).
+4.  **Track FX Drawer Rotary Knobs Redesign (Phases 3 & 4)**:
+    *   Swapped standard linear range sliders with CSS/SVG-based circular knobs (`.fx-knob` and `.fx-mini-knob`) in the FX drawer, laid out in a clean 6x2 grid.
+    *   Deconstructed the unified "Ælapse" block into independent "Tape Delay" and "Spring Reverb" send channels. Updated the backend and frontend bypass routings (`updateAelapseBypass`) to support independent toggle paths.
+    *   Implemented full serialization for the new knobs and toggles:
+        *   **Copy & Paste FX Settings**: Extracted and restored `aelapseDelayEnabled`, `aelapseReverbEnabled`, `tunaChorusMix`, `tunaPhaserMix`, `tunaBitcrusherMix`, `aelapseReverbSize`, and the `feedback` macro value.
+        *   **Copy & Paste Track Settings**: Serialized and loaded the split delay/reverb bypass status, delay feedback parameter, Chorus and Phaser mixes, and custom rotary value states.
+        *   **Project Save & Load**: Expanded the JSON serialization model in `saveProject()` and `loadProject()` to store, parse, and restore all split settings and dispatch `'input'` events to the knobs on load.
+    *   Verified Javascript code correctness via `node -c`.
 
-## Cleanup & Visual Fixes (Completed)
-1. **Waveform End Gap Fix**: Updated `drawWaveform` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to truncate visual samples to exactly match the active loop duration, eliminating the 2.0-second fade-out/headroom tail padding from the card waveforms.
-2. **Gitignore Updates**: Updated [.gitignore](file:///j:/projects/sa3/.gitignore) to ignore `.ogg` and `.zip` outputs.
-3. **Workspace Cleanup**: Deleted stray/untracked browser testing screenshot images from the project root.
-4. **Wiki Updates**: Synced [Home.md](file:///j:/projects/sa3/loopmaster/wiki/Home.md) and [User-Guide.md](file:///j:/projects/sa3/loopmaster/wiki/User-Guide.md) to document BF16 mode, Tuna.js effects integration, and remove Valentine references.
+## Status & Next Steps
+
+*   All visual theme modifications, hover card overlays, rotary knobs, copy/paste, and project save/load routines are implemented and compile successfully.
+*   **Next steps**: Proceed with testing real-time audio playback, knob dragging, LFO matrix sweeps, project save/load loop, and verify offline mixdown bouncing.

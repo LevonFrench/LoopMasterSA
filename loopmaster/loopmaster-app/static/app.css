@@ -3,41 +3,41 @@
    Multi-track mixer with row-based layout
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Righteous&family=Space+Mono:wght@400;700&display=swap');
 
 /* --- Design Tokens --- */
 :root {
-    --bg-base: #0a0a10;
-    --bg-surface: #12121a;
-    --bg-card: rgba(22, 22, 32, 0.7);
-    --bg-card-hover: rgba(30, 30, 44, 0.8);
-    --bg-card-active: rgba(35, 35, 55, 0.85);
-    --bg-card-selected: rgba(59, 130, 246, 0.1);
-    --bg-input: rgba(18, 18, 28, 0.9);
-    --bg-mixer: rgba(16, 16, 24, 0.9);
+    --bg-base: #07070c;
+    --bg-surface: #0f0f18;
+    --bg-card: rgba(22, 22, 38, 0.45);
+    --bg-card-hover: rgba(30, 30, 52, 0.6);
+    --bg-card-active: rgba(40, 40, 68, 0.7);
+    --bg-card-selected: rgba(94, 106, 210, 0.1);
+    --bg-input: rgba(15, 15, 26, 0.9);
+    --bg-mixer: rgba(12, 12, 20, 0.9);
 
-    --border-subtle: rgba(255, 255, 255, 0.06);
-    --border-card: rgba(255, 255, 255, 0.08);
-    --border-input: rgba(255, 255, 255, 0.1);
-    --border-focus: rgba(59, 130, 246, 0.5);
-    --border-selected: rgba(59, 130, 246, 0.6);
+    --border-subtle: rgba(255, 255, 255, 0.04);
+    --border-card: rgba(255, 255, 255, 0.06);
+    --border-input: rgba(255, 255, 255, 0.08);
+    --border-focus: rgba(94, 106, 210, 0.55);
+    --border-selected: rgba(94, 106, 210, 0.6);
 
     --text-primary: #e8e8ee;
     --text-secondary: #8888a0;
     --text-tertiary: #555568;
-    --text-accent: #6ea8fe;
+    --text-accent: #9b8fbb;
 
-    --accent: #3b82f6;
-    --accent-glow: rgba(59, 130, 246, 0.25);
-    --accent-soft: rgba(59, 130, 246, 0.12);
+    --accent: #5e6ad2;
+    --accent-glow: rgba(94, 106, 210, 0.25);
+    --accent-soft: rgba(94, 106, 210, 0.12);
 
     --solo-color: #facc15;
     --mute-color: #ef4444;
-    --success: #22c55e;
+    --success: #10b981;
     --error: #ef4444;
 
-    --waveform-fill: rgba(59, 130, 246, 0.3);
-    --waveform-fill-selected: rgba(59, 130, 246, 0.55);
+    --waveform-fill: rgba(94, 106, 210, 0.25);
+    --waveform-fill-selected: rgba(16, 185, 129, 0.45);
     --playhead-color: #fff;
 
     --radius-sm: 6px;
@@ -45,14 +45,14 @@
     --radius-lg: 14px;
 
     --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.3);
-    --shadow-glow: 0 4px 14px rgba(59, 130, 246, 0.2);
+    --shadow-glow: 0 4px 14px rgba(94, 106, 210, 0.2);
     --shadow-btn: 0 2px 8px rgba(0, 0, 0, 0.4);
 
     --transition-fast: 150ms ease;
     --transition-med: 250ms ease;
 
-    --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
-    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+    --font-sans: 'Poppins', system-ui, -apple-system, sans-serif;
+    --font-mono: 'Space Mono', ui-monospace, 'SF Mono', Consolas, monospace;
 }
 
 /* --- Reset --- */
@@ -78,8 +78,9 @@ body::before {
     position: fixed;
     inset: 0;
     background:
-        radial-gradient(ellipse 80% 60% at 20% 10%, rgba(59, 130, 246, 0.06), transparent 60%),
-        radial-gradient(ellipse 60% 50% at 80% 80%, rgba(99, 50, 200, 0.04), transparent 50%);
+        radial-gradient(circle at 15% 15%, rgba(94, 106, 210, 0.06) 0%, transparent 50%),
+        radial-gradient(circle at 85% 85%, rgba(16, 185, 129, 0.04) 0%, transparent 55%),
+        radial-gradient(circle at 50% 120%, rgba(124, 58, 237, 0.05) 0%, transparent 60%);
     pointer-events: none;
     z-index: 0;
 }
@@ -120,9 +121,11 @@ body::before {
 .app-logo svg { width: 18px; height: 18px; fill: #fff; }
 
 .app-title {
+    font-family: 'Righteous', sans-serif;
     font-size: 1.2rem;
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     background: linear-gradient(135deg, var(--text-primary) 40%, var(--text-accent));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -1003,19 +1006,27 @@ body::before {
     display: block;
 }
 
+@keyframes lock-breath {
+    0%, 100% {
+        box-shadow: 0 0 4px rgba(245, 158, 11, 0.2);
+        border-color: rgba(245, 158, 11, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 12px rgba(245, 158, 11, 0.45);
+        border-color: rgba(245, 158, 11, 0.75);
+    }
+}
+
 .audio-card.card-is-locked {
-    border-color: rgba(245, 158, 11, 0.45);
     background: rgba(245, 158, 11, 0.03);
-    box-shadow: 0 0 8px rgba(245, 158, 11, 0.1);
+    animation: lock-breath 3s ease-in-out infinite;
 }
 
 .audio-card.card-is-locked:hover {
-    border-color: rgba(245, 158, 11, 0.6);
     background: rgba(245, 158, 11, 0.05);
 }
 
 .audio-card.card-is-locked.is-selected {
-    border-color: rgba(245, 158, 11, 0.8);
     background: rgba(245, 158, 11, 0.08);
     box-shadow: inset 0 0 12px rgba(245, 158, 11, 0.15);
 }
@@ -1198,6 +1209,42 @@ body.split-mode .card-split-line {
     overflow: hidden;
     container-type: inline-size;
     min-height: 48px;
+}
+
+.card-hover-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 10, 20, 0.82);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-fast) ease-in-out;
+    border-radius: 3px;
+    z-index: 5;
+}
+
+.audio-card:hover:not(.is-loading):not(.is-deleted) .card-hover-overlay {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.card-hover-overlay button {
+    height: 22px;
+    padding: 0 6px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    border-radius: 3px;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-input);
+    line-height: 1;
 }
 
 .card-waveform {
@@ -2848,5 +2895,188 @@ body.split-mode .card-split-line {
 }
 
 
+/* --- Modular FX Drawer Grid & Knobs --- */
 
+.fx-drawer {
+    display: grid !important;
+    grid-template-columns: repeat(6, 1fr) !important;
+    grid-template-rows: repeat(2, auto) !important;
+    gap: 10px !important;
+    min-height: unset !important;
+    height: auto !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    flex-wrap: unset !important;
+}
 
+/* Ensure FX sections occupy their full grid area */
+.fx-drawer .fx-section {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    width: auto !important;
+    margin: 0 !important;
+    box-sizing: border-box;
+}
+
+/* Specific section size tweaks */
+.fx-drawer .fx-section.macros-section {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+    min-width: 0 !important;
+    background: rgba(59, 130, 246, 0.04) !important;
+    border-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+/* Knob and group styling */
+.fx-knob-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.fx-knob-label {
+    font-size: 0.55rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+.fx-knob-value {
+    font-size: 0.55rem;
+    font-family: monospace;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+.fx-knob {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #3a3a50, #1a1a2a);
+    border: 1.5px solid rgba(255, 255, 255, 0.12);
+    position: relative;
+    cursor: ns-resize;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+    transition: border-color var(--transition-fast);
+}
+
+.fx-knob:hover {
+    border-color: var(--accent);
+}
+
+.fx-knob .knob-indicator {
+    position: absolute;
+    top: 3px;
+    left: 50%;
+    width: 2px;
+    height: 8px;
+    margin-left: -1px;
+    background: var(--accent);
+    border-radius: 1px;
+    transform-origin: center 11px;
+    transform: rotate(-135deg);
+    transition: none;
+}
+
+/* Mini knobs in headers */
+.mini-knob-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.fx-mini-knob {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #3a3a50, #1a1a2a);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    position: relative;
+    cursor: ns-resize;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    transition: border-color var(--transition-fast);
+}
+
+.fx-mini-knob:hover {
+    border-color: var(--accent);
+}
+
+.fx-mini-knob .mini-knob-indicator {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    width: 1.5px;
+    height: 4px;
+    margin-left: -0.75px;
+    background: var(--accent);
+    border-radius: 0.5px;
+    transform-origin: center 6px;
+    transform: rotate(-135deg);
+    transition: none;
+}
+
+/* Grid layouts for knob controls within sections */
+.fx-controls-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 6px;
+    justify-items: center;
+    align-items: flex-start;
+}
+
+/* Specific grids for Luftikus EQ, Macros, and Chorus/Phaser */
+.eq-knobs-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px 4px !important;
+    justify-items: center !important;
+}
+
+.macros-knobs-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 8px 4px !important;
+    justify-items: center !important;
+}
+
+.chorus-knobs-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
+    justify-items: center !important;
+}
+
+/* Style for empty Eurorack slots */
+.fx-section.empty-slot {
+    border: 1.5px dashed rgba(255, 255, 255, 0.08) !important;
+    background: transparent !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 0.3 !important;
+    min-height: 120px;
+}
+
+/* Mod Matrix dots styling relative to knobs */
+.lfo-dot {
+    position: absolute;
+    width: 6px !important;
+    height: 6px !important;
+    background: #10b981 !important;
+    border-radius: 50% !important;
+    box-shadow: 0 0 8px #10b981 !important;
+    pointer-events: none !important;
+    z-index: 100 !important;
+}

@@ -383,3 +383,20 @@
 - [x] Update `.gitignore` to include `.ogg` and `.zip` outputs
 - [x] Update wiki knowledge base (`Home.md` and `User-Guide.md`) to document BF16 mode, Tuna.js effects, Valentine/Favorites removal, and current controls
 - [x] Fix the silent trailing gap on the waveform display by limiting rendering to active loop duration
+- [x] Analyze UI layout and draft visual redesign proposal based on ui-ux-pro-max-skill guidelines:
+  - [x] Implement Phase 1 theme variables and typography import in `app.css`
+  - [x] Implement breathing padlock `lock-breath` glow animation in `app.css`
+  - [x] Implement Phase 2 frosted glass hover card overlay shields in `app.js` and `app.css`
+  - [x] Fix pre-existing syntax error (duplicate template literal closer) in `app.js`
+- [x] Track FX Drawer Rotary Knobs Redesign:
+  - [x] Redesign HTML grid layout (6x2 grid) and CSS in `app.css` and `app.js`
+  - [x] Initialize dry/wet parallel gain nodes for Tuna.js effects in `createTrackRow`
+  - [x] Wire all FX parameter knobs to custom `.fx-knob` / `.fx-mini-knob` controls using `initKnob`
+  - [x] Add independent bypass toggles for Tape Delay and Spring Reverb in UI and state
+  - [x] Reposition Macro Controls panel as the first unit in the second row
+  - [x] Update LFO modulation dot alignment logic to anchor to top-right of modulated knobs
+  - [x] Replicate independent delay/reverb sends and bypasses in OfflineAudioContext rendering
+  - [x] Update Copy & Paste FX Settings in `app.js` to serialize split delay/reverb bypasses, mixes, and macros
+  - [x] Update Copy & Paste Track Settings in `app.js` to copy/paste new split FX configurations
+  - [x] Update Project Save & Load in `app.js` to serialize and restore new split FX settings and toggles
+  - [x] Run syntax check and verify real-time audio playback, copy/paste settings, save/load, and WAV mixdown bounce
