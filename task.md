@@ -545,4 +545,13 @@
   - [x] Perform syntax and compilation validation check on all modified Python/JS source files
   - [x] Analyze codebase tracking and build artifact directories for size bloat
   - [x] Stage all modified assets, create Git commit, and push to origin/main remote repository
+
+- [x] Handoff Rules Update:
+  - [x] Add specific handoff.md guidelines to Section 11 of AGENTS.md.
+
+- [x] Fix LFO panning clicks and automations:
+  - [x] Replace native `StereoPannerNode` with custom `GainNode`-based balance panning node graph in `createTrackRow` inside `app.js`
+  - [x] Implement equal-power balance panning curves in the custom `.pan` object's `.value`, `setValueAtTime()`, and `setTargetAtTime()` methods in `app.js`
+  - [x] Update `runAudioSchedulerTick()` in `app.js` to schedule LFO parameter automations 15ms in the future using a unified `rampTime`
+  - [x] Verify that the application builds, loads, and plays audio with smooth, click-free panning modulation
 

@@ -40,6 +40,12 @@
     --waveform-fill-selected: rgba(16, 185, 129, 0.45);
     --playhead-color: #fff;
 
+    /* LFO Colors */
+    --lfo1-color: #10b981;
+    --lfo2-color: #00f2fe;
+    --lfo3-color: #facc15;
+    --lfo4-color: #ec4899;
+
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
@@ -2390,12 +2396,140 @@ body.split-mode .card-split-line {
     display: none;
 }
 
-.lfo-section {
-    background: rgba(16, 185, 129, 0.04);
+.lfo1-section {
+    background: rgba(16, 185, 129, 0.03) !important;
     border-color: rgba(16, 185, 129, 0.15) !important;
 }
-.lfo-section-title span {
-    color: #10b981;
+.lfo1-section .fx-section-title span {
+    color: var(--lfo1-color) !important;
+}
+.lfo2-section {
+    background: rgba(0, 242, 254, 0.03) !important;
+    border-color: rgba(0, 242, 254, 0.15) !important;
+}
+.lfo2-section .fx-section-title span {
+    color: var(--lfo2-color) !important;
+}
+.lfo3-section {
+    background: rgba(250, 204, 21, 0.03) !important;
+    border-color: rgba(250, 204, 21, 0.15) !important;
+}
+.lfo3-section .fx-section-title span {
+    color: var(--lfo3-color) !important;
+}
+.lfo4-section {
+    background: rgba(236, 72, 153, 0.03) !important;
+    border-color: rgba(236, 72, 153, 0.15) !important;
+}
+.lfo4-section .fx-section-title span {
+    color: var(--lfo4-color) !important;
+}
+
+/* Timing Lights */
+.lfo-timing-light {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: currentColor;
+    opacity: 0.15;
+    box-shadow: none;
+    transition: opacity 0.05s ease, box-shadow 0.05s ease;
+    flex-shrink: 0;
+}
+
+/* Oscilloscope Container */
+.lfo-visualizer-container {
+    position: relative;
+    margin: 4px 0 8px 0;
+    background: rgba(4, 4, 8, 0.65);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    height: 34px;
+    overflow: hidden;
+}
+.lfo-mini-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* Direct Map buttons */
+.fx-map-btn {
+    height: 18px;
+    padding: 0 6px;
+    font-size: 0.58rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-input);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+.fx-map-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Map active states per LFO */
+.lfo1-section .fx-map-btn.active {
+    background: var(--lfo1-color) !important;
+    border-color: var(--lfo1-color) !important;
+    color: #000 !important;
+    animation: lfo1-pulse-btn 1s infinite alternate;
+}
+.lfo2-section .fx-map-btn.active {
+    background: var(--lfo2-color) !important;
+    border-color: var(--lfo2-color) !important;
+    color: #000 !important;
+    animation: lfo2-pulse-btn 1s infinite alternate;
+}
+.lfo3-section .fx-map-btn.active {
+    background: var(--lfo3-color) !important;
+    border-color: var(--lfo3-color) !important;
+    color: #000 !important;
+    animation: lfo3-pulse-btn 1s infinite alternate;
+}
+.lfo4-section .fx-map-btn.active {
+    background: var(--lfo4-color) !important;
+    border-color: var(--lfo4-color) !important;
+    color: #000 !important;
+    animation: lfo4-pulse-btn 1s infinite alternate;
+}
+
+@keyframes lfo1-pulse-btn {
+    0% { box-shadow: 0 0 2px rgba(16, 185, 129, 0.4); }
+    100% { box-shadow: 0 0 8px rgba(16, 185, 129, 0.8); }
+}
+@keyframes lfo2-pulse-btn {
+    0% { box-shadow: 0 0 2px rgba(0, 242, 254, 0.4); }
+    100% { box-shadow: 0 0 8px rgba(0, 242, 254, 0.8); }
+}
+@keyframes lfo3-pulse-btn {
+    0% { box-shadow: 0 0 2px rgba(250, 204, 21, 0.4); }
+    100% { box-shadow: 0 0 8px rgba(250, 204, 21, 0.8); }
+}
+@keyframes lfo4-pulse-btn {
+    0% { box-shadow: 0 0 2px rgba(236, 72, 153, 0.4); }
+    100% { box-shadow: 0 0 8px rgba(236, 72, 153, 0.8); }
+}
+
+/* Direct Map highlights */
+.lfo-mappable-active {
+    outline: 2px dashed var(--lfo-mapping-color) !important;
+    outline-offset: 2px !important;
+    cursor: cell !important;
+    animation: lfo-mapping-blink 0.8s infinite alternate !important;
+}
+
+@keyframes lfo-mapping-blink {
+    0% { outline-color: var(--lfo-mapping-color); opacity: 0.8; }
+    100% { outline-color: #ffffff; opacity: 1.0; }
+}
+
+#modulators-panel .mod-matrix-section {
+    grid-column: span 2 !important;
 }
 .lfo-matrix-grid {
     display: flex;

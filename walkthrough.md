@@ -867,4 +867,28 @@ We verified the redesigned track mixer strip:
 1. **Workspace File System Cleanup**: Run `git clean -fdn` to confirm there are no untracked or dangling cache files/directories in the project that could pollute commits.
 2. **Compilation and Syntax Checks**: Validated Python code compilation on `stable_audio_3/model.py` and `loopmaster-app/app_server.py` using `python -m py_compile`, and verified JavaScript syntax for `static/app.js` using `node -c`. All checks passed.
 3. **Bloat Analysis**: Analyzed the workspace for large files (over 10MB) to ensure model checkpoints and site-packages remain correctly ignored in `.gitignore`, preventing repository bloat. Tracked files are all lightweight (under 1MB).
-4. **Git Stage and Commit**: Prepared the changes to code and documentation assets, committing the updates to the local git index.
+4. **Git Stage and Commit**: Prepared the changes to code and documentation assets, committing the updates to the local git index.
+
+### 77. Agent Operating Rules Update (2026-05-29)
+1. **Rule Modification**: Updated `AGENTS.md` under Section 11 (`Handoff Documents`) to include the user's specific rules for handoff files.
+2. **Rules Added**: Added requirements to summarize the conversation for the next agent, save to the OS temporary directory (instead of the workspace), include a "suggested skills" section, avoid duplicating existing files (PRDs, plans, etc.) and instead reference them, redact sensitive data, and adapt the tail section based on user arguments.
+
+### 78. LFO Drawer Redesign with Timing Lights & Direct Mapping Workflow (2026-05-29)
+1. **Timing LED Indicators**: Added pulsing HTML indicators in LFO headers that dynamically scale brightness and glow based on real-time LFO output calculations during playback.
+2. **Waveform Oscilloscopes**: Added real-time canvas oscilloscopes for all 4 LFOs, rendering waveforms (Sine, Triangle, Saw, Square, S&H steps) and active playhead/phase position lines.
+3. **Direct Parameter Mapping**: Added Map buttons to each LFO section. Active map state applies a pulsing dashed outline (`.lfo-mappable-active`) matching the LFO's color coding to all 12 modifiable parameters and the master volume fader. Clicking a control intercepts the click, routes LFO modulation to the first free Mod Matrix slot (overwriting slot 8 if full) at +50% depth, calls `syncModMatrixUI()` to sync the Mod Matrix drawer, and cleanly exits mapping mode. Clicking an already modulated target parameter acts as a toggle, clearing the modulation slot.
+4. **Grid Layout Balance**: Modified `#modulators-panel .mod-matrix-section` in `app.css` to span 2 grid columns, aligning it flush with the four 1-column LFO modules across the 6-column grid drawer.
+5. **Interactive UI Repainting**: Added event triggers so that modifying LFO parameters (toggling shape, rate, sync, or active states) redraws visualizers instantly when paused.
+6. **Syntax Validation**: Confirmed that Javascript (`app.js`) compiles cleanly.
+
+### 79. LFO Panning Clicks & Automations Fix (2026-05-29)
+1. **Custom Gain Panner Graph**: Replaced native `StereoPannerNode` with a custom node graph inside `createTrackRow()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js):
+   - Configured `panningInput.channelCountMode = 'explicit'` to ensure both mono and stereo tracks are processed as stereo.
+   - Connected `panningInput` to a `ChannelSplitterNode(2)` which routes split channels to `leftGain` and `rightGain` nodes.
+   - Connected left and right gains to a `ChannelMergerNode(2)` and linked it to the track's output compressor.
+2. **Equal-Power Balance Panning Curves**: Implemented standard equal-power balance curves in the custom `.pan` object's `.value`, `setValueAtTime()`, and `setTargetAtTime()` methods to scale left/right channel gains smoothly:
+   - For $pan \le 0$: Left gain = $1.0$, Right gain = $\cos(\frac{\pi}{2} \cdot -pan)$
+   - For $pan > 0$: Left gain = $\cos(\frac{\pi}{2} \cdot pan)$, Right gain = $1.0$
+3. **Lookahead Parameter Automation**: Refactored `runAudioSchedulerTick()` in [app.js](file:///j:/projects/sa3/loopmaster/loopmaster-app/static/app.js) to automate volume, panning, filter frequency, and delay/reverb send gains `15ms` in the future (`currentTime + 0.015`) using a unified `rampTime` and tuned time constants, eliminating click/zipper noise.
+4. **Validation**: Confirmed that Javascript (`app.js`) compiles cleanly using `node -c` and that the application boots and routes audio correctly.
+

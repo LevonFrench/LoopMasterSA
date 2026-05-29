@@ -269,10 +269,19 @@
             
             <div class="fx-drawer">
                 <!-- LFO 1 -->
-                <div class="fx-section lfo-section">
+                <div class="fx-section lfo-section lfo1-section">
                     <div class="fx-section-title">
-                        <span>LFO 1</span>
-                        <button class="fx-toggle-btn lfo1-toggle" type="button">On</button>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div class="lfo-timing-light" id="lfo1-timing-light"></div>
+                            <span>LFO 1</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <button class="fx-map-btn lfo1-map-btn" type="button" title="Map LFO 1 to parameter">Map</button>
+                            <button class="fx-toggle-btn lfo1-toggle" type="button">On</button>
+                        </div>
+                    </div>
+                    <div class="lfo-visualizer-container">
+                        <canvas id="lfo1-canvas" class="lfo-mini-canvas" width="160" height="34"></canvas>
                     </div>
                     <div class="fx-controls-grid">
                         <div class="fx-control-row">
@@ -318,10 +327,19 @@
                 </div>
                 
                 <!-- LFO 2 -->
-                <div class="fx-section lfo-section">
+                <div class="fx-section lfo-section lfo2-section">
                     <div class="fx-section-title">
-                        <span>LFO 2</span>
-                        <button class="fx-toggle-btn lfo2-toggle" type="button">On</button>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div class="lfo-timing-light" id="lfo2-timing-light"></div>
+                            <span>LFO 2</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <button class="fx-map-btn lfo2-map-btn" type="button" title="Map LFO 2 to parameter">Map</button>
+                            <button class="fx-toggle-btn lfo2-toggle" type="button">On</button>
+                        </div>
+                    </div>
+                    <div class="lfo-visualizer-container">
+                        <canvas id="lfo2-canvas" class="lfo-mini-canvas" width="160" height="34"></canvas>
                     </div>
                     <div class="fx-controls-grid">
                         <div class="fx-control-row">
@@ -367,10 +385,19 @@
                 </div>
 
                 <!-- LFO 3 -->
-                <div class="fx-section lfo-section">
+                <div class="fx-section lfo-section lfo3-section">
                     <div class="fx-section-title">
-                        <span>LFO 3</span>
-                        <button class="fx-toggle-btn lfo3-toggle" type="button">On</button>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div class="lfo-timing-light" id="lfo3-timing-light"></div>
+                            <span>LFO 3</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <button class="fx-map-btn lfo3-map-btn" type="button" title="Map LFO 3 to parameter">Map</button>
+                            <button class="fx-toggle-btn lfo3-toggle" type="button">On</button>
+                        </div>
+                    </div>
+                    <div class="lfo-visualizer-container">
+                        <canvas id="lfo3-canvas" class="lfo-mini-canvas" width="160" height="34"></canvas>
                     </div>
                     <div class="fx-controls-grid">
                         <div class="fx-control-row">
@@ -416,10 +443,19 @@
                 </div>
 
                 <!-- LFO 4 -->
-                <div class="fx-section lfo-section">
+                <div class="fx-section lfo-section lfo4-section">
                     <div class="fx-section-title">
-                        <span>LFO 4</span>
-                        <button class="fx-toggle-btn lfo4-toggle" type="button">On</button>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div class="lfo-timing-light" id="lfo4-timing-light"></div>
+                            <span>LFO 4</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <button class="fx-map-btn lfo4-map-btn" type="button" title="Map LFO 4 to parameter">Map</button>
+                            <button class="fx-toggle-btn lfo4-toggle" type="button">On</button>
+                        </div>
+                    </div>
+                    <div class="lfo-visualizer-container">
+                        <canvas id="lfo4-canvas" class="lfo-mini-canvas" width="160" height="34"></canvas>
                     </div>
                     <div class="fx-controls-grid">
                         <div class="fx-control-row">

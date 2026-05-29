@@ -136,6 +136,35 @@
         modMatrixSlots.push({ src: 'none', trackId: 'none', param: 'none', depth: 0 });
     }
 
+    let activeLfoMapping = null; // null or 1, 2, 3, 4
+
+    function startLfoMapping(num) {
+        cancelLfoMapping();
+        activeLfoMapping = num;
+
+        const mapBtn = document.querySelector(`.lfo${num}-map-btn`);
+        if (mapBtn) mapBtn.classList.add('active');
+
+        const color = ['#10b981', '#00f2fe', '#facc15', '#ec4899'][num - 1];
+        document.body.style.setProperty('--lfo-mapping-color', color);
+
+        const targets = document.querySelectorAll('.level-knob, .filtr-cutoff, .aelapse-delay-mix, .aelapse-reverb-mix, .pan-knob, .chorus-rate, .chorus-depth, .chorus-feedback, .phaser-rate, .phaser-depth, .phaser-feedback, .crusher-bits, .crusher-normfreq, #master-volume-slider');
+        targets.forEach(target => {
+            target.classList.add('lfo-mappable-active');
+        });
+    }
+
+    function cancelLfoMapping() {
+        if (activeLfoMapping !== null) {
+            const mapBtn = document.querySelector(`.lfo${activeLfoMapping}-map-btn`);
+            if (mapBtn) mapBtn.classList.remove('active');
+            activeLfoMapping = null;
+        }
+        document.querySelectorAll('.lfo-mappable-active').forEach(target => {
+            target.classList.remove('lfo-mappable-active');
+        });
+    }
+
     // --- Song Arranger State ---
     let arrangerModeActive = false;
     let arrangerLengthLoops = 8;
@@ -1143,11 +1172,13 @@
                 crusherNormfreq: 0
             };
 
+            const rampTime = audioCtx.currentTime + 0.015;
+
             // Volume
             let level = track.level + offsets.level;
             level = Math.max(0, Math.min(1, level));
             if (track.gainNode) {
-                track.gainNode.gain.value = level * track._arrangerGate;
+                track.gainNode.gain.setTargetAtTime(level * track._arrangerGate, rampTime, 0.02);
             }
             updateSliderModDot(track, '.level-knob', level);
 
@@ -1155,7 +1186,7 @@
             let pan = track.pan + offsets.pan * 2.0;
             pan = Math.max(-1, Math.min(1, pan));
             if (track.panNode) {
-                track.panNode.pan.value = pan;
+                track.panNode.pan.setTargetAtTime(pan, rampTime, 0.025);
             }
             const panKnob = track.wrapper.querySelector('.pan-knob');
             if (panKnob) {
@@ -1173,15 +1204,19 @@
             let filterCutoff = track.filtrCutoff + offsets.filter * 15000;
             filterCutoff = Math.max(20, Math.min(20000, filterCutoff));
             if (track.filtrFilterNode) {
-                track.filtrFilterNode.frequency.value = filterCutoff;
+                track.filtrFilterNode.frequency.setTargetAtTime(filterCutoff, rampTime, 0.025);
             }
             updateSliderModDot(track, '.filtr-cutoff', (filterCutoff - 20) / 19980);
             // Space
             let space = offsets.space;
             let dMix = Math.max(0, Math.min(1, track.aelapseDelayMix + space));
             let rMix = Math.max(0, Math.min(1, track.aelapseReverbMix + space));
-            if (track.aelapseDelayGainNode) track.aelapseDelayGainNode.gain.value = dMix;
-            if (track.aelapseReverbGainNode) track.aelapseReverbGainNode.gain.value = rMix;
+            if (track.aelapseDelayGainNode) {
+                track.aelapseDelayGainNode.gain.setTargetAtTime(dMix, rampTime, 0.02);
+            }
+            if (track.aelapseReverbGainNode) {
+                track.aelapseReverbGainNode.gain.setTargetAtTime(rMix, rampTime, 0.02);
+            }
             updateSliderModDot(track, '.aelapse-delay-mix', dMix);
             updateSliderModDot(track, '.aelapse-reverb-mix', rMix);
 
@@ -1285,6 +1320,165 @@
         if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
     }
 
+    function renderLFOVisualizers(currentTime) {
+        const modulatorsPanel = document.getElementById('modulators-panel');
+        if (!modulatorsPanel || modulatorsPanel.style.display === 'none') return;
+
+        const bpm = parseInt(bpmInput.value) || 120;
+        const colors = ['#10b981', '#00f2fe', '#facc15', '#ec4899'];
+
+        for (let num = 1; num <= 4; num++) {
+            const lfo = globalModulators[`lfo${num}`];
+            if (!lfo) continue;
+
+            // 1. Update timing LED
+            const led = document.getElementById(`lfo${num}-timing-light`);
+            let period = 1.0;
+            if (lfo.mode === 'sync') {
+                const bars = parseFloat(lfo.syncRate) || 1.0;
+                period = bars * (240.0 / bpm);
+            } else {
+                period = 1.0 / (lfo.freeRate || 1.0);
+            }
+            const phase = (currentTime / period) % 1.0;
+
+            let val = 0.0;
+            switch (lfo.shape) {
+                case 'sine':
+                    val = Math.sin(2.0 * Math.PI * phase);
+                    break;
+                case 'triangle':
+                    val = phase < 0.5 ? (4.0 * phase - 1.0) : (3.0 - 4.0 * phase);
+                    break;
+                case 'sawtooth':
+                    val = 2.0 * phase - 1.0;
+                    break;
+                case 'square':
+                    val = phase < 0.5 ? 1.0 : -1.0;
+                    break;
+                case 'random': {
+                    const cycleIndex = Math.floor(currentTime / period);
+                    const stateKey = `lfo${num}_sh`;
+                    if (globalModulators[stateKey] === undefined || globalModulators[stateKey].cycle !== cycleIndex) {
+                        globalModulators[stateKey] = {
+                            cycle: cycleIndex,
+                            val: Math.random() * 2.0 - 1.0
+                        };
+                    }
+                    val = globalModulators[stateKey].val;
+                    break;
+                }
+            }
+
+            if (led) {
+                if (lfo.enabled) {
+                    const intensity = (val + 1.0) / 2.0; // 0 to 1
+                    led.style.opacity = (0.2 + 0.8 * intensity).toString();
+                    led.style.boxShadow = `0 0 ${Math.round(2 + 8 * intensity)}px ${colors[num - 1]}`;
+                    led.style.color = colors[num - 1];
+                } else {
+                    led.style.opacity = '0.15';
+                    led.style.boxShadow = 'none';
+                    led.style.color = 'var(--text-tertiary)';
+                }
+            }
+
+            // 2. Draw waveform canvas
+            const canvas = document.getElementById(`lfo${num}-canvas`);
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (!lfo.enabled) {
+                    // Draw disabled straight line
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(0, canvas.height / 2);
+                    ctx.lineTo(canvas.width, canvas.height / 2);
+                    ctx.stroke();
+                } else {
+                    const color = colors[num - 1];
+                    const steps = 8;
+                    const stepW = canvas.width / steps;
+
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 1.5;
+                    ctx.lineJoin = 'round';
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+
+                    if (lfo.shape === 'random') {
+                        // Draw sample and hold steps
+                        for (let s = 0; s < steps; s++) {
+                            const stepVal = Math.sin(s * 13.37) * 0.75;
+                            const y = (canvas.height / 2) - stepVal * (canvas.height / 2 - 6);
+                            const xStart = s * stepW;
+                            const xEnd = (s + 1) * stepW;
+                            if (s === 0) {
+                                ctx.moveTo(xStart, y);
+                            } else {
+                                ctx.lineTo(xStart, y);
+                            }
+                            ctx.lineTo(xEnd, y);
+                        }
+                    } else {
+                        // Draw smooth wave
+                        for (let x = 0; x <= canvas.width; x++) {
+                            const tPhase = x / canvas.width;
+                            let yVal = 0.0;
+                            switch (lfo.shape) {
+                                case 'sine':
+                                    yVal = Math.sin(2.0 * Math.PI * tPhase);
+                                    break;
+                                case 'triangle':
+                                    yVal = tPhase < 0.5 ? (4.0 * tPhase - 1.0) : (3.0 - 4.0 * tPhase);
+                                    break;
+                                case 'sawtooth':
+                                    yVal = 2.0 * tPhase - 1.0;
+                                    break;
+                                case 'square':
+                                    yVal = tPhase < 0.5 ? 1.0 : -1.0;
+                                    break;
+                            }
+                            const y = (canvas.height / 2) - yVal * (canvas.height / 2 - 6);
+                            if (x === 0) {
+                                ctx.moveTo(x, y);
+                            } else {
+                                ctx.lineTo(x, y);
+                            }
+                        }
+                    }
+                    ctx.stroke();
+
+                    // Draw vertical playhead
+                    const px = phase * canvas.width;
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+                    ctx.lineWidth = 1.0;
+                    ctx.beginPath();
+                    ctx.moveTo(px, 0);
+                    ctx.lineTo(px, canvas.height);
+                    ctx.stroke();
+
+                    // Draw playhead cursor dot on wave
+                    let pyVal = val;
+                    if (lfo.shape === 'random') {
+                        const activeStep = Math.floor(phase * steps);
+                        pyVal = Math.sin(activeStep * 13.37) * 0.75;
+                    }
+                    const py = (canvas.height / 2) - pyVal * (canvas.height / 2 - 6);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.shadowColor = color;
+                    ctx.shadowBlur = 4;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.shadowBlur = 0; // reset
+                }
+            }
+        }
+    }
+
     let prevPlayPct = 0;
 
     function updatePlayheads() {
@@ -1297,6 +1491,8 @@
         } else {
             currentTime = playOffset % activeDuration;
         }
+
+        renderLFOVisualizers(currentTime);
 
         const pct = activeDuration > 0 ? currentTime / activeDuration : 0;
         tPosition.textContent = formatTime(currentTime);
@@ -1793,9 +1989,69 @@
         const gainNode = ctx.createGain();
         gainNode.gain.value = 0.8;
 
-        const panNode = ctx.createStereoPanner();
-        panNode.pan.value = 0;
-        panNode.connect(gainNode);
+        // Custom panner to avoid clicks/zipper noise in StereoPannerNode
+        const panningInput = ctx.createGain();
+        panningInput.channelCount = 2;
+        panningInput.channelCountMode = 'explicit';
+
+        const splitter = ctx.createChannelSplitter(2);
+        const leftGain = ctx.createGain();
+        const rightGain = ctx.createGain();
+        const merger = ctx.createChannelMerger(2);
+
+        panningInput.connect(splitter);
+        splitter.connect(leftGain, 0);
+        splitter.connect(rightGain, 1);
+        leftGain.connect(merger, 0, 0);
+        rightGain.connect(merger, 0, 1);
+        merger.connect(gainNode);
+
+        const panNode = panningInput;
+        panNode.pan = {
+            _val: 0,
+            get value() {
+                return this._val;
+            },
+            set value(targetVal) {
+                this._val = targetVal;
+                const panVal = Math.max(-1, Math.min(1, targetVal));
+                let leftGainVal = 1.0;
+                let rightGainVal = 1.0;
+                if (panVal <= 0) {
+                    rightGainVal = Math.cos((Math.PI / 2) * -panVal);
+                } else {
+                    leftGainVal = Math.cos((Math.PI / 2) * panVal);
+                }
+                leftGain.gain.value = leftGainVal;
+                rightGain.gain.value = rightGainVal;
+            },
+            setTargetAtTime: function(targetVal, startTime, timeConstant) {
+                this._val = targetVal;
+                const panVal = Math.max(-1, Math.min(1, targetVal));
+                let leftGainVal = 1.0;
+                let rightGainVal = 1.0;
+                if (panVal <= 0) {
+                    rightGainVal = Math.cos((Math.PI / 2) * -panVal);
+                } else {
+                    leftGainVal = Math.cos((Math.PI / 2) * panVal);
+                }
+                leftGain.gain.setTargetAtTime(leftGainVal, startTime, timeConstant);
+                rightGain.gain.setTargetAtTime(rightGainVal, startTime, timeConstant);
+            },
+            setValueAtTime: function(targetVal, startTime) {
+                this._val = targetVal;
+                const panVal = Math.max(-1, Math.min(1, targetVal));
+                let leftGainVal = 1.0;
+                let rightGainVal = 1.0;
+                if (panVal <= 0) {
+                    rightGainVal = Math.cos((Math.PI / 2) * -panVal);
+                } else {
+                    leftGainVal = Math.cos((Math.PI / 2) * panVal);
+                }
+                leftGain.gain.setValueAtTime(leftGainVal, startTime);
+                rightGain.gain.setValueAtTime(rightGainVal, startTime);
+            }
+        };
 
         // Track-level compressor (Comprez-style: -6dB threshold, 5:1, 10ms attack)
         const trackCompressor = ctx.createDynamicsCompressor();
@@ -8651,6 +8907,7 @@
             if (shapeSelect) {
                 shapeSelect.addEventListener('change', () => {
                     globalModulators[`lfo${num}`].shape = shapeSelect.value;
+                    updatePlayheads();
                 });
             }
             if (syncToggle) {
@@ -8659,11 +8916,13 @@
                     globalModulators[`lfo${num}`].mode = activeSync ? 'sync' : 'free';
                     if (rateSyncRow) rateSyncRow.style.display = activeSync ? 'flex' : 'none';
                     if (rateFreeRow) rateFreeRow.style.display = activeSync ? 'none' : 'flex';
+                    updatePlayheads();
                 });
             }
             if (rateSyncSelect) {
                 rateSyncSelect.addEventListener('change', () => {
                     globalModulators[`lfo${num}`].syncRate = rateSyncSelect.value;
+                    updatePlayheads();
                 });
             }
             if (rateFreeSlider) {
@@ -8671,6 +8930,7 @@
                     const hz = rateFreeSlider.value / 10.0;
                     globalModulators[`lfo${num}`].freeRate = hz;
                     if (rateFreeVal) rateFreeVal.textContent = hz.toFixed(1) + 'Hz';
+                    updatePlayheads();
                 });
             }
             if (toggleBtn) {
@@ -8683,6 +8943,7 @@
                     if (section) {
                         section.classList.toggle('is-bypassed', !newActive);
                     }
+                    updatePlayheads();
                 });
             }
         };
@@ -8691,6 +8952,99 @@
         setupLfoControls(2);
         setupLfoControls(3);
         setupLfoControls(4);
+
+        // Setup direct LFO map button listeners
+        for (let num = 1; num <= 4; num++) {
+            const mapBtn = modulatorsPanel.querySelector(`.lfo${num}-map-btn`);
+            if (mapBtn) {
+                mapBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (activeLfoMapping === num) {
+                        cancelLfoMapping();
+                    } else {
+                        startLfoMapping(num);
+                    }
+                });
+            }
+        }
+
+        // Intercept clicks on mappable parameters when LFO direct mapping is active
+        document.addEventListener('click', (e) => {
+            if (activeLfoMapping === null) return;
+
+            const el = e.target.closest('.level-knob, .filtr-cutoff, .aelapse-delay-mix, .aelapse-reverb-mix, .pan-knob, .chorus-rate, .chorus-depth, .chorus-feedback, .phaser-rate, .phaser-depth, .phaser-feedback, .crusher-bits, .crusher-normfreq, #master-volume-slider');
+            if (el) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                let trackId = 'none';
+                let paramName = '';
+
+                if (el.id === 'master-volume-slider') {
+                    trackId = 'master';
+                    paramName = 'level';
+                } else {
+                    const wrapper = el.closest('.track-wrapper');
+                    if (wrapper) {
+                        trackId = wrapper.dataset.trackId;
+                    }
+                    if (el.classList.contains('level-knob')) paramName = 'level';
+                    else if (el.classList.contains('pan-knob')) paramName = 'pan';
+                    else if (el.classList.contains('filtr-cutoff')) paramName = 'filter';
+                    else if (el.classList.contains('aelapse-delay-mix')) paramName = 'space';
+                    else if (el.classList.contains('aelapse-reverb-mix')) paramName = 'space';
+                    else if (el.classList.contains('chorus-rate')) paramName = 'chorusRate';
+                    else if (el.classList.contains('chorus-depth')) paramName = 'chorusDepth';
+                    else if (el.classList.contains('chorus-feedback')) paramName = 'chorusFeedback';
+                    else if (el.classList.contains('phaser-rate')) paramName = 'phaserRate';
+                    else if (el.classList.contains('phaser-depth')) paramName = 'phaserDepth';
+                    else if (el.classList.contains('phaser-feedback')) paramName = 'phaserFeedback';
+                    else if (el.classList.contains('crusher-bits')) paramName = 'crusherBits';
+                    else if (el.classList.contains('crusher-normfreq')) paramName = 'crusherNormfreq';
+                }
+
+                if (trackId !== 'none' && paramName !== '') {
+                    const lfoSrc = `lfo${activeLfoMapping}`;
+                    
+                    const existingSlotIdx = modMatrixSlots.findIndex(slot => 
+                        slot.src === lfoSrc && 
+                        slot.trackId === trackId.toString() && 
+                        slot.param === paramName
+                    );
+
+                    if (existingSlotIdx !== -1) {
+                        modMatrixSlots[existingSlotIdx] = { src: 'none', trackId: 'none', param: 'none', depth: 0 };
+                        console.log(`LFO Direct Mapping: Cleared slot ${existingSlotIdx + 1} (${lfoSrc} -> ${trackId} ${paramName})`);
+                    } else {
+                        let slotIdx = modMatrixSlots.findIndex(slot => slot.src === 'none');
+                        if (slotIdx === -1) {
+                            slotIdx = 7; // overwrite last slot
+                        }
+                        modMatrixSlots[slotIdx] = {
+                            src: lfoSrc,
+                            trackId: trackId.toString(),
+                            param: paramName,
+                            depth: 50
+                        };
+                        console.log(`LFO Direct Mapping: Mapped slot ${slotIdx + 1} (${lfoSrc} -> ${trackId} ${paramName} @ 50%)`);
+                    }
+
+                    syncModMatrixUI();
+                }
+
+                cancelLfoMapping();
+            }
+        }, true);
+
+        // Cancel direct mapping mode when clicking outside mappable elements
+        document.addEventListener('mousedown', (e) => {
+            if (activeLfoMapping === null) return;
+            const isMapBtn = e.target.closest('.fx-map-btn');
+            const isMappable = e.target.closest('.level-knob, .filtr-cutoff, .aelapse-delay-mix, .aelapse-reverb-mix, .pan-knob, .chorus-rate, .chorus-depth, .chorus-feedback, .phaser-rate, .phaser-depth, .phaser-feedback, .crusher-bits, .crusher-normfreq, #master-volume-slider');
+            if (!isMapBtn && !isMappable) {
+                cancelLfoMapping();
+            }
+        });
 
         const setupEnvControls = (num) => {
             const aSlider = document.getElementById(`env${num}-a`);
