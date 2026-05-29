@@ -322,6 +322,8 @@
   - [x] Remove detailed `RSz` and `Feedbk` sliders from the drawer UI and mixer strip controls.
 - [x] Fix Outpaint Generation Gaps:
   - [x] Append zero-padding to the input `init_waveform` tensor up to `gen_duration` in `app_server.py` to prevent gaps in outpainted and continuation tracks.
+  - [x] Modify `runOutpaint` in `app.js` to set `continue_start` to `parentDuration` instead of `variant.buffer.duration` (preventing the 2.0s fade-out tail from being included in the unmasked seed section).
+  - [x] Update `setInitAudio` in `app.js` to bound the remix sliders to `track.originalParams.duration` instead of the padded `v.buffer.duration`, preventing selection of the fade-out zone.
 - [x] Set default master level to 0 dB:
   - [x] Change default master fader slider value to 100 in `index.html`.
   - [x] Change fallback fader value in `app.js` to 100.
@@ -400,3 +402,104 @@
   - [x] Update Copy & Paste Track Settings in `app.js` to copy/paste new split FX configurations
   - [x] Update Project Save & Load in `app.js` to serialize and restore new split FX settings and toggles
   - [x] Run syntax check and verify real-time audio playback, copy/paste settings, save/load, and WAV mixdown bounce
+- [x] Audit `ui-ux-pro-max-skill` and document additional design system recommendations for LoopMaster SA3 (2026-05-29)
+- [x] Dual-Macro Grid Restructuring & Interactive Hover Highlighting:
+  - [x] Add CSS `.macro-target-highlight` class and glow animations to `app.css`
+  - [x] Re-order FX drawer grid HTML template in `app.js` (Macro Group A in Row 1 Col 1, Macro Group B in Row 2 Col 1)
+  - [x] Define the 8 new Macro Group B creative parameters in `applyFxMacro` in `app.js`
+  - [x] Implement `mouseenter`/`mouseleave` highlight listeners and `macroMaps` dictionary in `app.js`
+  - [x] Update Copy/Paste settings and Project Save/Load serialization for the new Macro Group B parameters
+  - [x] Verify JS compilation (`node -c`) and check visual hover highlighting in action
+- [/] DSP Channel Expansion, Split Filtr, Sync Knobs, and Pytest Bypass:
+  - [ ] Implement split Filtr block (HP filter node, LP filter node, and drive shaper) in `app.js` and update connections
+  - [ ] Implement custom Tremolo node (GainNode modulated by LFO) in `app.js` and route in-series
+  - [ ] Implement custom Tempo Gate node (GainNode modulated by synced LFO) in `app.js` and route in-series
+  - [ ] Expose wow/flutter rate/depth in Tape Delay, and Damp/Pre-Delay in Spring Reverb
+  - [ ] Convert all sync dropdowns to sync knobs in the UI, mapping to discrete rate values via `initSyncKnob`
+  - [ ] Replicate all new DSP, filters, and knobs in `OfflineAudioContext` for WAV mixdown
+  - [ ] Update track copy/paste settings and FX drawer copy/paste settings to serialize and restore new parameters
+  - [ ] Update project Save/Load serialization to save and restore all new parameters and states
+  - [ ] Verify project functionality manually without running automated python tests (pytest) to comply with new guidelines.
+- [x] Run comprehensive workspace diagnostic scan for font bloat, syntax errors, broken links, and dead files.
+- [x] Set outputs folder preservation rule (manual user deletion only).
+- [x] Verify pytest restriction safety constraint rule and acknowledge in AGENTS.md.
+- [x] Volume Slider to Circular Knob Redesign:
+  - [x] Modify mixer strip HTML template to replace `.level-slider` with `.level-knob` and `.knob-indicator`
+  - [x] Initialize volume knobs with `initKnob` engine during track row creation
+  - [x] Update track lock/unlock toggle logic to disable/enable `.level-knob` pointer events
+  - [x] Update project loading routine to assign track level through knob value properties
+  - [x] Map MIDI Learn and Modulation Matrix selectors to target `.level-knob` instead of `.level-slider`
+  - [x] Classify `.level-knob` as a knob in `updateSliderModDot` for top-right modulation dot placement
+  - [x] Style `.level-knob` and `.mixer-level` in `app.css` to match `.pan-knob` and align as column modules
+  - [x] Validate JS/CSS compilation and verify knob rotation, resets, and parameters synchronization
+- [x] Resolve Syntax and Reference Errors in `app.js` (2026-05-29):
+  - [x] Remove extra closing curly brace `}   }` at line 3246 inside the `pasteTrackBtn` click listener
+  - [x] Remove duplicate `const` declarations for `chorusRateSlider` and `phaserRateSlider`
+  - [x] Confirm clean compilation via `node -c` and Python compilation via `python -m py_compile`
+- [x] Resolve FX Drawer Default Behavior and Toggle Logic (2026-05-29):
+  - [x] Identify CSS conflict (`display: grid !important` on `.fx-drawer`) preventing inline style display overrides
+  - [x] Define `.fx-drawer.is-collapsed { display: none !important; }` in `app.css`
+  - [x] Initialize track drawers with `'fx-drawer is-collapsed'` and `.fx-btn` without `'is-on'` in `app.js`
+  - [x] Update `.fx-btn` click handler to toggle `.is-collapsed` on the drawer and `.is-on` on the button
+  - [x] Verify JavaScript and CSS syntax parsing correctness
+- [x] Playhead Sync & Audio Front Gap Fix (2026-05-29):
+  - [x] Modify `seekTo(pct)` in `app.js` to query `getActiveDuration()` when arranger mode is inactive
+  - [x] Implement card waveform click-seeking in `app.js` to target `.card-seek-bar` and map click percentage to global time progress
+  - [x] Change default `duration_padding_sec` from `6.0` to `0.0` in both `app.js` (payloads) and `app_server.py` (generation args and defaults)
+  - [x] Verify JavaScript syntax via `node -c` and Python compilation
+  - [x] Manually verify seeking, playhead sweeps, and absence of leading silent gaps on newly generated loops
+- [x] Fix launcher script (run_server.bat) argument parsing robustness (2026-05-29)
+- [x] Audit workspace for syntax errors, broken markdown links, and missing files (2026-05-29)
+- [x] Document and explain Master Limiter dynamics and PyTorch compilation latency (2026-05-29)
+- [x] Add prompt input history cycling, swap Style/Accent, unify sizes/fonts, align horizontally, and reduce deadspace (2026-05-29)
+- [x] Add detailed real-time step-by-step progress readouts to the status bar (2026-05-29)
+- [x] Redesign track mixer strip to a single row:
+  - [x] Rebuild track mixer InnerHTML template in `app.js` with `.mixer-knobs-row`
+  - [x] Position Tone, DMX, RMX, Pan, and Vol knobs side-by-side in that order
+  - [x] Add null-checks inside `applyMacroKnob` to safely ignore removed filter/resonance knobs
+  - [x] Define `.mixer-knobs-row` styling in `app.css` and clean up unused `.mixer-vol-pan`
+- [x] Disable card click-seeking:
+  - [x] Remove `.card-seek-bar` click listener block from `app.js`
+  - [x] Ensure clicks on card body fall back to normal selection/queuing
+- [x] Implement VAE decoding verbose stage tracking:
+  - [x] Instrument `stable_audio_3/inference/sampling.py` to print VAE times and fire callback stages
+  - [x] Update Python `progress_callback` functions to catch `vae_start`/`vae_end` stages
+  - [x] Set UI status panel to show `Decoding audio latents using VAE (30-40s)…` during VAE operations
+  - [x] Verify Python compilation and JavaScript syntax correctness
+- [x] Redesign Global Modulators Panel layout (2026-05-29):
+  - [x] Modify index.html to change outer panel class to `track-wrapper` and remove inline margin-top from `.fx-drawer`
+  - [x] Add modulators header CSS block inside app.css to style arranger-header with solid `var(--bg-mixer)` and custom border/fonts
+  - [x] Verify syntax and layout consistency manually
+
+- [x] Waveform Stretching Fix & Master Volume Knob Redesign:
+  - [x] Anchor `.card-seek-bar` height to exactly `48px` in `app.css` to prevent layout feedback loops
+  - [x] Add drawing size comparison guard in `drawWaveform()` in `app.js`
+  - [x] Replace range input with `.level-knob` div for `#master-volume-slider` in `index.html`
+  - [x] Remove obsolete `.master-volume-slider` classes/rules from `app.css`
+  - [x] Initialize master volume knob on page load in `app.js` using `initKnob`
+  - [x] Update `ensureAudioCtx()` in `app.js` to hook into the knob's input events
+  - [x] Validate JS and CSS compilation
+
+- [x] Limiter Text Removal & Track Row Layout Isolation:
+  - [x] Remove `<span class="limiter-label">` from `index.html`
+  - [x] Remove `.limiter-label` CSS rules from `app.css`
+  - [x] Remove DOM references and text content updates to `limiterLabel` in `app.js`
+  - [x] Isolate vertical VU meter canvas by converting to relative/absolute positioning in `app.css`
+  - [x] Force variant cards container to stretch its grid rows to full height via `grid-auto-rows: 1fr` in `app.css`
+- [x] Default Track Volume Knob to 80:
+  - [x] Change default Web Audio gain node value to `0.8` in `app.js`
+  - [x] Change default track state `level` value to `0.8` in `app.js`
+  - [x] Update default HTML title `Vol: 80` and value readout `80` in `app.js` mixer strip innerHTML template
+  - [x] Change `defaultVal` inside track volume `initKnob` options to `80` in `app.js`
+- [x] Status Bar Layout Stability:
+  - [x] Modify `.status-bar` in `app.css` to use always-flex display and visibility toggle to eliminate layout shifts
+- [x] BPM and Timing Alignment Fix:
+  - [x] Update `_run_generation` in `app_server.py` to use `duration` conditioning and `duration_padding_sec=2.0`
+  - [x] Update `_run_regeneration` in `app_server.py` to use `duration` conditioning and `duration_padding_sec=2.0`
+  - [x] Verify generated audio matches requested BPM and aligns with the tempo grid
+- [x] Codebase Cleanup:
+  - [x] Remove stray/untracked file `playhead_test.png` from the repository root
+
+
+
+

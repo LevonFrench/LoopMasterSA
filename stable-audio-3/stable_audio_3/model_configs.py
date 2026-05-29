@@ -112,7 +112,7 @@ models: dict[str, ModelConfig] = {
     "medium-bf16": ModelConfig(
         "dummy9996/stable-audio-3-bf16-comfyui",
         "model_config.json",
-        "model.safetensors",
+        "stable_audio_3_medium-bf16.safetensors",
         config_repo_id="stabilityai/stable-audio-3-medium",
     ),
     "medium-base": ModelConfig(

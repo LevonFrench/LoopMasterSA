@@ -66,6 +66,8 @@ model_lock = threading.Lock()
 jobs = {}
 jobs_lock = threading.Lock()
 
+first_generation_completed = False
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -389,7 +391,7 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
         
     return final_prompt
 
-def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cfg_scale, track_num, duration_padding_sec=6.0, init_audio_path=None, init_noise_level=0.6, seed=-1, remix_mode="variation", inpaint_start=0.0, inpaint_end=0.0, continue_start=0.0, invert_timing=False):
+def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cfg_scale, track_num, duration_padding_sec=0.0, init_audio_path=None, init_noise_level=0.6, seed=-1, remix_mode="variation", inpaint_start=0.0, inpaint_end=0.0, continue_start=0.0, invert_timing=False):
     global model
     try:
         with jobs_lock:
@@ -420,8 +422,29 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
             print(f"[Prompt Enhancement] Variant {i+1} Enhanced: '{p_str}'")
         print()
 
+        global first_generation_completed
         with jobs_lock:
-            jobs[job_id]["progress"] = "GENERATING"
+            if not first_generation_completed:
+                jobs[job_id]["progress"] = "Compiling Diffusion Transformer (45-60s on first run)…"
+            else:
+                jobs[job_id]["progress"] = "Running diffusion model (0% done)…"
+
+        def progress_callback(info):
+            if "stage" in info:
+                stage = info["stage"]
+                if stage == "vae_start":
+                    progress_msg = "Decoding audio latents using VAE (30-40s)…"
+                elif stage == "vae_end":
+                    progress_msg = "VAE decoding completed…"
+                else:
+                    progress_msg = f"Stage: {stage}…"
+                with jobs_lock:
+                    jobs[job_id]["progress"] = progress_msg
+                return
+            step = info.get('i', 0)
+            pct = int((step + 1) / steps * 100)
+            with jobs_lock:
+                jobs[job_id]["progress"] = f"Generating diffusion model (step {step + 1}/{steps} - {pct}%)…"
 
         start_gen = time.time()
 
@@ -464,15 +487,18 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
             with torch.inference_mode():
                 
                 # Configure generation parameters based on remix mode
+                pad_sec = 2.0 if loop else 0.0
                 gen_kwargs = {
                     "prompt": prompts_list,
                     "negative_prompt": "poor quality, bad quality, low quality, noise, distortion, artifact",
-                    "duration": gen_duration,
+                    "duration": duration,
                     "steps": steps,
                     "cfg_scale": cfg_scale,
                     "batch_size": num_variants,
                     "seed": seed,
-                    "duration_padding_sec": duration_padding_sec,
+                    "duration_padding_sec": pad_sec,
+                    "truncate_output_to_duration": False,
+                    "callback": progress_callback,
                 }
                 
                 if seed_audio is not None:
@@ -506,8 +532,11 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
                         print(f"[Generation] Running continuation keeping first {mask_start}s (overlap: {overlap_sec}s).")
                 
                 audio = model.generate(**gen_kwargs)
+                first_generation_completed = True
 
         audio = audio.clone()
+        with jobs_lock:
+            jobs[job_id]["progress"] = "Processing audio & blending loop transitions…"
         elapsed = time.time() - start_gen
 
         # Apply loop tail headroom preservation and fade-out feathering
@@ -622,6 +651,8 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
                 print(f"[Blending] Error crossfading audio boundaries: {blend_err}")
 
         # Save to track_X folder inside the session directory
+        with jobs_lock:
+            jobs[job_id]["progress"] = "Saving and metadata tagging WAV files…"
         track_dir_name = f"track_{track_num}"
         out_dir = os.path.join(SESSION_DIR, track_dir_name)
         os.makedirs(out_dir, exist_ok=True)
@@ -663,7 +694,7 @@ def _run_generation(job_id, prompt, bpm, duration, num_variants, loop, steps, cf
             jobs[job_id]["status"] = "error"
             jobs[job_id]["error"] = str(e)
 
-def _run_regeneration(job_id, prompt, bpm, duration, loop, steps, cfg_scale, track_num, unlocked_indices, duration_padding_sec=6.0, seed=-1):
+def _run_regeneration(job_id, prompt, bpm, duration, loop, steps, cfg_scale, track_num, unlocked_indices, duration_padding_sec=0.0, seed=-1):
     global model
     try:
         with jobs_lock:
@@ -695,28 +726,55 @@ def _run_regeneration(job_id, prompt, bpm, duration, loop, steps, cfg_scale, tra
             print(f"[Prompt Enhancement] Regenerating Variant {target_idx+1} with Enhanced: '{prompts_list[gen_i]}'")
         print()
 
+        global first_generation_completed
         with jobs_lock:
-            jobs[job_id]["progress"] = "GENERATING"
+            if not first_generation_completed:
+                jobs[job_id]["progress"] = "Compiling Diffusion Transformer (45-60s on first run)…"
+            else:
+                jobs[job_id]["progress"] = "Running diffusion model (0% done)…"
+
+        def progress_callback(info):
+            if "stage" in info:
+                stage = info["stage"]
+                if stage == "vae_start":
+                    progress_msg = "Decoding audio latents using VAE (30-40s)…"
+                elif stage == "vae_end":
+                    progress_msg = "VAE decoding completed…"
+                else:
+                    progress_msg = f"Stage: {stage}…"
+                with jobs_lock:
+                    jobs[job_id]["progress"] = progress_msg
+                return
+            step = info.get('i', 0)
+            pct = int((step + 1) / steps * 100)
+            with jobs_lock:
+                jobs[job_id]["progress"] = f"Generating diffusion model (step {step + 1}/{steps} - {pct}%)…"
 
         start_gen = time.time()
 
+        pad_sec = 2.0 if loop else 0.0
+        gen_duration = duration + pad_sec
         with model_lock:
             with torch.inference_mode():
-                gen_duration = duration + 2.0 if loop else duration
                 gen_kwargs = {
                     "prompt": prompts_list,
                     "negative_prompt": "poor quality, bad quality, low quality, noise, distortion, artifact",
-                    "duration": gen_duration,
+                    "duration": duration,
                     "steps": steps,
                     "cfg_scale": cfg_scale,
                     "batch_size": num_variants,
                     "seed": seed,
-                    "duration_padding_sec": duration_padding_sec,
+                    "duration_padding_sec": pad_sec,
+                    "truncate_output_to_duration": False,
+                    "callback": progress_callback,
                 }
                 
                 audio = model.generate(**gen_kwargs)
+                first_generation_completed = True
 
         audio = audio.clone()
+        with jobs_lock:
+            jobs[job_id]["progress"] = "Processing audio & blending loop transitions…"
         elapsed = time.time() - start_gen
 
         # Apply loop tail headroom preservation and fade-out feathering
@@ -768,6 +826,8 @@ def _run_regeneration(job_id, prompt, bpm, duration, loop, steps, cfg_scale, tra
                         break
 
         # Generate and save new files for unlocked_indices
+        with jobs_lock:
+            jobs[job_id]["progress"] = "Saving and metadata tagging WAV files…"
         for gen_i, target_idx in enumerate(unlocked_indices):
             # Delete old file if exists
             old_f = existing_files.get(target_idx)
@@ -868,7 +928,7 @@ def api_generate():
     steps = int(data.get("steps", 8))
     cfg_scale = float(data.get("cfg_scale", 1.0))
     seed = int(data.get("seed", -1))
-    duration_padding_sec = float(data.get("duration_padding_sec", 6.0))
+    duration_padding_sec = float(data.get("duration_padding_sec", 0.0))
     duration = float(data.get("duration", 960.0 / bpm))
 
     init_audio_path = data.get("init_audio_path")
@@ -930,7 +990,7 @@ def api_regenerate():
     steps = int(data.get("steps", 8))
     cfg_scale = float(data.get("cfg_scale", 1.0))
     seed = int(data.get("seed", -1))
-    duration_padding_sec = float(data.get("duration_padding_sec", 6.0))
+    duration_padding_sec = float(data.get("duration_padding_sec", 0.0))
     duration = float(data.get("duration", 960.0 / bpm))
 
     

@@ -22,49 +22,63 @@
         <section class="controls-panel" id="controls-panel">
             <div class="controls-row">
                 <div class="control-group prompt-group">
-                    <div class="prompt-header-row">
+                    <div class="control-group-header">
                         <label class="control-label" for="prompt-input">Prompt</label>
                         <div class="prompt-inline-btns">
                             <button class="prompt-pill-btn" id="btn-random-in-key" type="button" title="Generate Random Prompt in Current Key/Chord"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L14 9"/></svg>In Key</button>
                             <button class="prompt-pill-btn" id="btn-random-prompt" type="button" title="Generate Random Instrument Prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M7.5 7.5h.01M16.5 7.5h.01M7.5 16.5h.01M16.5 16.5h.01M12 12h.01"/></svg>Random</button>
                             <button class="prompt-pill-btn" id="btn-change-chord" type="button" title="Change Key/Chord only in current prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Chord</button>
-                            <button class="prompt-pill-btn" id="btn-change-style" type="button" title="Change Style/Genre only in current prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Style</button>
-                            <button class="prompt-pill-btn" id="btn-change-instrument" type="button" title="Change Instrument only in current prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M12 2v20M17 5v14M22 9v6M7 8v8M2 10v4"/></svg>Inst</button>
                             <button class="prompt-pill-btn" id="btn-change-accent" type="button" title="Change Accent/Production Style only in current prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M15 4V2m0 14v-2M8 9h2m10 0h-2m-2.2-4.8l-1.4 1.4m-5.6 5.6l-1.4 1.4m0-8.4l1.4 1.4m5.6 5.6l1.4 1.4M3 21l9-9m4-5l1-1"/></svg>Accent</button>
+                            <button class="prompt-pill-btn" id="btn-change-instrument" type="button" title="Change Instrument only in current prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M12 2v20M17 5v14M22 9v6M7 8v8M2 10v4"/></svg>Inst</button>
+                            <button class="prompt-pill-btn" id="btn-change-style" type="button" title="Change Style/Genre only in current prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Style</button>
                             <button class="prompt-pill-btn" id="btn-random-drums" type="button" title="Generate Random Drum Loop Prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v10c0 1.66 4 3 9 3s9-1.34 9-3V5M7 17v4M17 17v4"/></svg>Drums</button>
                             <button class="prompt-pill-btn" id="btn-random-bass" type="button" title="Generate Random Bass Prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M2 10h3l2.5-6 3 16 2.5-14 3 10 1.5-6h4.5"/></svg>Bass</button>
                             <button class="prompt-pill-btn" id="btn-random-lead" type="button" title="Generate Random Lead Prompt"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v12M10 3v12M14 3v12M18 3v12M2 15h20"/></svg>Lead</button>
-                            <button class="prompt-pill-btn" id="btn-fav-prompt" type="button" title="Add Current Instrument to Favorites Library"><svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>Favorite</button>
                         </div>
                     </div>
-                    <input class="control-input" id="prompt-input" type="text"
-                           placeholder="bass synth loop, funky, hyperpop…"
-                           autocomplete="off" spellcheck="false">
+                    <div class="prompt-input-wrapper">
+                        <input class="control-input" id="prompt-input" type="text"
+                               placeholder="bass synth loop, funky, hyperpop…"
+                               autocomplete="off" spellcheck="false">
+                        <button class="btn-prompt-history" id="btn-prompt-history" type="button" title="Cycle through last 10 prompts">
+                            <svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                                <path d="M3 3v5h5"/>
+                                <path d="M12 7v5l4 2"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="control-group">
-                    <label class="control-label" for="bpm-input" title="Tempo in beats per minute. Determines loop length (4 bars). Drag to change, double-click to type.">BPM</label>
+                    <div class="control-group-header">
+                        <label class="control-label" for="bpm-input" title="Tempo in beats per minute. Determines loop length (4 bars). Drag to change, double-click to type.">BPM</label>
+                    </div>
                     <input class="control-input" id="bpm-input" type="number"
                            min="40" max="300" value="120" step="1"
                            title="Click to type, drag ↕ to change. 120 BPM = 8s loop (4 bars)">
                 </div>
 
                 <div class="control-group">
-                    <label class="control-label" for="seed-input" title="Random seed for reproducible generations. -1 = random each time. Set a number to get the same output.">Seed</label>
+                    <div class="control-group-header">
+                        <label class="control-label" for="seed-input" title="Random seed for reproducible generations. -1 = random each time. Set a number to get the same output.">Seed</label>
+                    </div>
                     <input class="control-input control-input-sm" id="seed-input" type="number"
                            min="-1" max="999999" value="-1" step="1"
                            title="Click to type, drag ↕ to change. -1 = random">
                 </div>
 
-
                 <div class="control-group">
-                    <label class="control-label" for="steps-input" title="Diffusion denoising passes. 8 = fast iteration, 20-30 = high quality, 50+ = diminishing returns.">Steps</label>
+                    <div class="control-group-header">
+                        <label class="control-label" for="steps-input" title="Diffusion denoising passes. 8 = fast iteration, 20-30 = high quality, 50+ = diminishing returns.">Steps</label>
+                    </div>
                     <input class="control-input control-input-sm" id="steps-input" type="number"
                            min="1" max="100" value="8" step="1"
                            title="Click to type, drag ↕ to change. More = better but slower">
                 </div>
 
                 <div class="control-group">
+                    <div class="control-group-header"></div>
                     <button class="btn-generate" id="btn-generate" type="button">Generate</button>
                 </div>
             </div>
@@ -150,14 +164,14 @@
                 <!-- Master Meter & Limiter Section -->
                 <div class="master-meter-section" id="master-meter-section" style="display: none;">
                     <span class="master-meter-label">MASTER</span>
-                    <input type="range" id="master-volume-slider" class="master-volume-slider"
-                           min="0" max="100" value="100" step="1"
-                           title="Master Volume">
+                    <div id="master-volume-slider" class="level-knob" title="Master Volume">
+                        <div class="knob-indicator"></div>
+                    </div>
                     <span class="master-volume-readout" id="master-volume-readout">0.0 dB</span>
                     <div class="master-meter-container">
                         <canvas id="master-meter-canvas" width="140" height="8"></canvas>
                     </div>
-                    <span class="limiter-label">LIMITER -6.0dB</span>
+
                 </div>
 
                 <div class="transport-spacer"></div>
@@ -247,13 +261,12 @@
             </div>
         </div>
 
-        <!-- Global Modulators Panel -->
-        <section class="arranger-panel" id="modulators-panel" style="display: none; margin-top: 10px; margin-bottom: 10px;">
+        <section class="track-wrapper" id="modulators-panel" style="display: none; margin-top: 10px; margin-bottom: 10px;">
             <div class="arranger-header">
                 <h3>Global Modulators</h3>
             </div>
             
-            <div class="fx-drawer" style="margin-top: 10px;">
+            <div class="fx-drawer">
                 <!-- LFO 1 -->
                 <div class="fx-section lfo-section">
                     <div class="fx-section-title">

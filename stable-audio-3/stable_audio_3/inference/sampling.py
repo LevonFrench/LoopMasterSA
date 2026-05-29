@@ -507,8 +507,22 @@ def sample_diffusion(
 
     # Decode if requested
     if decode and pretransform is not None:
+        import time
+        if callback is not None:
+            try:
+                callback({"stage": "vae_start"})
+            except Exception:
+                pass
+        print(f"\n[VAE] Starting VAE decoding of {sampled.shape[0]} latent variants on device {device}...")
+        start_vae = time.time()
         sampled = sampled.to(next(pretransform.parameters()).dtype)
         sampled = pretransform.decode(sampled, chunked=chunked_decode)
+        print(f"[VAE] VAE decoding completed in {time.time() - start_vae:.2f}s.")
+        if callback is not None:
+            try:
+                callback({"stage": "vae_end"})
+            except Exception:
+                pass
 
         # Zero out audio beyond valid region (padding positions decode to garbage)
         if padding_mask is not None:

@@ -145,7 +145,7 @@ body::before {
 
 .controls-row {
     display: flex;
-    align-items: flex-end;
+    align-items: flex-start;
     gap: 14px;
     flex-wrap: wrap;
 }
@@ -160,7 +160,9 @@ body::before {
     flex: 1;
     min-width: 200px;
 }
-.prompt-header-row {
+
+.control-group-header {
+    height: 28px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -176,18 +178,20 @@ body::before {
 
 .prompt-pill-btn {
     font-family: var(--font-sans);
-    font-size: 0.65rem;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 500;
     color: var(--text-secondary);
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
+    border-radius: 14px;
     cursor: pointer;
     padding: 3px 9px;
     white-space: nowrap;
     line-height: 1.4;
     transition: all var(--transition-fast);
     letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
 }
 
 .prompt-pill-btn:hover {
@@ -202,23 +206,27 @@ body::before {
 }
 
 .control-label {
-    font-size: 0.7rem;
+    font-family: var(--font-sans);
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-secondary);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
+    line-height: 1;
 }
 
 .control-input {
     height: 38px;
     padding: 0 12px;
-    font-size: 0.85rem;
+    font-family: var(--font-sans);
+    font-size: 13px;
     color: var(--text-primary);
     background: var(--bg-input);
     border: 1px solid var(--border-input);
     border-radius: var(--radius-sm);
     outline: none;
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    box-sizing: border-box;
 }
 
 .control-input:focus {
@@ -230,7 +238,7 @@ body::before {
 
 .control-input[type="number"] {
     width: 70px;
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     text-align: center;
     -moz-appearance: textfield;
     cursor: ns-resize;
@@ -241,6 +249,41 @@ body::before {
 }
 
 .control-input-sm { width: 55px; }
+
+/* Prompt Input Wrapper & History Button */
+.prompt-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+.prompt-input-wrapper .control-input {
+    width: 100%;
+    padding-right: 36px;
+}
+.btn-prompt-history {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    z-index: 2;
+}
+.btn-prompt-history:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+}
+.btn-prompt-history svg {
+    display: block;
+}
+
 
 /* Toggle switch */
 .toggle-switch {
@@ -343,7 +386,7 @@ body::before {
     height: 38px;
     padding: 0 24px;
     font-family: var(--font-sans);
-    font-size: 0.85rem;
+    font-size: 13px;
     font-weight: 600;
     color: #fff;
     background: linear-gradient(135deg, var(--accent) 0%, #5b6ef5 100%);
@@ -387,10 +430,14 @@ body::before {
     height: 20px;
     margin-top: 10px;
     opacity: 0;
-    transition: opacity var(--transition-med);
+    visibility: hidden;
+    transition: opacity var(--transition-med), visibility var(--transition-med);
 }
 
-.status-bar.visible { opacity: 1; }
+.status-bar.visible {
+    opacity: 1;
+    visibility: visible;
+}
 
 .status-spinner {
     width: 12px;
@@ -404,9 +451,9 @@ body::before {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .status-text {
-    font-size: 0.75rem;
+    font-size: 13px;
     color: var(--text-secondary);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
 }
 
 .status-text.done { color: var(--success); }
@@ -798,62 +845,53 @@ body::before {
     border-color: var(--error);
 }
 
-/* --- Vol + Pan Row --- */
-.mixer-vol-pan {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
 
-/* --- Level Slider --- */
+/* --- Level Knob --- */
 .mixer-level {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     flex: 1;
     min-width: 0;
 }
 
-.mixer-level label {
-    font-size: 0.6rem;
-    color: var(--text-tertiary);
-    flex-shrink: 0;
-}
-
-.level-slider {
-    flex: 1;
-    min-width: 0;
-    -webkit-appearance: none;
-    appearance: none;
-    height: 6px;
-    border-radius: 3px;
-    background: var(--border-input);
-    outline: none;
-    cursor: pointer;
-}
-
-.level-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px;
-    height: 14px;
+.level-knob {
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
-    background: var(--text-secondary);
-    border: 2px solid var(--bg-mixer);
-    cursor: pointer;
-    transition: background var(--transition-fast);
+    background: radial-gradient(circle at 40% 35%, #3a3a50, #1a1a2a);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    cursor: ns-resize;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: border-color var(--transition-fast);
 }
 
-.level-slider::-webkit-slider-thumb:hover {
+.level-knob:hover {
+    border-color: var(--accent);
+}
+
+.level-knob .knob-indicator {
+    position: absolute;
+    top: 3px;
+    left: 50%;
+    width: 2px;
+    height: 6px;
+    margin-left: -1px;
     background: var(--accent);
+    border-radius: 1px;
+    transform-origin: center 9px;
+    transform: rotate(-135deg);
+    transition: none;
 }
 
 .level-value {
-    font-size: 0.6rem;
+    font-size: 0.45rem;
     font-family: var(--font-mono);
     color: var(--text-tertiary);
-    width: 20px;
-    text-align: right;
-    flex-shrink: 0;
+    text-align: center;
+    line-height: 1;
 }
 
 /* --- Pan Knob --- */
@@ -903,13 +941,14 @@ body::before {
     line-height: 1;
 }
 
-/* --- Mixer Macro Knobs Row --- */
-.mixer-macros-row {
+/* --- Mixer Knobs Row --- */
+.mixer-knobs-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 2px;
+    gap: 4px;
     padding: 2px 0;
+    width: 100%;
 }
 
 .macro-knob-group {
@@ -1042,6 +1081,7 @@ body::before {
     flex: 1;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-rows: 1fr;
     gap: 6px;
     padding: 6px;
     min-width: 0;
@@ -1211,40 +1251,44 @@ body.split-mode .card-split-line {
     min-height: 48px;
 }
 
-.card-hover-overlay {
-    position: absolute;
-    inset: 0;
-    background: rgba(10, 10, 20, 0.82);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+.card-controls-row {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 4px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--transition-fast) ease-in-out;
-    border-radius: 3px;
+    gap: 3px;
+    margin-top: 4px;
+    flex-shrink: 0;
+    width: 100%;
     z-index: 5;
 }
 
-.audio-card:hover:not(.is-loading):not(.is-deleted) .card-hover-overlay {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-.card-hover-overlay button {
-    height: 22px;
-    padding: 0 6px;
-    font-size: 0.62rem;
+.card-controls-row button {
+    flex: 1;
+    min-width: 0;
+    height: 18px;
+    padding: 0;
+    font-size: 0.55rem;
     font-weight: 600;
-    border-radius: 3px;
+    border-radius: 2px;
     margin: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid var(--border-input);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text-tertiary);
+    transition: all var(--transition-fast);
     line-height: 1;
+    cursor: pointer;
+}
+
+.card-controls-row button:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+    border-color: var(--border-subtle);
+}
+
+.card-controls-row .btn-use-init {
+    margin-right: 0;
 }
 
 .card-waveform {
@@ -1296,9 +1340,7 @@ body.split-mode .card-split-line {
     #master-meter-canvas {
         width: 100px;
     }
-    .master-volume-slider {
-        width: 55px;
-    }
+
 }
 
 
@@ -1343,43 +1385,9 @@ body.split-mode .card-split-line {
     height: 8px;
 }
 
-.limiter-label {
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: var(--solo-color);
-    letter-spacing: 0.04em;
-    background: rgba(250, 204, 21, 0.1);
-    padding: 2px 6px;
-    border-radius: 3px;
-    border: 1px solid rgba(250, 204, 21, 0.25);
-    font-family: var(--font-mono);
-}
 
-.master-volume-slider {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 70px;
-    height: 4px;
-    border-radius: 2px;
-    background: var(--border-input);
-    outline: none;
-    cursor: pointer;
-}
 
-.master-volume-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--accent);
-    cursor: pointer;
-    transition: transform var(--transition-fast), background var(--transition-fast);
-}
 
-.master-volume-slider::-webkit-slider-thumb:hover {
-    transform: scale(1.2);
-    background: var(--text-accent);
-}
 
 .master-volume-readout {
     font-size: 0.6rem;
@@ -1399,20 +1407,16 @@ body.split-mode .card-split-line {
 }
 
 .mixer-meter.vertical {
+    position: relative;
     background: #0e0e14;
     width: 12px;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
     border-left: 1px solid var(--border-subtle);
     border-right: 1px solid var(--border-subtle);
     border-top: none;
     border-bottom: none;
-    padding: 2px 1px;
     margin-top: 0;
     flex-shrink: 0;
     box-sizing: border-box;
-    height: auto;
     align-self: stretch;
 }
 
@@ -1424,7 +1428,10 @@ body.split-mode .card-split-line {
 }
 
 .meter-canvas.vertical {
-    height: 100% !important;
+    position: absolute;
+    inset: 2px 1px;
+    width: calc(100% - 2px) !important;
+    height: calc(100% - 4px) !important;
 }
 
 :focus-visible {
@@ -1745,8 +1752,7 @@ body.split-mode .card-split-line {
     .transport-bar {
         gap: 6px;
     }
-    .master-meter-label,
-    .limiter-label {
+    .master-meter-label {
         display: none !important;
     }
     .toggle-switch {
@@ -1759,9 +1765,7 @@ body.split-mode .card-split-line {
     #master-meter-canvas {
         width: 80px;
     }
-    .master-volume-slider {
-        width: 45px;
-    }
+
 }
 
 @media (max-width: 640px) {
@@ -1784,9 +1788,7 @@ body.split-mode .card-split-line {
     #master-meter-canvas {
         width: 50px;
     }
-    .master-volume-slider {
-        width: 30px;
-    }
+
 }
 
 /* FX Controls Grid */
@@ -1861,10 +1863,18 @@ body.split-mode .card-split-line {
 }
 
 .fx-section.macros-section {
-    background: rgba(59, 130, 246, 0.04);
-    border-color: rgba(59, 130, 246, 0.15);
     flex: 0 0 auto;
     min-width: 220px;
+}
+
+.fx-section.macros-section.a-group {
+    background: rgba(59, 130, 246, 0.04);
+    border-color: rgba(59, 130, 246, 0.15);
+}
+
+.fx-section.macros-section.b-group {
+    background: rgba(168, 85, 247, 0.04);
+    border-color: rgba(168, 85, 247, 0.15);
 }
 
 .fx-macro-knobs-row {
@@ -2909,6 +2919,11 @@ body.split-mode .card-split-line {
     flex-wrap: unset !important;
 }
 
+.fx-drawer.is-collapsed {
+    display: none !important;
+}
+
+
 /* Ensure FX sections occupy their full grid area */
 .fx-drawer .fx-section {
     flex: 1 1 0 !important;
@@ -2920,11 +2935,21 @@ body.split-mode .card-split-line {
 
 /* Specific section size tweaks */
 .fx-drawer .fx-section.macros-section {
-    grid-column: 1 !important;
-    grid-row: 2 !important;
     min-width: 0 !important;
+}
+
+.fx-drawer .fx-section.macros-section.a-group {
+    grid-column: 1 / span 1 !important;
+    grid-row: 1 !important;
     background: rgba(59, 130, 246, 0.04) !important;
     border-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+.fx-drawer .fx-section.macros-section.b-group {
+    grid-column: 1 / span 1 !important;
+    grid-row: 2 !important;
+    background: rgba(168, 85, 247, 0.04) !important;
+    border-color: rgba(168, 85, 247, 0.15) !important;
 }
 
 /* Knob and group styling */
@@ -3058,6 +3083,13 @@ body.split-mode .card-split-line {
     justify-items: center !important;
 }
 
+.filtr-knobs-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px 4px !important;
+    justify-items: center !important;
+}
+
 /* Style for empty Eurorack slots */
 .fx-section.empty-slot {
     border: 1.5px dashed rgba(255, 255, 255, 0.08) !important;
@@ -3080,3 +3112,32 @@ body.split-mode .card-split-line {
     pointer-events: none !important;
     z-index: 100 !important;
 }
+
+/* --- Macro target hover highlighting --- */
+.macro-target-highlight {
+    border-color: #00f2fe !important;
+    box-shadow: 0 0 12px rgba(0, 242, 254, 0.9), inset 0 0 4px rgba(0, 242, 254, 0.5) !important;
+    transform: scale(1.06) !important;
+    transition: all 0.15s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+    z-index: 50 !important;
+}
+
+/* --- Global Modulators Header Redesign --- */
+#modulators-panel .arranger-header {
+    background: var(--bg-mixer);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 8px 16px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+#modulators-panel .arranger-header h3 {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
