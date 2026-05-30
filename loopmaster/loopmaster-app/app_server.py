@@ -1088,6 +1088,39 @@ def api_delete_variant():
             return jsonify({"error": str(e)}), 500
     return jsonify({"error": "File not found"}), 404
 
+@app.post("/api/screenshot")
+def api_screenshot():
+    import base64
+    try:
+        data = request.json or {}
+        image_data = data.get("image")
+        if not image_data:
+            return jsonify({"error": "Image data is required"}), 400
+        
+        if "," in image_data:
+            image_data = image_data.split(",", 1)[1]
+            
+        decoded_image = base64.b64decode(image_data)
+        
+        # Project root screenshots folder: j:/projects/sa3/screenshots
+        project_root = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+        screenshots_dir = os.path.join(project_root, "screenshots")
+        os.makedirs(screenshots_dir, exist_ok=True)
+        
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"screenshot_{timestamp}.png"
+        filepath = os.path.join(screenshots_dir, filename)
+        
+        with open(filepath, "wb") as f:
+            f.write(decoded_image)
+            
+        print(f"Saved screenshot: {filepath}")
+        return jsonify({"status": "success", "filename": filename, "path": filepath})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 @app.post("/api/convert")
 def api_convert():
     try:

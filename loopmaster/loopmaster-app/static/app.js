@@ -18,6 +18,7 @@
     const tDuration = document.getElementById('t-duration');
     const btnStopAll = document.getElementById('btn-stop-all');
     const tracksContainer = document.getElementById('tracks-container');
+    const welcomeBoardHTML = tracksContainer ? tracksContainer.innerHTML : '';
     const btnRandomPrompt = document.getElementById('btn-random-prompt');
     const btnRandomInKey = document.getElementById('btn-random-in-key');
     const btnChangeChord = document.getElementById('btn-change-chord');
@@ -511,6 +512,13 @@
         if (tracks.length === 0) return;
         ensureAudioCtx();
 
+        // Auto-collapse shortcuts footer when playback starts
+        const appFooter = document.getElementById('app-footer');
+        if (appFooter && !appFooter.classList.contains('is-collapsed')) {
+            appFooter.classList.add('is-collapsed');
+            localStorage.setItem('loopmaster_footer_collapsed', 'true');
+        }
+
         // Start a source for each track's selected variant
         tracks.forEach(t => {
             startTrackSource(t);
@@ -671,12 +679,7 @@
         // If no tracks left, show empty state
         if (tracks.length === 0) {
             tracksContainer.classList.add('empty');
-            tracksContainer.innerHTML = `
-                <div class="grid-empty-state">
-                    <svg viewBox="0 0 24 24"><path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z"/></svg>
-                    <div>Enter a prompt and hit <strong>Generate</strong> OR Hit Random & Generate (Use The Random Buttons to Fill Out Your Arrangement)</div>
-                </div>
-            `;
+            tracksContainer.innerHTML = welcomeBoardHTML;
             btnPlayPause.disabled = true;
             if (btnStopAll) btnStopAll.disabled = true;
             if (btnRenderMix) btnRenderMix.disabled = true;
@@ -3774,10 +3777,10 @@
                         let bandGains = [0, 0, 0, 0, 0, 0];
                         if (value < 50) {
                             const factor = (50 - value) / 50;
-                            bandGains = [6.0 * factor, 6.0 * factor, 4.0 * factor, 0, -6.0 * factor, -6.0 * factor];
+                            bandGains = [7.8 * factor * 1.3, 7.8 * factor * 1.3, 5.2 * factor * 1.3, 0, -7.8 * factor * 1.3, -7.8 * factor * 1.3];
                         } else if (value > 50) {
                             const factor = (value - 50) / 50;
-                            bandGains = [-6.0 * factor, -6.0 * factor, -3.0 * factor, 0, 6.0 * factor, 8.0 * factor];
+                            bandGains = [-7.8 * factor * 1.3, -7.8 * factor * 1.3, -3.9 * factor * 1.3, 0, 7.8 * factor * 1.3, 10.4 * factor * 1.3];
                         }
                         eqSlidersList.forEach((slider, b) => {
                             slider.value = bandGains[b];
@@ -3788,13 +3791,13 @@
                     if (slider) {
                         slider.value = value;
                     }
-                    if (knobEl) knobEl.title = `Delay: ${Math.round(value * 0.75)}%`;
+                    if (knobEl) knobEl.title = `Delay: ${value.toFixed(1)}%`;
                 } else if (param === 'revMix') {
                     const slider = track.wrapper.querySelector('.aelapse-reverb-mix');
                     if (slider) {
                         slider.value = value;
                     }
-                    if (knobEl) knobEl.title = `Reverb: ${Math.round(value * 0.80)}%`;
+                    if (knobEl) knobEl.title = `Reverb: ${value.toFixed(1)}%`;
                 }
             }
         }
@@ -3822,7 +3825,11 @@
                 const delta = st.startY - e.clientY;
                 const min = isBipolar ? -100 : 0;
                 const max = 100;
-                const newVal = Math.max(min, Math.min(max, st.startVal + delta));
+                let newVal = st.startVal + delta * 0.4;
+                if (param === 'dlyMix' || param === 'revMix' || param === 'tone' || param === 'filter' || param === 'reso') {
+                    newVal = Math.round(newVal * 10) / 10;
+                }
+                newVal = Math.max(min, Math.min(max, newVal));
                 st.value = newVal;
                 applyMacroKnob(param, newVal);
             });
@@ -3885,8 +3892,8 @@
                 track.eqGains[b] = val;
                 eqFilters[b].gain.value = val;
             }, {
-                min: -12,
-                max: 12,
+                min: -16,
+                max: 16,
                 step: 0.1,
                 defaultVal: 0,
                 value: track.eqGains[b]
@@ -4058,40 +4065,40 @@
         const aeMixVal = fxDrawerEl.querySelector('.aelapse-mix-val');
         initKnob(aeMix, (val) => {
             const pct = val / 100;
-            const mix = pct * 0.75;
+            const mix = pct;
             const feedback = pct * 0.95;
             track.aelapseDelayMix = mix;
             track.aelapseFeedback = feedback;
             track.aelapseDelayGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
             track.aelapseFeedbackNode.gain.setTargetAtTime(feedback, ctx.currentTime, 0.01);
-            const displayMix = Math.round(mix * 100);
-            const displayFb = Math.round(feedback * 100);
-            aeMixVal.textContent = `${displayMix}% (Fb: ${displayFb}%)`;
+            const displayMix = mix * 100;
+            const displayFb = feedback * 100;
+            aeMixVal.textContent = `${displayMix.toFixed(1)}% (Fb: ${displayFb.toFixed(1)}%)`;
             updateAelapseBypass(track);
         }, {
             min: 0,
             max: 100,
-            step: 1,
+            step: 0.1,
             defaultVal: 0,
-            value: Math.round((track.aelapseDelayMix / 0.75) * 100)
+            value: track.aelapseDelayMix * 100
         });
 
         const aeReverbMix = fxDrawerEl.querySelector('.aelapse-reverb-mix');
         const aeReverbVal = fxDrawerEl.querySelector('.aelapse-reverb-val');
         initKnob(aeReverbMix, (val) => {
             const pct = val / 100;
-            const mix = pct * 0.80;
+            const mix = pct;
             track.aelapseReverbMix = mix;
             track.aelapseReverbGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
-            const displayMix = Math.round(mix * 100);
-            aeReverbVal.textContent = `${displayMix}%`;
+            const displayMix = mix * 100;
+            aeReverbVal.textContent = `${displayMix.toFixed(1)}%`;
             updateAelapseBypass(track);
         }, {
             min: 0,
             max: 100,
-            step: 1,
+            step: 0.1,
             defaultVal: 0,
-            value: Math.round((track.aelapseReverbMix / 0.80) * 100)
+            value: track.aelapseReverbMix * 100
         });
 
         const aeReverbSize = fxDrawerEl.querySelector('.aelapse-reverb-size');
@@ -4596,10 +4603,10 @@
                     let bandGains = [0, 0, 0, 0, 0, 0];
                     if (value < 50) {
                         const factor = (50 - value) / 50;
-                        bandGains = [6.0 * factor, 6.0 * factor, 4.0 * factor, 0, -6.0 * factor, -6.0 * factor];
+                        bandGains = [7.8 * factor * 1.3, 7.8 * factor * 1.3, 5.2 * factor * 1.3, 0, -7.8 * factor * 1.3, -7.8 * factor * 1.3];
                     } else if (value > 50) {
                         const factor = (value - 50) / 50;
-                        bandGains = [-6.0 * factor, -6.0 * factor, -3.0 * factor, 0, 6.0 * factor, 8.0 * factor];
+                        bandGains = [-7.8 * factor * 1.3, -7.8 * factor * 1.3, -3.9 * factor * 1.3, 0, 7.8 * factor * 1.3, 10.4 * factor * 1.3];
                     }
                     eqSlidersList.forEach((slider, b) => {
                         slider.value = bandGains[b];
@@ -9480,6 +9487,131 @@
     // --- Initialize MIDI and Modulators ---
     initMIDI();
     setupGlobalModulatorsListeners();
+
+    // --- Keyboard Shortcuts Framework ---
+    function takeScreenshot() {
+        const oldStatusText = statusText ? statusText.textContent : 'Ready';
+        const oldStatusDisplay = statusBar ? statusBar.style.display : 'none';
+        
+        if (statusBar) statusBar.style.display = 'flex';
+        if (statusText) statusText.textContent = 'Capturing screenshot...';
+        
+        html2canvas(document.body, {
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#07070a'
+        }).then(canvas => {
+            const dataUrl = canvas.toDataURL('image/png');
+            
+            fetch('/api/screenshot', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ image: dataUrl })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    if (statusText) statusText.textContent = `Screenshot saved to screenshots/${data.filename}`;
+                    console.log('Screenshot saved to', data.path);
+                    setTimeout(() => {
+                        if (statusBar) statusBar.style.display = oldStatusDisplay;
+                        if (statusText) statusText.textContent = oldStatusText;
+                    }, 4000);
+                } else {
+                    throw new Error(data.error || 'Server error saving screenshot');
+                }
+            })
+            .catch(err => {
+                console.error('Error saving screenshot:', err);
+                if (statusText) statusText.textContent = `Screenshot failed: ${err.message}`;
+                setTimeout(() => {
+                    if (statusBar) statusBar.style.display = oldStatusDisplay;
+                    if (statusText) statusText.textContent = oldStatusText;
+                }, 4000);
+            });
+        }).catch(err => {
+            console.error('html2canvas capture error:', err);
+            if (statusText) statusText.textContent = `Screenshot failed: ${err.message}`;
+            setTimeout(() => {
+                if (statusBar) statusBar.style.display = oldStatusDisplay;
+                if (statusText) statusText.textContent = oldStatusText;
+            }, 4000);
+        });
+    }
+
+    const KEYBOARD_SHORTCUTS = {
+        'KeyP': { desc: 'Take Screenshot', action: () => takeScreenshot() },
+        'Space': { desc: 'Play / Pause', action: () => btnPlayPause && btnPlayPause.click() },
+        'KeyS': { desc: 'Stop / Rewind', action: () => btnStopAll && btnStopAll.click() },
+        'KeyG': { desc: 'Generate Track', action: () => btnGenerate && btnGenerate.click() },
+        'KeyK': { desc: 'Randomize In Key', action: () => btnRandomInKey && btnRandomInKey.click() },
+        'KeyN': { desc: 'Randomize Instrument', action: () => btnRandomPrompt && btnRandomPrompt.click() },
+        'KeyC': { desc: 'Change Key/Chord', action: () => btnChangeChord && btnChangeChord.click() },
+        'KeyM': { desc: 'Change Mood', action: () => btnChangeMood && btnChangeMood.click() },
+        'KeyA': { desc: 'Change Accent/Style', action: () => btnChangeAccent && btnChangeAccent.click() },
+        'KeyI': { desc: 'Change Instrument', action: () => btnChangeInstrument && btnChangeInstrument.click() },
+        'KeyY': { desc: 'Change Style/Genre', action: () => btnChangeStyle && btnChangeStyle.click() },
+        'KeyD': { desc: 'Generate Random Drums', action: () => btnRandomDrums && btnRandomDrums.click() },
+        'KeyB': { desc: 'Generate Random Bass', action: () => btnRandomBass && btnRandomBass.click() },
+        'KeyL': { desc: 'Generate Random Lead', action: () => btnRandomLead && btnRandomLead.click() },
+        'KeyH': { desc: 'Cycle Prompt History', action: () => btnPromptHistory && btnPromptHistory.click() },
+        'KeyV': { desc: 'Save Project', action: () => btnSaveProject && btnSaveProject.click() },
+        'KeyO': { desc: 'Load Project', action: () => btnLoadProject && btnLoadProject.click() },
+        'KeyX': { desc: 'Render Mix', action: () => btnRenderMix && btnRenderMix.click() },
+        'KeyE': { desc: 'Export Loops', action: () => btnExportLoops && btnExportLoops.click() },
+        'KeyT': { desc: 'Toggle Split Mode', action: () => splitToggle && splitToggle.click() },
+        'KeyF': { desc: 'Toggle Song Mode', action: () => {
+            const arr = document.getElementById('toggle-arranger');
+            if (arr) arr.click();
+        }},
+        'KeyU': { desc: 'Toggle MIDI Learn', action: () => {
+            const ml = document.getElementById('btn-midi-learn');
+            if (ml) ml.click();
+        }},
+        'KeyW': { desc: 'Toggle Modulators Panel', action: () => toggleGlobalModulators() }
+    };
+
+    window.addEventListener('keydown', (e) => {
+        // Ignore events with modifier keys (to avoid overriding browser commands like Ctrl+S, Ctrl+P, etc.)
+        if (e.ctrlKey || e.metaKey || e.altKey) {
+            return;
+        }
+
+        const active = document.activeElement;
+        if (active && (
+            active.tagName === 'INPUT' || 
+            active.tagName === 'TEXTAREA' || 
+            active.tagName === 'SELECT' || 
+            active.isContentEditable
+        )) {
+            return;
+        }
+
+        const shortcut = KEYBOARD_SHORTCUTS[e.code];
+        if (shortcut) {
+            e.preventDefault();
+            shortcut.action();
+        }
+    });
+
+    // --- Keyboard Shortcuts Collapse Toggle ---
+    const appFooter = document.getElementById('app-footer');
+    const btnToggleFooter = document.getElementById('btn-toggle-footer');
+    if (appFooter && btnToggleFooter) {
+        let isCollapsed = localStorage.getItem('loopmaster_footer_collapsed') === 'true';
+        if (tracks.length === 0) {
+            isCollapsed = false; // Force open before the first generation
+        }
+        appFooter.classList.toggle('is-collapsed', isCollapsed);
+
+        btnToggleFooter.addEventListener('click', () => {
+            const willCollapse = !appFooter.classList.contains('is-collapsed');
+            appFooter.classList.toggle('is-collapsed', willCollapse);
+            localStorage.setItem('loopmaster_footer_collapsed', willCollapse);
+        });
+    }
 
     // Expose dev variables for testing
     window._dev = {

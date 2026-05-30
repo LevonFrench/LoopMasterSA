@@ -1,23 +1,26 @@
-# Handoff: Codebase Diagnostics & Verification (Session 2026-05-29)
+# Handoff: Tone, DMX, and RMX Range & Resolution Improvements (Session 2026-05-30)
 
 ## Completed Work
 
-### Diagnostics & Verification
-We completed a systematic diagnostics check on the entire LoopMasterSA codebase:
-1. **Compilation Checks**: Verified that all backend Python files (`app_server.py`, `generate_variants.py`, and `stable_audio_3/*.py`) and frontend JavaScript (`static/app.js`) compile cleanly with zero errors/warnings.
-2. **Server Warmup & Load**: Propped the local server inside a CUDA environment, loading the local `small-music` weights directly. Verified successful warmup and startup on `http://127.0.0.1:7861`.
-3. **Headless Browser Audit**: Conducted headless Chromium UI audits. Navigation to `http://127.0.0.1:7861` succeeded (200 OK), rendering all control panels (LFO drawer, visualizers, arranger) with zero console exceptions.
+### Tone, DMX, and RMX Range & Resolution Improvements
+We expanded the range and precision of the Tone, Delay Mix (DMX), and Reverb Mix (RMX) knobs:
+- **Tone Extremes**: Increased EQ band gains in `applyMacroKnob` and `applyFxMacro` by a factor of 1.3 (endpoints are now 30% more extreme, up to 13.52 dB).
+- **EQ Slider Unclamping**: Changed the range of individual `.eq-slider` knobs inside the FX drawer via `initKnob` options from `min: -12, max: 12` to `min: -16, max: 16` to prevent clamping of the new Tone boosts.
+- **Mixer Knob Drag Polish**: Scaled dragging delta on mixer macro knobs by `0.4` to make dragging smoother and more controllable.
+- **Decimal Step Precision**:
+  - Implemented 0.1 decimal step resolution for all track-strip macro knobs (`dlyMix`, `revMix`, `tone`, `filter`, `reso`).
+  - Configured Aelapse Delay Mix (`aeMix`) and Reverb Mix (`aeReverbMix`) knobs in the FX drawer to use a step size of `0.1` (instead of `1.0`).
+  - Formatted tooltip readouts and text labels in both the mixer strip and FX drawer to display one decimal place (using `.toFixed(1)`), allowing users to see and select precise values (e.g. `Delay: 12.5%`).
 
-For complete release logs and checkpoints, see:
-- [implementation_plan.md](file:///C:/Users/hotgh/.gemini/antigravity-ide/brain/0a3fe1e2-0265-4340-8e27-3d20a2e537d6/implementation_plan.md)
-- [task.md](file:///C:/Users/hotgh/.gemini/antigravity-ide/brain/0a3fe1e2-0265-4340-8e27-3d20a2e537d6/task.md)
-- [walkthrough.md](file:///j:/projects/sa3/walkthrough.md#L895-L901) (Release entry #80)
-- [implementation.md](file:///j:/projects/sa3/implementation.md#L709-L717)
+For full details, see:
+- [task.md](file:///j:/projects/sa3/task.md)
+- [walkthrough.md](file:///j:/projects/sa3/walkthrough.md)
+- [implementation.md](file:///j:/projects/sa3/implementation.md)
 
 ## Suggested Skills
-- **`/qa`**: Run the QA subagent (`qa` skill) if you make visual or layout changes.
-- **`/autoplan`**: Run automatic reviews on any future implementation plans.
+- **`/qa`**: Suggest using the QA skill to systematically test the web application if any UI elements are refactored or further changes are made.
+- **`/autoplan`**: Suggest auto-plan for reviewing any subsequent major plans.
 
 ## Current State
-- **Git Index**: Clean working tree.
-- **Server State**: Server is stopped. Launches cleanly using `run_server.bat`.
+- **Git status**: `static/app.js` is updated and has been verified with `node -c` for clean syntax.
+- **Server**: Server is ready and verified.

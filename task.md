@@ -559,4 +559,15 @@
   - [x] Run syntax and compilation validation check on all Python files and frontend JavaScript
   - [x] Launch the Flask app server locally and verify CUDA DiT graph compilation and warmup
   - [x] Perform headless browser test using chained execution to confirm 200 OK navigation, zero startup console errors, and correct page rendering
+
+- [x] Ignore AI/Agent workspace files (2026-05-30):
+  - [x] Add HANDOFF.md, handoff.md, implementation.md, implementation_plan.md, task.md, and walkthrough.md to .gitignore
+
+- [x] Expand Tone, DMX, and RMX Knob Ranges and Resolution:
+  - [x] Multiply EQ band gains for Tone macro in `applyMacroKnob` and `applyFxMacro` by 1.3
+  - [x] Increase individual EQ sliders' range limits to `min: -16` and `max: 16` in `initKnob` setup to prevent clamping
+  - [x] Scale mixer macro knobs drag delta by 0.4 for smoother control
+  - [x] Implement 0.1 decimal step resolution for front-panel macro knobs and update tooltip readouts to show one decimal place
+  - [x] Set `step: 0.1` for Aelapse Delay Mix and Reverb Mix knobs in the FX drawer, and format their text readouts to show one decimal place
+  - [x] Verify functionality (auditioning tone extremes, smooth decimal drag values, project save/load, offline rendering)
 

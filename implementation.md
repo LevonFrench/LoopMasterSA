@@ -711,3 +711,60 @@ We performed repository-wide diagnostics and runtime verification:
 1. **Compilation Checks**: Verified syntactic correctness of all core Python backend files (`app_server.py`, `generate_variants.py`, and `stable_audio_3/*.py`) and frontend JavaScript (`static/app.js`). All compiled cleanly with zero errors.
 2. **Launch Verification**: Started the local Flask application server using the GPU-enabled CUDA environment and the lightweight `small-music` model, completing model DiT graph warmup and server initialization on port `7861`.
 3. **Headless Browser Audit**: Audited page loading and runtime execution via persistent headless Chromium. Confirmed 200 OK navigation, zero startup console errors, and successful rendering of all UI modulators, arranger cards, and export parameters.
+
+## Gitignore Update (Session 2026-05-30)
+
+We updated the repository's `.gitignore` configuration to exclude AI-related workspace files:
+1. **Targeted Files**: Added `HANDOFF.md`, `handoff.md`, `implementation.md`, `implementation_plan.md`, `task.md`, and `walkthrough.md`.
+2. **Result**: Prevents agent workspace metadata, task lists, and release logs from polluting git commits.
+
+## Keyboard Shortcuts & Screenshot Capture Integration (Session 2026-05-30)
+
+We implemented a client-side screenshot utility and a global keyboard shortcuts framework:
+1. **Screenshot Utility (`P` key)**:
+   - Added `html2canvas` library link to `index.html`.
+   - Coded `takeScreenshot()` in `app.js` using `html2canvas` with CORS support, capturing the entire DOM and posting the base64 payload to `/api/screenshot`.
+   - Implemented a backend Flask route `/api/screenshot` in `app_server.py` to decode and save images inside the project root `screenshots/` directory.
+   - Updated `.gitignore` to exclude user-captured screenshots folder.
+2. **Keyboard Shortcuts Framework**:
+   - Added a mapping of key codes to actions in `app.js` and registered a global `keydown` event listener.
+   - Ignored shortcuts when typing inside form input/textarea/select elements.
+   - Associated hotkeys with every actionable button on the page (e.g. `Space` for Play/Pause, `S` for Stop, `G` for Generate, etc.).
+   - Updated button tooltips (title attributes) in `index.html` to visually display the assigned hotkeys (e.g., `[Space]`, `[G]`, `[P]`).
+
+## Keyboard Shortcuts Footer Guide & Bottom Header (Session 2026-05-30)
+
+We added a dedicated visual footer guide to present all keyboard shortcuts graphically at the bottom of the interface, later restructured into a split collapsible layout:
+1. **Split HTML Layout**: Split the `.app-footer` bar into a "Quick Start Guide" list (steps 1-4) on the left, and a condensed 4-row shortcut grid (6 columns) on the right.
+2. **Collapse Toggle**: Added a collapse button (`#btn-toggle-footer`) on the top-right of the footer header to hide/reveal the body content, persisting its collapse state across reloads in `localStorage` under `loopmaster_footer_collapsed`.
+3. **CSS Styling**: Added CSS rules for the 6x4 compact shortcuts grid, Quick Start step numeric badges, transition sweeps, chevron rotations, and hide/reveal behaviors. Included responsive design query rules to scale grid columns and stack columns on smaller screen sizes.
+4. **Auto-Collapse & Initial Open State**:
+   - Programmed the footer initialization in `app.js` to force the guide to open on startup if no tracks exist (`tracks.length === 0`), ensuring new users see the guide.
+   - Implemented an auto-collapse routine in `playAll()` to hide the footer automatically when playback starts, saving the state to `localStorage`.
+
+## Parameter Recording Removal (Session 2026-05-30)
+
+We removed the Loop Parameter Recording feature from the application:
+1. **HTML Layout**: Commented out the `#btn-record` button from the transport bar and the `#record-log-drawer` panel in `index.html`. Removed the `[R]` keyboard shortcut entry from the footer visual guide and left a blank placeholder in the grid cell.
+2. **Javascript Logic**: Deleted the `KeyR` keyboard shortcut assignment from `app.js` to completely disable keyboard triggers. The variables and functions remain inactive as the DOM hooks have been cleanly commented out.
+
+## Proposed Plan: Tone, DMX, and RMX Knob Range Expansion and Resolution (Session 2026-05-30)
+
+### Problem Statement
+- **Tone Range**: The user wants the Tone knob to have 30% farther endpoints, allowing for more extreme Dark and Bright settings.
+- **DMX & RMX Resolution**: The Delay Mix (DMX) and Reverb Mix (RMX) knobs, as well as the other macro knobs on the track mixer, are currently too sensitive when dragging (1.0% per pixel), making it difficult to dial in precise, intermediate values ("more inbetween"). The delay and reverb mix values are also constrained to integer percentages (step: 1) instead of allowing decimal precision.
+
+### Proposed Changes
+1. **Extend Tone Endpoint Gains**:
+   - In both `applyMacroKnob()` and `applyFxMacro()` inside `app.js`, multiply the EQ gains by a further 1.3 (increasing endpoints by 30%).
+   - Update individual EQ bands' maximum gain range from `[-12.0, 12.0]` to `[-16.0, 16.0]` in the `.eq-slider` `initKnob` calls to prevent clipping of the new maximum boost of 13.52 dB.
+2. **Improve Mixer Knob Sensitivity & Resolution**:
+   - In the mouse dragging event listener for mixer macro knobs in `app.js`, scale the dragging delta by `0.4` (instead of `1.0`) to make adjustments smoother and more controllable.
+   - Allow decimal precision (rounding to `0.1` instead of `1`) for front-panel macro knobs (`dlyMix`, `revMix`, `tone`, `filter`, `reso`) during drag updates.
+   - Change the step size of the Aelapse Delay Mix (`aeMix`) and Reverb Mix (`aeReverbMix`) custom knobs inside the FX drawer from `1` to `0.1`.
+   - Update tooltip titles and readouts to display one decimal place (using `.toFixed(1)`) for Delay and Reverb mix parameters, showing e.g., `Delay: 12.5%` instead of `Delay: 13%`.
+
+### Verification Plan
+1. **Tone Audition**: Turn the Tone knob to full Dark and Bright, verifying that the sound is more drastically altered and the individual EQ sliders in the FX drawer reach the new extremes (~13.5dB) without being clamped.
+2. **Resolution Check**: Drag the DMX and RMX knobs slowly and verify that they move in increments of 0.1% and are much less sensitive/jumpy.
+3. **Save/Load & Mixdown**: Save a project with decimal mix values, reload it, and verify that the decimal precision is preserved. Render a WAV mixdown and verify no errors are generated.

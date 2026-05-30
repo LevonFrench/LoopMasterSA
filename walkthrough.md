@@ -896,4 +896,39 @@ We verified the redesigned track mixer strip:
 1. **Compilation Audit**: Verified syntactic validity for all backend Python files using `py_compile` and for frontend scripts using `node -c`. All codebase files compiled cleanly with no syntax errors.
 2. **Backend Server Startup**: Initiated the local Flask web server in the background environment. Confirmed successful local model initialization, GPU resource detection (CUDA), DiT graph warmup, and successful serving on port `7861`.
 3. **Headless Browser Test**: Ran persistent headless Chromium browser tests targeting the active local server instance. Verified successful HTTP 200 OK navigation, zero startup console errors/exceptions, and verified correct rendering of all control modulators, mod matrix mapping parameters, and audio cards.
+
+### 81. Ignore AI/Agent workspace files (2026-05-30)
+1. **Gitignore update**: Added AI-related Markdown files (`HANDOFF.md`, `handoff.md`, `implementation.md`, `implementation_plan.md`, `task.md`, and `walkthrough.md`) to the root `.gitignore` to prevent committing session artifacts and temporary planning files.
+
+### 82. Keyboard Shortcuts & Screenshot Capture Integration (2026-05-30)
+1. **Screenshot Utility Integration**: Added the `html2canvas` library to `index.html` and implemented `takeScreenshot()` in `app.js` which performs DOM capture and POSTs base64 image data to the backend. Added a `/api/screenshot` Flask endpoint in `app_server.py` that decodes and saves images in a newly created `screenshots/` directory in the project root, using a timestamped filename scheme. Updated `.gitignore` to ignore the `screenshots/` folder.
+2. **Keyboard Shortcuts Framework**: Coded a global keydown event mapping mapping keys to UI actions in `app.js`. Configured bounds so shortcuts do not trigger while typing in text elements. Added hotkeys for all key buttons in the application. Added visual cues (e.g. `[Space]`, `[P]`, `[G]`) in button tooltips inside `index.html`.
+
+### 83. Keyboard Shortcuts Visual Footer Guide (2026-05-30)
+1. **Visual Shortcuts Bar**: Appended a full-width `.app-footer` bottom bar in `index.html` presenting keyboard shortcuts grouped logically (Transport, Modifiers, Generators, Utility).
+2. **tactile keycap graphics**: Created CSS rules in `app.css` to render keycaps (`<kbd>`) as 3D tactile keys (using gradient backgrounds, solid bottom borders, and text shadowing). Added responsive viewport breakpoints to scale columns elegantly.
+
+### 84. Collapsible Restructured Shortcuts Footer & Quick Start Guide (2026-05-30)
+1. **Collapsible Header Toggle**: Added a toggle button (`#btn-toggle-footer`) on the right side of the footer header. Wired event listeners in `app.js` to toggle a `.is-collapsed` class on the footer wrapper and rotate the chevron icon, persisting state in `localStorage` under `loopmaster_footer_collapsed`.
+2. **Split Quick Start & Compact Shortcuts Layout**: Restructured the footer body in `index.html`:
+   - Left side: Added a numbered 4-step Quick Start guide with visual numeric circle badges to guide new users.
+   - Right side: Condensed all 24 hotkey shortcuts into a unified grid format consisting of exactly 6 columns across 4 rows.
+3. **CSS Layout Enhancements**: Styled columns, numeric badges, hover actions, show/hide overrides, and viewport column stacking queries in `app.css`.
+4. **Auto-Collapse and Forced Open Behaviors**:
+   - Programmed the footer initialization to force the guide to open on startup if no tracks exist (`tracks.length === 0`), guaranteeing new users see the instructions.
+   - Wired an auto-collapse trigger in `playAll()` to collapse the footer automatically when playback starts, saving the collapsed state to `localStorage`.
+
+### 85. Parameter Recording Removal (2026-05-30)
+1. **UI Disabling**: Commented out the `#btn-record` element in `index.html` and the `#record-log-drawer` panel. Removed the keycap display entry for the `R` key inside the visual shortcuts footer guide grid.
+2. **Logic Cleanup**: Deleted the `KeyR` shortcut mapping inside `app.js` to disable the shortcut trigger, keeping the recording logic inactive.
+
+### 86. Tone, DMX, and RMX Knob Range Expansion and Resolution (Session 2026-05-30)
+1. **Extended Tone Endpoint Gains**:
+   - Multiplied the EQ band gains for the Tone macro in both channel-strip `applyMacroKnob()` and global `applyFxMacro()` by a factor of `1.3`, pushing maximum endpoint boosts/cuts from 7.8dB/10.4dB to 10.14dB/13.52dB.
+   - Expanded the range limits of individual `.eq-slider` knobs inside the FX drawer via `initKnob` options from `min: -12, max: 12` to `min: -16, max: 16` to prevent clamping of the new wider Tone gains.
+2. **DMX and RMX Resolution & Sensitivity Polish**:
+   - Scale dragging delta on all track-strip macro knobs by a sensitivity factor of `0.4` (down from `1.0`), making adjustments much smoother and allowing for precise, controllable dialing of intermediate values.
+   - Rounded mixer macro values (`dlyMix`, `revMix`, `tone`, `filter`, `reso`) to `0.1` decimal step precision when dragging.
+   - Set the step size of Aelapse Delay Mix (`aeMix`) and Reverb Mix (`aeReverbMix`) knobs in the FX drawer to `0.1`, and formatted their display value text readouts to show one decimal place (`toFixed(1)`).
+3. **Verification**: Checked JavaScript syntax via `node -c` (successfully compiles).
 

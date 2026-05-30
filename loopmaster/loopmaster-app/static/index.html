@@ -257,8 +257,64 @@
         <!-- Track Rows -->
         <div class="tracks-container empty" id="tracks-container">
             <div class="grid-empty-state">
-                <svg viewBox="0 0 24 24"><path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z"/></svg>
-                <div>Enter a prompt and hit <strong>Generate</strong> OR Hit Random & Generate (Use The Random Buttons to Fill Out Your Arrangement)</div>
+                <div class="empty-state-welcome">
+                    <svg viewBox="0 0 24 24" class="welcome-logo-icon"><path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z"/></svg>
+                    <h2>Welcome to LoopMaster SA3</h2>
+                    <p class="welcome-subtitle">Generate dynamic multi-track audio loops using generative AI.<br>Control playback, mixing, and generation instantly via keyboard shortcuts.</p>
+                </div>
+                <div class="footer-body" id="empty-state-body">
+                    <!-- Left Column: Getting Started (1, 2, 3, 4) -->
+                    <div class="footer-left">
+                        <span class="group-label">Quick Start</span>
+                        <div class="quick-start-steps">
+                            <div class="qs-step">
+                                <span class="qs-num">1</span>
+                                <p>Use the random buttons to cook up variations in key. Use the instrument buttons to fill out what your arrangement is missing.</p>
+                            </div>
+                            <div class="qs-step">
+                                <span class="qs-num">2</span>
+                                <p>Set your BPM, Steps (higher takes longer to generate), and press <strong>Generate</strong> <code>[G]</code> to start.</p>
+                            </div>
+                            <div class="qs-step">
+                                <span class="qs-num">3</span>
+                                <p>Playback starts automatically! <strong>2x</strong> and <strong>4x</strong> extend loops you like; delete and regen the ones you don't. All loops are ACiDized and ready to drop into your DAW. You can also export a ZIP or render a full mixdown from the export panel.</p>
+                            </div>
+                            <div class="qs-step">
+                                <span class="qs-num">4</span>
+                                <p>FX & Modulation are WIP. The macro knobs add quick color and bring the mix together. Limiting, compression, and prompt massaging work behind the scenes.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Right Column: Shortcuts compact grid -->
+                    <div class="footer-right">
+                        <span class="group-label">Keyboard Shortcuts</span>
+                        <div class="shortcuts-compact-grid">
+                            <div class="shortcut-item-compact"><kbd>Space</kbd> <span>Play/Pause</span></div>
+                            <div class="shortcut-item-compact"><kbd>S</kbd> <span>Stop/Reset</span></div>
+                            <div class="shortcut-item-compact"><kbd>X</kbd> <span>Render Mix</span></div>
+                            <div class="shortcut-item-compact"><kbd>E</kbd> <span>Export Loops</span></div>
+                            <div class="shortcut-item-compact"><kbd>P</kbd> <span>Screenshot</span></div>
+                            <div class="shortcut-item-compact"><kbd>G</kbd> <span>Generate Track</span></div>
+                            <div class="shortcut-item-compact"><kbd>D</kbd> <span>Random Drums</span></div>
+                            <div class="shortcut-item-compact"><kbd>B</kbd> <span>Random Bass</span></div>
+                            <div class="shortcut-item-compact"><kbd>L</kbd> <span>Random Lead</span></div>
+                            <div class="shortcut-item-compact"><kbd>H</kbd> <span>Prompt History</span></div>
+                            <div class="shortcut-item-compact"><kbd>V</kbd> <span>Save Project</span></div>
+                            <div class="shortcut-item-compact"><kbd>K</kbd> <span>In Key Prompt</span></div>
+                            <div class="shortcut-item-compact"><kbd>N</kbd> <span>Random Prompt</span></div>
+                            <div class="shortcut-item-compact"><kbd>C</kbd> <span>Change Chord</span></div>
+                            <div class="shortcut-item-compact"><kbd>M</kbd> <span>Change Mood</span></div>
+                            <div class="shortcut-item-compact"><kbd>A</kbd> <span>Change Accent</span></div>
+                            <div class="shortcut-item-compact"><kbd>O</kbd> <span>Load Project</span></div>
+                            <div class="shortcut-item-compact"><kbd>I</kbd> <span>Change Inst</span></div>
+                            <div class="shortcut-item-compact"><kbd>Y</kbd> <span>Change Style</span></div>
+                            <div class="shortcut-item-compact"><kbd>T</kbd> <span>Toggle Split</span></div>
+                            <div class="shortcut-item-compact"><kbd>F</kbd> <span>Song Mode</span></div>
+                            <div class="shortcut-item-compact"><kbd>U</kbd> <span>MIDI Learn</span></div>
+                            <div class="shortcut-item-compact"><kbd>W</kbd> <span>Modulators Panel</span></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -848,6 +904,69 @@
 
     </div>
 
+    <!-- Bottom Header & Keyboard Shortcuts Graphic -->
+    <footer class="app-footer" id="app-footer">
+        <div class="footer-header">
+            <h3>LoopMaster SA3 — Quick Start & Keyboard Shortcuts</h3>
+            <button class="footer-toggle-btn" id="btn-toggle-footer" type="button" title="Toggle Shortcuts Panel">
+                <svg class="chevron-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+        </div>
+        <div class="footer-body" id="footer-body">
+            <!-- Left Column: Getting Started (1, 2, 3, 4) -->
+            <div class="footer-left">
+                <span class="group-label">Quick Start</span>
+                <div class="quick-start-steps">
+                    <div class="qs-step">
+                        <span class="qs-num">1</span>
+                        <p>Use the random buttons to cook up variations in key. Use the instrument buttons to fill out what your arrangement is missing.</p>
+                    </div>
+                    <div class="qs-step">
+                        <span class="qs-num">2</span>
+                        <p>Set your BPM, Steps (higher takes longer to generate), and press <strong>Generate</strong> <code>[G]</code> to start.</p>
+                    </div>
+                    <div class="qs-step">
+                        <span class="qs-num">3</span>
+                        <p>Playback starts automatically! <strong>2x</strong> and <strong>4x</strong> extend loops you like; delete and regen the ones you don't. All loops are ACiDized and ready to drop into your DAW. You can also export a ZIP or render a full mixdown from the export panel.</p>
+                    </div>
+                    <div class="qs-step">
+                        <span class="qs-num">4</span>
+                        <p>FX & Modulation are WIP. The macro knobs add quick color and bring the mix together. Limiting, compression, and prompt massaging work behind the scenes.</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Right Column: Shortcuts compact grid -->
+            <div class="footer-right">
+                <span class="group-label">Keyboard Shortcuts</span>
+                <div class="shortcuts-compact-grid">
+                    <div class="shortcut-item-compact"><kbd>Space</kbd> <span>Play/Pause</span></div>
+                    <div class="shortcut-item-compact"><kbd>S</kbd> <span>Stop/Reset</span></div>
+                    <div class="shortcut-item-compact"><kbd>X</kbd> <span>Render Mix</span></div>
+                    <div class="shortcut-item-compact"><kbd>E</kbd> <span>Export Loops</span></div>
+                    <div class="shortcut-item-compact"><kbd>P</kbd> <span>Screenshot</span></div>
+                    <div class="shortcut-item-compact"><kbd>G</kbd> <span>Generate Track</span></div>
+                    <div class="shortcut-item-compact"><kbd>D</kbd> <span>Random Drums</span></div>
+                    <div class="shortcut-item-compact"><kbd>B</kbd> <span>Random Bass</span></div>
+                    <div class="shortcut-item-compact"><kbd>L</kbd> <span>Random Lead</span></div>
+                    <div class="shortcut-item-compact"><kbd>H</kbd> <span>Prompt History</span></div>
+                    <div class="shortcut-item-compact"><kbd>V</kbd> <span>Save Project</span></div>
+                    <div class="shortcut-item-compact"><kbd>K</kbd> <span>In Key Prompt</span></div>
+                    <div class="shortcut-item-compact"><kbd>N</kbd> <span>Random Prompt</span></div>
+                    <div class="shortcut-item-compact"><kbd>C</kbd> <span>Change Chord</span></div>
+                    <div class="shortcut-item-compact"><kbd>M</kbd> <span>Change Mood</span></div>
+                    <div class="shortcut-item-compact"><kbd>A</kbd> <span>Change Accent</span></div>
+                    <div class="shortcut-item-compact"><kbd>O</kbd> <span>Load Project</span></div>
+                    <div class="shortcut-item-compact"><kbd>I</kbd> <span>Change Inst</span></div>
+                    <div class="shortcut-item-compact"><kbd>Y</kbd> <span>Change Style</span></div>
+                    <div class="shortcut-item-compact"><kbd>T</kbd> <span>Toggle Split</span></div>
+                    <div class="shortcut-item-compact"><kbd>F</kbd> <span>Song Mode</span></div>
+                    <div class="shortcut-item-compact"><kbd>U</kbd> <span>MIDI Learn</span></div>
+                    <div class="shortcut-item-compact"><kbd>W</kbd> <span>Modulators Panel</span></div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
     <!-- Export Settings Modal -->
     <div id="export-modal" class="modal-overlay">
         <div class="modal-content">
@@ -883,6 +1002,7 @@
     </div>
 
     <script src="/static/tuna.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>
