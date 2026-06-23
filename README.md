@@ -46,12 +46,12 @@ Pick a model from the menu, then open [http://localhost:7861](http://localhost:7
 sa3/
 ├── stable-audio-3/           # SA3 model library, virtualenv, localized weights
 ├── loopmaster/
-│   ├── loopmaster-app/       # Flask backend + JS/CSS/HTML frontend
-│   │   ├── app_server.py     # API server & generation worker
-│   │   └── static/           # Dashboard (index.html, app.js, app.css)
-│   └── wiki/                 # Documentation
-│       ├── Home.md           # Architecture & technical reference
-│       └── User-Guide.md     # Feature walkthrough & workflows
+│   └── loopmaster-app/       # Flask backend + JS/CSS/HTML frontend
+│       ├── app_server.py     # API server & generation worker
+│       └── static/           # Dashboard (index.html, app.js, app.css)
+├── .wiki/                    # Knowledge base
+│   ├── raw/                  # Immutable source documents
+│   └── wiki/                 # Living compiled articles (concepts, topics, references)
 ├── run_server.bat            # Interactive launcher (model selector)
 └── AGENTS.md                 # Agent operating rules
 ```
@@ -62,8 +62,9 @@ sa3/
 
 | Document | What's in it |
 |----------|-------------|
-| [User Guide](loopmaster/wiki/User-Guide.md) | Every feature explained with workflows. Start here. |
-| [Architecture](loopmaster/wiki/Home.md) | Signal chain, API contracts, DSP specs, generation pipeline. |
+| [Knowledge Base Index](.wiki/_index.md) | Entry point to all system and user documentation. |
+| [User Guide](.wiki/wiki/topics/user_guide.md) | Every feature explained with workflows. Start here. |
+| [Architecture](.wiki/wiki/concepts/architecture.md) | Signal chain, API contracts, DSP specs, generation pipeline. |
 
 ---
 

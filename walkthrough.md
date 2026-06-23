@@ -931,4 +931,27 @@ We verified the redesigned track mixer strip:
    - Rounded mixer macro values (`dlyMix`, `revMix`, `tone`, `filter`, `reso`) to `0.1` decimal step precision when dragging.
    - Set the step size of Aelapse Delay Mix (`aeMix`) and Reverb Mix (`aeReverbMix`) knobs in the FX drawer to `0.1`, and formatted their display value text readouts to show one decimal place (`toFixed(1)`).
 3. **Verification**: Checked JavaScript syntax via `node -c` (successfully compiles).
+
+### 87. Knowledge Base Migration & AGENTS.md Rules Update (Session 2026-06-21)
+We migrated the repository documentation and local rules to align with current repository standards:
+1. **Knowledge Base Directory Restructuring**:
+   - Created the new standard `.wiki/` directory layout at the project root.
+   - Copied legacy documentation (`Home.md`, `User-Guide.md`) into `.wiki/raw/` as raw immutable source documents.
+   - Created standard index files (`_index.md`) containing catalogs, category mappings, and recent changes for all subdirectories under `.wiki/`.
+2. **Expanded Living Wiki Compilation**:
+   - Authored clean, detailed compiled wiki articles inside `.wiki/wiki/`:
+     - `concepts/architecture.md`: Main system layout, client-server boundaries, and series/parallel channel strip signals.
+     - `concepts/generation_pipeline.md`: BF16 precision, metadata prompt formatting, drum fill list conditioning, and VAE decoding callbacks.
+     - `concepts/dsp_effects.md`: Web Audio nodes, Luftikus EQ gains, Scream distortion shapers, wow/flutter delay modulation, and brickwall master limiter calibration.
+     - `topics/user_guide.md`: Launcher parameters, quick start prompts, and channel controls.
+     - `topics/remixing.md`: Inpainting ranges, call-and-response mode, timing inversion, and 2x/4x outpainting column grid spans.
+     - `references/api_reference.md`: Request-response structures for generate, status, regenerate, convert, and delete endpoints.
+     - `references/midi_modulation.md`: Lazy Web MIDI requests, CC maps, and modulation matrix routing.
+     - `theses/future_opportunities.md`: Exploration of server-side mixdown using pure JS Web Audio API inside Node.js.
+   - Applied Obsidian-style wikilinks with relative markdown paths (Dual-Linking) and set frontmatter metadata (`confidence: high` and `volatility: cold`) on all compiled articles.
+   - Logged the operations in `.wiki/log.md` and deleted the legacy `loopmaster/wiki/` folder.
+3. **Rules Synchronization (`AGENTS.md` & `README.md`)**:
+   - Rewrote `AGENTS.md` to remove duplicated rules and consolidated all guidelines into five clear sections, pointing the Knowledge Wiki link to the new root `.wiki/_index.md`.
+   - Updated legacy folder paths and documentation URLs inside root `README.md`.
+
 

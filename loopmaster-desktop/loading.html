@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Loading Backend</title>
+    <link rel="stylesheet" href="shared.css">
+    <style>
+        .loader {
+            border: 6px solid #333;
+            border-top: 6px solid #bb86fc;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        h2 {
+            color: #bb86fc;
+            margin: 0;
+        }
+        p {
+            color: #aaaaaa;
+        }
+    </style>
+</head>
+<body>
+    <div class="loader"></div>
+    <h2>Loading Stable Audio 3...</h2>
+    <p>Booting PyTorch backend and allocating VRAM. Please wait...</p>
+</body>
+</html>

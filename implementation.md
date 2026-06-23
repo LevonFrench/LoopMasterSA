@@ -748,23 +748,37 @@ We removed the Loop Parameter Recording feature from the application:
 1. **HTML Layout**: Commented out the `#btn-record` button from the transport bar and the `#record-log-drawer` panel in `index.html`. Removed the `[R]` keyboard shortcut entry from the footer visual guide and left a blank placeholder in the grid cell.
 2. **Javascript Logic**: Deleted the `KeyR` keyboard shortcut assignment from `app.js` to completely disable keyboard triggers. The variables and functions remain inactive as the DOM hooks have been cleanly commented out.
 
-## Proposed Plan: Tone, DMX, and RMX Knob Range Expansion and Resolution (Session 2026-05-30)
+## Completed Work: Tone, DMX, and RMX Knob Range Expansion and Resolution (Session 2026-05-30)
 
-### Problem Statement
-- **Tone Range**: The user wants the Tone knob to have 30% farther endpoints, allowing for more extreme Dark and Bright settings.
-- **DMX & RMX Resolution**: The Delay Mix (DMX) and Reverb Mix (RMX) knobs, as well as the other macro knobs on the track mixer, are currently too sensitive when dragging (1.0% per pixel), making it difficult to dial in precise, intermediate values ("more inbetween"). The delay and reverb mix values are also constrained to integer percentages (step: 1) instead of allowing decimal precision.
-
-### Proposed Changes
+We completed the range expansion and resolution refinement for Tone, Delay Mix, and Reverb Mix knobs:
 1. **Extend Tone Endpoint Gains**:
-   - In both `applyMacroKnob()` and `applyFxMacro()` inside `app.js`, multiply the EQ gains by a further 1.3 (increasing endpoints by 30%).
-   - Update individual EQ bands' maximum gain range from `[-12.0, 12.0]` to `[-16.0, 16.0]` in the `.eq-slider` `initKnob` calls to prevent clipping of the new maximum boost of 13.52 dB.
+   - Multiplied the EQ gains by 1.3 in both `applyMacroKnob()` and `applyFxMacro()` inside `app.js` to increase endpoints by 30% without affecting the center.
+   - Updated individual EQ bands' maximum gain range from `[-12.0, 12.0]` to `[-16.0, 16.0]` in `.eq-slider` `initKnob` calls to prevent clipping of the new maximum boost of 13.52 dB.
 2. **Improve Mixer Knob Sensitivity & Resolution**:
-   - In the mouse dragging event listener for mixer macro knobs in `app.js`, scale the dragging delta by `0.4` (instead of `1.0`) to make adjustments smoother and more controllable.
-   - Allow decimal precision (rounding to `0.1` instead of `1`) for front-panel macro knobs (`dlyMix`, `revMix`, `tone`, `filter`, `reso`) during drag updates.
-   - Change the step size of the Aelapse Delay Mix (`aeMix`) and Reverb Mix (`aeReverbMix`) custom knobs inside the FX drawer from `1` to `0.1`.
-   - Update tooltip titles and readouts to display one decimal place (using `.toFixed(1)`) for Delay and Reverb mix parameters, showing e.g., `Delay: 12.5%` instead of `Delay: 13%`.
+   - Scaled the dragging delta by `0.4` in the mouse dragging event listener for mixer macro knobs in `app.js` to make adjustments smoother.
+   - Allowed decimal precision (rounding to `0.1` instead of `1`) for front-panel macro knobs (`dlyMix`, `revMix`, `tone`, `filter`, `reso`) during drag updates.
+   - Changed the step size of the Aelapse Delay Mix (`aeMix`) and Reverb Mix (`aeReverbMix`) custom knobs inside the FX drawer from `1` to `0.1`.
+   - Updated tooltip titles and readouts to display one decimal place (using `.toFixed(1)`) for Delay and Reverb mix parameters, showing e.g., `Delay: 12.5%` instead of `Delay: 13%`.
 
-### Verification Plan
-1. **Tone Audition**: Turn the Tone knob to full Dark and Bright, verifying that the sound is more drastically altered and the individual EQ sliders in the FX drawer reach the new extremes (~13.5dB) without being clamped.
-2. **Resolution Check**: Drag the DMX and RMX knobs slowly and verify that they move in increments of 0.1% and are much less sensitive/jumpy.
-3. **Save/Load & Mixdown**: Save a project with decimal mix values, reload it, and verify that the decimal precision is preserved. Render a WAV mixdown and verify no errors are generated.
+## Completed Work: Knowledge Base Migration & AGENTS.md Rules Update (Session 2026-06-21)
+
+We synchronized the repository documentation and local rules with current repository standards:
+1. **Knowledge Base Directory Restructuring**:
+   - Initialized the new standard `.wiki/` directory at the project root.
+   - Copied legacy documentation (`Home.md`, `User-Guide.md`) into `.wiki/raw/` as raw immutable source documents.
+   - Created standard index files (`_index.md`) containing catalogs, category mappings, and recent changes for all subdirectories under `.wiki/`.
+2. **Expanded Living Wiki Compilation**:
+   - Authored clean, detailed compiled wiki articles inside `.wiki/wiki/`:
+     - `concepts/architecture.md`: Main system layout, client-server boundaries, and series/parallel channel strip signals.
+     - `concepts/generation_pipeline.md`: BF16 precision, metadata prompt formatting, drum fill list conditioning, and VAE decoding callbacks.
+     - `concepts/dsp_effects.md`: Web Audio nodes, Luftikus EQ gains, Scream distortion shapers, wow/flutter delay modulation, and brickwall master limiter calibration.
+     - `topics/user_guide.md`: Launcher parameters, quick start prompts, and channel controls.
+     - `topics/remixing.md`: Inpainting ranges, call-and-response mode, timing inversion, and 2x/4x outpainting column grid spans.
+     - `references/api_reference.md`: Request-response structures for generate, status, regenerate, convert, and delete endpoints.
+     - `references/midi_modulation.md`: Lazy Web MIDI requests, CC maps, and modulation matrix routing.
+     - `theses/future_opportunities.md`: Exploration of server-side mixdown using pure JS Web Audio API inside Node.js.
+   - Applied Obsidian-style wikilinks with relative markdown paths (Dual-Linking) and set frontmatter metadata (`confidence` and `volatility`) on all compiled articles.
+   - Logged the operations in `.wiki/log.md` and deleted the legacy `loopmaster/wiki/` folder.
+3. **Rules Synchronization (`AGENTS.md` & `README.md`)**:
+   - Rewrote `AGENTS.md` to remove duplicated rules and consolidated all guidelines into five clear sections, pointing the Knowledge Wiki link to the new root `.wiki/_index.md`.
+   - Updated legacy folder paths and documentation URLs inside root `README.md`.
