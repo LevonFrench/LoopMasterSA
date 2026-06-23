@@ -163,7 +163,7 @@ def _execute_model_task(job_id, prompt, bpm, duration, loop, steps, cfg_scale, t
 
         start_gen = time.time()
 
-        gen_duration = duration + 2.0 if loop else duration
+        start_gen = time.time()
 
         seed_audio = None
         if init_audio_path:
@@ -249,25 +249,23 @@ def _execute_model_task(job_id, prompt, bpm, duration, loop, steps, cfg_scale, t
         exact_samples = int(duration * sample_rate)
         
         if loop:
-            padded_samples = int((duration + 2.0) * sample_rate)
-            if audio.shape[-1] < padded_samples:
-                padding = torch.zeros((*audio.shape[:-1], padded_samples - audio.shape[-1]), device=audio.device, dtype=audio.dtype)
+            # The model generated exact_samples + padding samples.
+            # To create a seamless loop, we take the tail (everything after exact_samples)
+            # and add it back to the beginning of the audio.
+            if audio.shape[-1] > exact_samples:
+                tail = audio[..., exact_samples:]
+                
+                # We can only add as much tail as there is head
+                mix_len = min(tail.shape[-1], exact_samples)
+                audio[..., :mix_len] += tail[..., :mix_len]
+            
+            # Truncate strictly to exact_samples to maintain perfect tempo alignment
+            audio = audio[..., :exact_samples]
+            
+            # We still need to ensure it's exactly exact_samples in case the model generated too few
+            if audio.shape[-1] < exact_samples:
+                padding = torch.zeros((*audio.shape[:-1], exact_samples - audio.shape[-1]), device=audio.device, dtype=audio.dtype)
                 audio = torch.cat([audio, padding], dim=-1)
-            elif audio.shape[-1] > padded_samples:
-                audio = audio[..., :padded_samples]
-                
-            eighth_note_duration = 60.0 / bpm / 2.0
-            fade_samples = int(eighth_note_duration * sample_rate)
-            max_fade_samples = padded_samples - exact_samples
-            if fade_samples > max_fade_samples:
-                fade_samples = max_fade_samples
-                
-            if fade_samples > 0:
-                w = torch.linspace(1.0, 0.0, steps=fade_samples, device=audio.device, dtype=audio.dtype).unsqueeze(0).unsqueeze(0)
-                audio[:, :, exact_samples:exact_samples + fade_samples] *= w
-                
-            if exact_samples + fade_samples < padded_samples:
-                audio[:, :, exact_samples + fade_samples:] = 0.0
         else:
             if audio.shape[-1] > exact_samples:
                 audio = audio[..., :exact_samples]

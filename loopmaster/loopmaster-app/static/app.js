@@ -614,6 +614,19 @@
 
     function pushUndo(action, data) {
         undoStack.push({ action, data });
+        if (undoStack.length > 3) {
+            const old = undoStack.shift();
+            if (old.action === 'deleteTrack') {
+                const t = old.data.track;
+                try {
+                    if (t.fxInputNode) t.fxInputNode.disconnect();
+                    if (t.tunaChorusNode) t.tunaChorusNode.disconnect();
+                    if (t.tunaPhaserNode) t.tunaPhaserNode.disconnect();
+                    if (t.tunaBitcrusherNode) t.tunaBitcrusherNode.disconnect();
+                    if (t.gainNode) t.gainNode.disconnect();
+                } catch(e) {}
+            }
+        }
         if (btnUndo) btnUndo.style.display = 'inline-flex';
     }
 
@@ -638,8 +651,9 @@
             if (btnRenderMix) btnRenderMix.disabled = false;
             if (btnSaveProject) btnSaveProject.disabled = false;
             if (btnRecord) btnRecord.disabled = false;
-            // Restore gain level
+            // Restore gain level and connection
             t.gainNode.gain.value = t.level;
+            t.gainNode.connect(masterInputNode);
             updateModMatrixTracks();
             if (arrangerModeActive) renderArrangerTimeline();
             updateMixerState();
@@ -662,8 +676,9 @@
         // Stop playback of this track immediately
         stopTrackSource(track);
 
-        // Mute but DON'T disconnect nodes (allows undo)
+        // Mute and disconnect from master to stop background processing (allows undo)
         track.gainNode.gain.value = 0;
+        try { track.gainNode.disconnect(); } catch(e) {}
 
         // Remove from DOM (but keep the element for undo)
         track.wrapper.remove();
@@ -4064,15 +4079,15 @@
         const aeMix = fxDrawerEl.querySelector('.aelapse-mix');
         const aeMixVal = fxDrawerEl.querySelector('.aelapse-mix-val');
         initKnob(aeMix, (val) => {
-            const pct = val / 100;
+            const pct = (val / 100) * 0.7;
             const mix = pct;
             const feedback = pct * 0.95;
             track.aelapseDelayMix = mix;
             track.aelapseFeedback = feedback;
             track.aelapseDelayGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
             track.aelapseFeedbackNode.gain.setTargetAtTime(feedback, ctx.currentTime, 0.01);
-            const displayMix = mix * 100;
-            const displayFb = feedback * 100;
+            const displayMix = val;
+            const displayFb = val * 0.95;
             aeMixVal.textContent = `${displayMix.toFixed(1)}% (Fb: ${displayFb.toFixed(1)}%)`;
             updateAelapseBypass(track);
         }, {
@@ -4086,11 +4101,11 @@
         const aeReverbMix = fxDrawerEl.querySelector('.aelapse-reverb-mix');
         const aeReverbVal = fxDrawerEl.querySelector('.aelapse-reverb-val');
         initKnob(aeReverbMix, (val) => {
-            const pct = val / 100;
+            const pct = (val / 100) * 0.7;
             const mix = pct;
             track.aelapseReverbMix = mix;
             track.aelapseReverbGainNode.gain.setTargetAtTime(mix, ctx.currentTime, 0.01);
-            const displayMix = mix * 100;
+            const displayMix = val;
             aeReverbVal.textContent = `${displayMix.toFixed(1)}%`;
             updateAelapseBypass(track);
         }, {
