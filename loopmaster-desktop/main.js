@@ -43,22 +43,29 @@ app.on('will-quit', () => {
 });
 
 // IPC listener from launcher to start backend
-ipcMain.on('start-backend', (event, modelId) => {
-    // modelId maps to [1-4] from launcher.html
-    let modelName = 'medium';
-    let extraArgs = ['--no-half'];
+ipcMain.on('start-backend', (event, engine, modelName) => {
+    let extraArgs = [];
 
-    if (modelId === '2') { modelName = 'small-music'; extraArgs = []; }
-    if (modelId === '3') { modelName = 'small-sfx'; extraArgs = []; }
-    if (modelId === '4') { modelName = 'medium-bf16'; extraArgs = []; }
+    // SA3 specific args
+    if (engine === 'sa3') {
+        if (modelName === 'medium') { extraArgs = ['--no-half']; }
+    }
 
-    console.log(`Starting backend with model: ${modelName}`);
+    console.log(`Starting backend with engine: ${engine}, model: ${modelName}`);
 
     // Show loading screen while we wait for Python
     mainWindow.loadFile('loading.html');
 
     const pythonExecutable = path.join(__dirname, '..', 'stable-audio-3', '.venv', 'Scripts', 'python.exe');
-    const scriptPath = path.join(__dirname, '..', 'loopmaster', 'loopmaster-app', 'app_server.py');
+    
+    let scriptName = 'app_server.py';
+    if (engine === 'musicgen') {
+        scriptName = 'app_server_musicgen.py';
+    } else if (engine === 'audioldm') {
+        scriptName = 'app_server_audioldm.py';
+    }
+    
+    const scriptPath = path.join(__dirname, '..', 'loopmaster', 'loopmaster-app', scriptName);
 
     const args = ['-u', scriptPath, '--model', modelName, ...extraArgs];
 

@@ -201,7 +201,7 @@ def acidize_wav_file(file_path, bpm, duration, loop=True, prompt=""):
     except Exception as e:
         print(f"[WAV Metadata] Error writing metadata: {e}")
 
-def enhance_prompt(prompt, bpm, duration, loop=True):
+def enhance_prompt(prompt, bpm, duration, loop=True, engine="sa3"):
     """
     Enhances a prompt based on official Stability AI Stable Audio 3 guidelines:
     1. Prepend TrackType prefix based on keyword matching.
@@ -209,6 +209,10 @@ def enhance_prompt(prompt, bpm, duration, loop=True):
     3. Append high-quality acoustic/production tags.
     4. Append standard BPM and Length tags.
     """
+    if engine != "sa3":
+        if loop and "loop" not in prompt.lower():
+            return prompt + " loop"
+        return prompt
     # Remove any existing informal BPM descriptions like "120 bpm", "120bpm", "at 120 bpm" to avoid conflicting with structured metadata
     prompt = re.sub(r'\b(?:at\s+)?\d+\s*bpm\b', '', prompt, flags=re.IGNORECASE)
     # Clean up trailing "at" if it got orphaned (e.g. "slow loop at")

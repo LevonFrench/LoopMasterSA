@@ -29,7 +29,7 @@
             font-size: 16px;
             cursor: pointer;
             transition: all 0.2s ease;
-            text-align: left;
+            text-align: center;
         }
         .btn:hover {
             background-color: #444444;
@@ -44,29 +44,90 @@
             font-size: 13px;
             color: #aaaaaa;
         }
+        .dropdown {
+            width: 100%;
+            padding: 12px;
+            background-color: #2a2a2a;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 6px;
+            font-size: 15px;
+            outline: none;
+        }
+        .dropdown:focus {
+            border-color: #bb86fc;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>LoopMaster Launcher</h1>
-        <p style="text-align:center; color:#ccc; margin-bottom: 30px;">Select a PyTorch inference model to boot.</p>
+        <p style="text-align:center; color:#ccc; margin-bottom: 30px;">Select an Audio Engine and Model to boot.</p>
         
-        <button class="btn" onclick="window.electronAPI.startBackend('1')">
-            <span class="btn-title">Medium Model (Default)</span>
-            <span class="btn-desc">Official - FP32 Precision, High VRAM, GPU</span>
-        </button>
-        <button class="btn" onclick="window.electronAPI.startBackend('2')">
-            <span class="btn-title">Small Music Model</span>
-            <span class="btn-desc">Lightweight, CPU/GPU compatible</span>
-        </button>
-        <button class="btn" onclick="window.electronAPI.startBackend('3')">
-            <span class="btn-title">Small SFX Model</span>
-            <span class="btn-desc">Optimized for Sound Effects</span>
-        </button>
-        <button class="btn" onclick="window.electronAPI.startBackend('4')">
-            <span class="btn-title">Medium Model (BF16)</span>
-            <span class="btn-desc">Optimized - BF16 Precision, Low VRAM, GPU</span>
+        <div style="margin-bottom: 20px;">
+            <label style="color: #ccc; display: block; margin-bottom: 8px;">Audio Engine</label>
+            <select id="engineSelect" class="dropdown" onchange="updateModels()">
+                <option value="sa3">Stable Audio 3</option>
+                <option value="musicgen">MusicGen (Meta)</option>
+                <option value="audioldm">AudioLDM 2</option>
+            </select>
+        </div>
+        <div style="margin-bottom: 30px;">
+            <label style="color: #ccc; display: block; margin-bottom: 8px;">Inference Model</label>
+            <select id="modelSelect" class="dropdown">
+                <!-- Populated by JS -->
+            </select>
+        </div>
+        
+        <button class="btn" onclick="launch()">
+            <span class="btn-title">Boot Server</span>
+            <span class="btn-desc">Launch the selected engine</span>
         </button>
     </div>
+
+    <script>
+        const models = {
+            'sa3': [
+                { id: 'medium', label: 'Medium Model (Official - FP32)' },
+                { id: 'medium-bf16', label: 'Medium Model (Optimized - BF16)' },
+                { id: 'small-music', label: 'Small Music Model' },
+                { id: 'small-sfx', label: 'Small SFX Model' },
+                { id: 'stable-audio-open-1.0', label: 'Stable Audio Open 1.0' }
+            ],
+            'musicgen': [
+                { id: 'melody', label: 'MusicGen Melody (Default)' },
+                { id: 'small', label: 'MusicGen Small' },
+                { id: 'medium', label: 'MusicGen Medium' },
+                { id: 'large', label: 'MusicGen Large' }
+            ],
+            'audioldm': [
+                { id: 'audioldm2', label: 'AudioLDM 2 (Base)' },
+                { id: 'audioldm2-large', label: 'AudioLDM 2 Large' },
+                { id: 'audioldm2-music', label: 'AudioLDM 2 Music' }
+            ]
+        };
+
+        function updateModels() {
+            const engine = document.getElementById('engineSelect').value;
+            const modelSelect = document.getElementById('modelSelect');
+            modelSelect.innerHTML = '';
+            
+            models[engine].forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = m.label;
+                modelSelect.appendChild(opt);
+            });
+        }
+
+        function launch() {
+            const engine = document.getElementById('engineSelect').value;
+            const model = document.getElementById('modelSelect').value;
+            window.electronAPI.startBackend(engine, model);
+        }
+
+        // Initialize
+        updateModels();
+    </script>
 </body>
 </html>

@@ -7,6 +7,9 @@ import os
 import sys
 import re
 
+os.environ["HF_HOME"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "huggingface"))
+os.environ["TORCH_HOME"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "torch"))
+
 # Add stable-audio-3 directory to system path to import stable_audio_3 module
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sa3_dir = None

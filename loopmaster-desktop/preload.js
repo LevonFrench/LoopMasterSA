@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    startBackend: (modelId) => ipcRenderer.send('start-backend', modelId)
+    startBackend: (engine, model) => ipcRenderer.send('start-backend', engine, model)
 });
