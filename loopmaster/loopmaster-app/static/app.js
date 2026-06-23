@@ -225,6 +225,138 @@
         return curve;
     }
 
+    function makeBitcrusherCurve(bits) {
+        const steps = Math.pow(2, bits);
+        const curve = new Float32Array(4096);
+        for (let i = 0; i < 4096; i++) {
+            let x = (i * 2) / 4096 - 1;
+            curve[i] = Math.round(x * steps) / steps;
+        }
+        return curve;
+    }
+
+    function createNativeChorus(ctx) {
+        const input = ctx.createGain();
+        const output = ctx.createGain();
+        const delay = ctx.createDelay();
+        delay.delayTime.value = 0.0045;
+        
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 1.5;
+        
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.value = 0.002;
+        
+        const feedback = ctx.createGain();
+        feedback.gain.value = 0.2;
+        
+        input.connect(delay);
+        delay.connect(output); // Wet only
+        delay.connect(feedback);
+        feedback.connect(delay);
+        
+        lfo.connect(lfoGain);
+        lfoGain.connect(delay.delayTime);
+        lfo.start();
+        
+        return {
+            input, output, lfo, lfoGain, delay,
+            get rate() { return lfo.frequency.value; },
+            set rate(r) { lfo.frequency.setTargetAtTime(r, ctx.currentTime, 0.01); },
+            get depth() { return lfoGain.gain.value / 0.003; },
+            set depth(d) { lfoGain.gain.setTargetAtTime(d * 0.003, ctx.currentTime, 0.01); },
+            get feedback() { return feedback.gain.value; },
+            set feedback(f) { feedback.gain.setTargetAtTime(f, ctx.currentTime, 0.01); },
+            disconnect: () => {
+                input.disconnect(); output.disconnect(); delay.disconnect(); feedback.disconnect();
+            }
+        };
+    }
+
+    function createNativePhaser(ctx) {
+        const input = ctx.createGain();
+        const output = ctx.createGain();
+        
+        const filters = [];
+        const stages = 4;
+        for (let i = 0; i < stages; i++) {
+            const f = ctx.createBiquadFilter();
+            f.type = 'allpass';
+            f.frequency.value = 1000;
+            f.Q.value = 1;
+            filters.push(f);
+            if (i > 0) {
+                filters[i-1].connect(f);
+            }
+        }
+        
+        input.connect(filters[0]);
+        filters[stages-1].connect(output); // Wet only
+        
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 1.2;
+        
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.value = 500;
+        
+        lfo.connect(lfoGain);
+        for (let i = 0; i < stages; i++) {
+            lfoGain.connect(filters[i].frequency);
+        }
+        lfo.start();
+        
+        const feedback = ctx.createGain();
+        feedback.gain.value = 0.2;
+        filters[stages-1].connect(feedback);
+        feedback.connect(filters[0]);
+        
+        return {
+            input, output, lfo, lfoGain,
+            get rate() { return lfo.frequency.value; },
+            set rate(r) { lfo.frequency.setTargetAtTime(r, ctx.currentTime, 0.01); },
+            get depth() { return lfoGain.gain.value / 800; },
+            set depth(d) { lfoGain.gain.setTargetAtTime(d * 800, ctx.currentTime, 0.01); },
+            get feedback() { return feedback.gain.value; },
+            set feedback(f) { feedback.gain.setTargetAtTime(f, ctx.currentTime, 0.01); },
+            disconnect: () => {
+                input.disconnect(); output.disconnect(); feedback.disconnect();
+                for (let i=0; i<stages; i++) filters[i].disconnect();
+            }
+        };
+    }
+
+    function createNativeBitcrusher(ctx) {
+        const input = ctx.createGain();
+        const output = ctx.createGain();
+        const shaper = ctx.createWaveShaper();
+        shaper.curve = makeBitcrusherCurve(8);
+        
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 20000;
+        
+        input.connect(shaper);
+        shaper.connect(filter);
+        filter.connect(output);
+        
+        let currentBits = 8;
+        return {
+            input, output, shaper, filter,
+            get bits() { return currentBits; },
+            set bits(b) { 
+                currentBits = Math.max(1, Math.min(16, b));
+                shaper.curve = makeBitcrusherCurve(currentBits); 
+            },
+            get normfreq() { return filter.frequency.value / 20000; },
+            set normfreq(nf) { filter.frequency.setTargetAtTime(Math.max(20, nf * 20000), ctx.currentTime, 0.01); },
+            disconnect: () => {
+                input.disconnect(); output.disconnect(); shaper.disconnect(); filter.disconnect();
+            }
+        };
+    }
+
     function createSpringImpulseResponse(audioCtx, duration, decay) {
         const sampleRate = audioCtx.sampleRate;
         const len = sampleRate * duration;
@@ -2180,16 +2312,11 @@
         screamShaper.connect(screamWetGain);
         screamWetGain.connect(screamSum);
 
-        // 3. Tuna DSP Nodes (Chorus, Phaser, Bitcrusher)
-        const tunaInstance = new Tuna(ctx);
+        // 3. Native DSP Nodes (Chorus, Phaser, Bitcrusher) replacing Tuna.js
+        const tunaChorusNode = createNativeChorus(ctx);
+        tunaChorusNode.setRate(1.5);
+        tunaChorusNode.setDepth(0.7);
 
-        const tunaChorusNode = new tunaInstance.Chorus({
-            rate: 1.5,
-            feedback: 0.2,
-            delay: 0.0045,
-            depth: 0.7,
-            bypass: false // always process internally
-        });
         const tunaChorusDryGain = ctx.createGain();
         tunaChorusDryGain.gain.value = 0.5;
         const tunaChorusWetGain = ctx.createGain();
@@ -2202,12 +2329,10 @@
         tunaChorusNode.output.connect(tunaChorusWetGain);
         tunaChorusWetGain.connect(tunaChorusSum);
 
-        const tunaPhaserNode = new tunaInstance.Phaser({
-            rate: 1.2,
-            feedback: 0.2,
-            depth: 0.6,
-            bypass: false // always process internally
-        });
+        const tunaPhaserNode = createNativePhaser(ctx);
+        tunaPhaserNode.setRate(1.2);
+        tunaPhaserNode.setDepth(0.6);
+
         const tunaPhaserDryGain = ctx.createGain();
         tunaPhaserDryGain.gain.value = 0.5;
         const tunaPhaserWetGain = ctx.createGain();
@@ -2220,11 +2345,10 @@
         tunaPhaserNode.output.connect(tunaPhaserWetGain);
         tunaPhaserWetGain.connect(tunaPhaserSum);
 
-        const tunaBitcrusherNode = new tunaInstance.Bitcrusher({
-            bits: 8,
-            normfreq: 0.1,
-            bypass: false // always process internally
-        });
+        const tunaBitcrusherNode = createNativeBitcrusher(ctx);
+        tunaBitcrusherNode.setBits(8);
+        tunaBitcrusherNode.setNormFreq(0.1);
+
         const tunaBitcrusherDryGain = ctx.createGain();
         tunaBitcrusherDryGain.gain.value = 0.5;
         const tunaBitcrusherWetGain = ctx.createGain();
@@ -7479,8 +7603,13 @@
         if (meterLoopRunning) return;
         meterLoopRunning = true;
         let lastTime = performance.now();
+        let lastFrameTime = performance.now();
         function tick() {
+            meterRafId = requestAnimationFrame(tick);
             const now = performance.now();
+            if (now - lastFrameTime < 33) return; // throttle to ~30fps
+            lastFrameTime = now;
+
             const dT = Math.min(0.1, (now - lastTime) / 1000);
             lastTime = now;
 
@@ -7496,12 +7625,16 @@
             // Update track meters
             tracks.forEach(t => {
                 if (t.analyserNode && t.meterState && t.meterCanvas) {
-                    updateMeterState(t.analyserNode, t.meterState, dT);
+                    if (t.gainNode && t.gainNode.gain.value === 0) {
+                        // Decay meter visually to 0 without pulling FFT
+                        t.meterState.peak -= (60 * dT);
+                        if (t.meterState.peak < -80) t.meterState.peak = -80;
+                    } else {
+                        updateMeterState(t.analyserNode, t.meterState, dT);
+                    }
                     drawMeter(t.meterCanvas, t.meterState);
                 }
             });
-
-            meterRafId = requestAnimationFrame(tick);
         }
         meterRafId = requestAnimationFrame(tick);
     }
@@ -7986,12 +8119,10 @@
                     lastNode = screamSumNode;
                 }
 
-                // 2. Tuna DSP Nodes (Chorus, Phaser, Bitcrusher)
+                // 2. Native DSP Nodes (Chorus, Phaser, Bitcrusher) replacing Tuna.js
                 let offlineTunaChorus = null;
                 let offlineTunaPhaser = null;
                 let offlineTunaBitcrusher = null;
-
-                const tunaInstance = new Tuna(offlineCtx);
 
                 // Chorus
                 const chorusDry = offlineCtx.createGain();
@@ -8007,13 +8138,11 @@
                     chorusWet.gain.value = 0.0;
                 }
 
-                const chorusNode = new tunaInstance.Chorus({
-                    rate: t.tunaChorusRate,
-                    feedback: t.tunaChorusFeedback,
-                    delay: 0.0045,
-                    depth: t.tunaChorusDepth,
-                    bypass: false
-                });
+                const chorusNode = createNativeChorus(offlineCtx);
+                chorusNode.rate = t.tunaChorusRate;
+                chorusNode.feedback = t.tunaChorusFeedback;
+                chorusNode.depth = t.tunaChorusDepth;
+                
                 offlineTunaChorus = chorusNode;
 
                 lastNode.connect(chorusDry);
@@ -8038,12 +8167,11 @@
                     phaserWet.gain.value = 0.0;
                 }
 
-                const phaserNode = new tunaInstance.Phaser({
-                    rate: t.tunaPhaserRate,
-                    feedback: t.tunaPhaserFeedback,
-                    depth: t.tunaPhaserDepth,
-                    bypass: false
-                });
+                const phaserNode = createNativePhaser(offlineCtx);
+                phaserNode.rate = t.tunaPhaserRate;
+                phaserNode.feedback = t.tunaPhaserFeedback;
+                phaserNode.depth = t.tunaPhaserDepth;
+
                 offlineTunaPhaser = phaserNode;
 
                 lastNode.connect(phaserDry);
@@ -8068,11 +8196,10 @@
                     crusherWet.gain.value = 0.0;
                 }
 
-                const crusherNode = new tunaInstance.Bitcrusher({
-                    bits: t.tunaBitcrusherBits,
-                    normfreq: t.tunaBitcrusherNormfreq,
-                    bypass: false
-                });
+                const crusherNode = createNativeBitcrusher(offlineCtx);
+                crusherNode.bits = t.tunaBitcrusherBits;
+                crusherNode.normfreq = t.tunaBitcrusherNormfreq;
+                
                 offlineTunaBitcrusher = crusherNode;
 
                 lastNode.connect(crusherDry);
