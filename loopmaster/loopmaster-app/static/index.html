@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LoopMaster SA3 — Grid Generator</title>
+    <title>LoopMaster Loop Generator (Stable Audio 3)</title>
     <meta name="description" content="Multi-track audio variant generator with synchronized grid playback.">
     <link rel="stylesheet" href="/static/app.css">
 </head>
@@ -15,7 +15,7 @@
             <div class="app-logo">
                 <svg viewBox="0 0 24 24"><path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z"/></svg>
             </div>
-            <h1 class="app-title">LoopMaster SA3 <span>Grid Generator</span></h1>
+            <h1 class="app-title">LoopMaster Loop Generator <span>(Stable Audio 3)</span></h1>
         </header>
 
         <!-- Controls -->
@@ -164,6 +164,20 @@
                 
                 <!-- Master Meter & Limiter Section -->
                 <div class="master-meter-section" id="master-meter-section">
+                    <div class="master-filter-controls">
+                        <select id="master-filter-type" class="master-filter-select" title="Filter Type">
+                            <option value="lowpass">LP</option>
+                            <option value="highpass">HP</option>
+                            <option value="bandpass">BP</option>
+                            <option value="notch">Notch</option>
+                        </select>
+                        <div id="master-cutoff-slider" class="level-knob master-filter-knob" title="Cutoff Frequency">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <div id="master-res-slider" class="level-knob master-filter-knob" title="Resonance">
+                            <div class="knob-indicator"></div>
+                        </div>
+                    </div>
                     <span class="master-meter-label">MASTER</span>
                     <div id="master-volume-slider" class="level-knob" title="Master Volume">
                         <div class="knob-indicator"></div>

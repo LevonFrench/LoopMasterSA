@@ -103,6 +103,7 @@
     let masterGain = null;
     let masterLimiter = null;
     let masterMakeup = null;
+    let masterFilterNode = null;
     let masterVolumeNode = null;
     let masterAnalyser = null;
     let masterMeterState = { rms: -60, peak: -60, peakHold: -60, peakHoldTime: 0 };
@@ -270,6 +271,7 @@
             set feedback(f) { feedback.gain.setTargetAtTime(f, ctx.currentTime, 0.01); },
             disconnect: () => {
                 input.disconnect(); output.disconnect(); delay.disconnect(); feedback.disconnect();
+                lfo.disconnect(); lfoGain.disconnect();
             }
         };
     }
@@ -313,7 +315,7 @@
         feedback.connect(filters[0]);
         
         return {
-            input, output, lfo, lfoGain,
+            input, output, lfo, lfoGain, filters, feedback,
             get rate() { return lfo.frequency.value; },
             set rate(r) { lfo.frequency.setTargetAtTime(r, ctx.currentTime, 0.01); },
             get depth() { return lfoGain.gain.value / 800; },
@@ -323,6 +325,7 @@
             disconnect: () => {
                 input.disconnect(); output.disconnect(); feedback.disconnect();
                 for (let i=0; i<stages; i++) filters[i].disconnect();
+                lfo.disconnect(); lfoGain.disconnect();
             }
         };
     }
@@ -463,16 +466,23 @@
             masterMakeup = audioCtx.createGain();
             masterMakeup.gain.setValueAtTime(1.0, audioCtx.currentTime);
 
+            masterFilterNode = audioCtx.createBiquadFilter();
+            masterFilterNode.type = 'lowpass';
+            // Default to 22000Hz (essentially bypassed)
+            masterFilterNode.frequency.setValueAtTime(22000, audioCtx.currentTime);
+            masterFilterNode.Q.setValueAtTime(0.5, audioCtx.currentTime);
+
             masterVolumeNode = audioCtx.createGain();
             masterVolumeNode.gain.setValueAtTime(params.volumeGain, audioCtx.currentTime);
 
             masterAnalyser = audioCtx.createAnalyser();
             masterAnalyser.fftSize = 1024;
 
-            // Connect master chain: masterGain -> masterLimiter -> masterMakeup -> masterVolumeNode -> masterAnalyser -> destination
+            // Connect master chain: masterGain -> masterLimiter -> masterMakeup -> masterFilterNode -> masterVolumeNode -> masterAnalyser -> destination
             masterGain.connect(masterLimiter);
             masterLimiter.connect(masterMakeup);
-            masterMakeup.connect(masterVolumeNode);
+            masterMakeup.connect(masterFilterNode);
+            masterFilterNode.connect(masterVolumeNode);
             masterVolumeNode.connect(masterAnalyser);
             masterAnalyser.connect(audioCtx.destination);
 
@@ -749,14 +759,7 @@
         if (undoStack.length > 3) {
             const old = undoStack.shift();
             if (old.action === 'deleteTrack') {
-                const t = old.data.track;
-                try {
-                    if (t.fxInputNode) t.fxInputNode.disconnect();
-                    if (t.tunaChorusNode) t.tunaChorusNode.disconnect();
-                    if (t.tunaPhaserNode) t.tunaPhaserNode.disconnect();
-                    if (t.tunaBitcrusherNode) t.tunaBitcrusherNode.disconnect();
-                    if (t.gainNode) t.gainNode.disconnect();
-                } catch(e) {}
+                destroyTrackAudio(old.data.track);
             }
         }
         if (btnUndo) btnUndo.style.display = 'inline-flex';
@@ -1022,10 +1025,18 @@
         const canvas = vizSpectrumCanvas;
         const ctx2d = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        ctx2d.scale(dpr, dpr);
+        const rect = canvas._cachedRect || canvas.getBoundingClientRect();
+        const expectedW = Math.round(rect.width * dpr);
+        const expectedH = Math.round(rect.height * dpr);
+        if (canvas.width !== expectedW || canvas.height !== expectedH) {
+            canvas.width = expectedW;
+            canvas.height = expectedH;
+            ctx2d.scale(dpr, dpr);
+        } else {
+            // Reset transform for clearRect
+            ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        
         const w = rect.width, h = rect.height;
 
         ctx2d.clearRect(0, 0, w, h);
@@ -1071,10 +1082,17 @@
         const canvas = vizOscCanvas;
         const ctx2d = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        ctx2d.scale(dpr, dpr);
+        const rect = canvas._cachedRect || canvas.getBoundingClientRect();
+        
+        const expectedW = Math.round(rect.width * dpr);
+        const expectedH = Math.round(rect.height * dpr);
+        if (canvas.width !== expectedW || canvas.height !== expectedH) {
+            canvas.width = expectedW;
+            canvas.height = expectedH;
+            ctx2d.scale(dpr, dpr);
+        } else {
+            ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
         const w = rect.width, h = rect.height;
 
         ctx2d.clearRect(0, 0, w, h);
@@ -1113,9 +1131,7 @@
         const ctx2d = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
         const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        ctx2d.scale(dpr, dpr);
+        
         const w = rect.width, h = rect.height;
 
         ctx2d.clearRect(0, 0, w, h);
@@ -1672,11 +1688,13 @@
         // Update card playheads
         tracks.forEach(t => {
             t.variants.forEach(v => {
-                const seekBar = v.el.querySelector('.card-seek-bar');
-                if (seekBar) {
+                if (!v.seekBarEl && v.el) {
+                    v.seekBarEl = v.el.querySelector('.card-seek-bar');
+                }
+                if (v.seekBarEl) {
                     const dur = (v.loopMultiplier || 1) * globalDuration;
                     const localProgress = (currentTime % dur) / dur;
-                    seekBar.style.setProperty('--progress', localProgress.toString());
+                    v.seekBarEl.style.setProperty('--progress', localProgress.toString());
                 }
             });
         });
@@ -2028,6 +2046,8 @@
             document.body.style.cursor = 'ns-resize';
         });
 
+        const listenerOpts = options.signal ? { signal: options.signal } : undefined;
+
         document.addEventListener('mousemove', (e) => {
             if (!dragging) return;
             const deltaY = startY - e.clientY;
@@ -2043,14 +2063,14 @@
             updateKnobRotation(value);
             onChange(value);
             knobEl.dispatchEvent(new Event('input'));
-        });
+        }, listenerOpts);
 
         document.addEventListener('mouseup', () => {
             if (dragging) {
                 dragging = false;
                 document.body.style.cursor = '';
             }
-        });
+        }, listenerOpts);
 
         knobEl.addEventListener('dblclick', (e) => {
             e.stopPropagation();
@@ -2069,7 +2089,55 @@
         return knobEl;
     }
 
-    function updateTrackLockState(track) {
+    
+    function destroyTrackAudio(track) {
+        if (!track) return;
+        
+        // Abort all document-level event listeners bound for this track
+        if (track._abort) {
+            track._abort.abort();
+        }
+        
+        // Stop playing variants
+        track.variants.forEach(v => {
+            if (v.sourceNode) {
+                try { v.sourceNode.stop(); } catch (e) {}
+                try { v.sourceNode.disconnect(); } catch (e) {}
+                v.sourceNode = null;
+            }
+            v.buffer = null; // free audio buffer
+        });
+        track.variants = [];
+
+        // Stop all tracked oscillators
+        if (track._oscillators) {
+            track._oscillators.forEach(osc => {
+                if (osc) {
+                    try { osc.stop(); } catch (e) {}
+                }
+            });
+            track._oscillators = [];
+        }
+
+        // Disconnect all tracked nodes
+        if (track._allNodes) {
+            track._allNodes.forEach(node => {
+                if (node && typeof node.disconnect === 'function') {
+                    try { node.disconnect(); } catch (e) {}
+                }
+            });
+            track._allNodes = [];
+        }
+
+        // Clear refs
+        track.gainNode = null;
+        track.panNode = null;
+        track.analyserNode = null;
+        track.fxInputNode = null;
+        track.fxOutputNode = null;
+    }
+
+function updateTrackLockState(track) {
         const isLocked = !!track.locked;
 
         // Disable/enable mixer sliders
@@ -2134,6 +2202,15 @@
         const id = trackNum;
         const macroKnobState = {};
         const fxMacroState = {};
+        
+        const trackAbort = new AbortController();
+        const _allNodes = [];
+        const _oscillators = [];
+
+        function trackInitKnob(el, onChange, options = {}) {
+            options.signal = trackAbort.signal;
+            return initKnob(el, onChange, options);
+        }
 
         // 1. Core Web Audio Nodes
         const gainNode = ctx.createGain();
@@ -2314,8 +2391,8 @@
 
         // 3. Native DSP Nodes (Chorus, Phaser, Bitcrusher) replacing Tuna.js
         const tunaChorusNode = createNativeChorus(ctx);
-        tunaChorusNode.setRate(1.5);
-        tunaChorusNode.setDepth(0.7);
+        tunaChorusNode.rate = 1.5;
+        tunaChorusNode.depth = 0.7;
 
         const tunaChorusDryGain = ctx.createGain();
         tunaChorusDryGain.gain.value = 0.5;
@@ -2330,8 +2407,8 @@
         tunaChorusWetGain.connect(tunaChorusSum);
 
         const tunaPhaserNode = createNativePhaser(ctx);
-        tunaPhaserNode.setRate(1.2);
-        tunaPhaserNode.setDepth(0.6);
+        tunaPhaserNode.rate = 1.2;
+        tunaPhaserNode.depth = 0.6;
 
         const tunaPhaserDryGain = ctx.createGain();
         tunaPhaserDryGain.gain.value = 0.5;
@@ -2346,8 +2423,8 @@
         tunaPhaserWetGain.connect(tunaPhaserSum);
 
         const tunaBitcrusherNode = createNativeBitcrusher(ctx);
-        tunaBitcrusherNode.setBits(8);
-        tunaBitcrusherNode.setNormFreq(0.1);
+        tunaBitcrusherNode.bits = 8;
+        tunaBitcrusherNode.normfreq = 0.1;
 
         const tunaBitcrusherDryGain = ctx.createGain();
         tunaBitcrusherDryGain.gain.value = 0.5;
@@ -2488,10 +2565,38 @@
         const initialDelayTime = 45.0 / currentBpm;
         aelapseDelay.delayTime.value = initialDelayTime;
 
+        _allNodes.push(
+            gainNode, panningInput, splitter, leftGain, rightGain, merger, trackCompressor, analyserNode,
+            filtrHpFilter, filtrLpFilter, filtrDriveShaper, filtrDryGain, filtrWetGain, filtrSum, filtrInputNode,
+            eqInput, eqOutput, eqDry, eqWet, ...eqFilters,
+            screamFilter, screamShaper, screamDryGain, screamWetGain, screamSum,
+            tunaChorusNode.input, tunaChorusNode.output, tunaChorusNode.delay, tunaChorusNode.feedback, tunaChorusNode.lfoGain,
+            tunaChorusDryGain, tunaChorusWetGain, tunaChorusSum,
+            tunaPhaserNode.input, tunaPhaserNode.output, tunaPhaserNode.feedback, tunaPhaserNode.lfoGain, ...tunaPhaserNode.filters,
+            tunaPhaserDryGain, tunaPhaserWetGain, tunaPhaserSum,
+            tunaBitcrusherNode.input, tunaBitcrusherNode.output, tunaBitcrusherNode.shaper, tunaBitcrusherNode.filter,
+            tunaBitcrusherDryGain, tunaBitcrusherWetGain, tunaBitcrusherSum,
+            aelapseDryGain, aelapseDelay, aelapseFeedbackNode, aelapseDelayGain, aelapseLFOGain,
+            reverbPreDelay, aelapseReverb, reverbDampFilter, aelapseReverbGain, sendSumGain,
+            tremoloGainNode, tremoloLfoGainNode,
+            gateInputNode, gateOutputNode, gateDryGainNode, gateWetGainNode, gateGatedGainNode, gateBiasNode, gateSumNode, gateShaperNode
+        );
+
+        _oscillators.push(
+            tunaChorusNode.lfo, tunaPhaserNode.lfo, aelapseLFO, tremoloLfoNode, gateLfoNode
+        );
+        if (gateDcSource) {
+            _allNodes.push(gateDcSource);
+            _oscillators.push(gateDcSource);
+        }
+
         // 5. Track State
         const track = {
             id,
             prompt,
+            _allNodes,
+            _oscillators,
+            _abort: trackAbort,
             el: null,
             wrapper: null,
             gainNode,
@@ -3742,6 +3847,7 @@
 
                     const { job_id } = await res.json();
                     const result = await pollJob(job_id);
+                    if (!tracks.includes(track)) return;
                     if (result.status === 'error') throw new Error(result.error || 'Failed');
 
                     for (let idx of unlockedIndices) {
@@ -3819,14 +3925,14 @@
             const delta = panStartY - e.clientY; // up = right
             const newVal = Math.max(-100, Math.min(100, panStartVal + delta));
             updatePanKnob(newVal);
-        });
+        }, { signal: trackAbort.signal });
 
         document.addEventListener('mouseup', () => {
             if (panDragging) {
                 panDragging = false;
                 document.body.style.cursor = '';
             }
-        });
+        }, { signal: trackAbort.signal });
 
         panKnob.addEventListener('dblclick', (e) => {
             e.stopPropagation();
@@ -3971,7 +4077,7 @@
                 newVal = Math.max(min, Math.min(max, newVal));
                 st.value = newVal;
                 applyMacroKnob(param, newVal);
-            });
+            }, { signal: trackAbort.signal });
 
             document.addEventListener('mouseup', () => {
                 const st = macroKnobState[param];
@@ -3979,7 +4085,7 @@
                     st.dragging = false;
                     document.body.style.cursor = '';
                 }
-            });
+            }, { signal: trackAbort.signal });
 
             knobEl.addEventListener('dblclick', (e) => {
                 e.stopPropagation();
@@ -5769,7 +5875,10 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const buf = await resp.arrayBuffer();
             const ctx = ensureAudioCtx();
-            variant.buffer = await ctx.decodeAudioData(buf);
+            const decoded = await ctx.decodeAudioData(buf);
+            if (track && !tracks.includes(track)) return;
+            if (variant.buffer) variant.buffer = null;
+            variant.buffer = decoded;
 
             // Calculate and store loop multiplier based on creation BPM
             const creationBpm = track ? track.originalParams?.bpm : (parseInt(bpmInput.value) || 120);
@@ -5921,7 +6030,15 @@
 
     function loadProject(projectData) {
         // 1. Clear active state
-        tracks.forEach(t => stopTrackSource(t));
+        tracks.forEach(t => {
+            stopTrackSource(t);
+            destroyTrackAudio(t);
+        });
+        undoStack.forEach(entry => {
+            if (entry.action === 'deleteTrack') {
+                destroyTrackAudio(entry.data.track);
+            }
+        });
         tracksContainer.innerHTML = '';
         tracks = [];
         undoStack = [];
@@ -6333,6 +6450,7 @@
 
                 const { job_id } = await res.json();
                 const result = await pollJob(job_id);
+                if (!tracks.includes(track)) return;
                 if (result.status === 'error') {
                     throw new Error(result.error || 'Failed generating track');
                 }
@@ -7427,14 +7545,28 @@
     }
 
     // --- Resize observer ---
-    const ro = new ResizeObserver(() => {
-        tracks.forEach(t => {
-            t.variants.forEach((v, i) => {
-                drawWaveform(v.el.querySelector('.card-waveform'), v.buffer, i === t.selectedVariant, t.originalParams?.bpm);
+    let _waveformDrawDebounce = null;
+    const ro = new ResizeObserver((entries) => {
+        if (_waveformDrawDebounce) clearTimeout(_waveformDrawDebounce);
+        _waveformDrawDebounce = setTimeout(() => {
+            tracks.forEach(t => {
+                t.variants.forEach((v, i) => {
+                    if (v.el) {
+                        const wf = v.el.querySelector('.card-waveform');
+                        if (wf && v.buffer) drawWaveform(wf, v.buffer, i === t.selectedVariant, t.originalParams?.bpm);
+                    }
+                });
             });
+        }, 100);
+        
+        document.querySelectorAll('.lfo-dot').forEach(d => d._cachedDims = null);
+        entries.forEach(entry => {
+            entry.target._cachedRect = entry.contentRect;
         });
     });
     ro.observe(tracksContainer);
+    if (vizSpectrumCanvas) ro.observe(vizSpectrumCanvas);
+    if (vizOscilloscopeCanvas) ro.observe(vizOscilloscopeCanvas);
 
     // --- Keyboard ---
     document.addEventListener('keydown', (e) => {
@@ -7452,7 +7584,10 @@
     function updateMeterState(analyser, state, dT) {
         if (!analyser) return;
         const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Float32Array(bufferLength);
+        if (!analyser._scratchBuffer || analyser._scratchBuffer.length !== bufferLength) {
+            analyser._scratchBuffer = new Float32Array(bufferLength);
+        }
+        const dataArray = analyser._scratchBuffer;
         analyser.getFloatTimeDomainData(dataArray);
 
         let sumSquares = 0;
@@ -7508,7 +7643,8 @@
 
     function drawMeter(canvas, state) {
         const ctx = canvas.getContext('2d');
-        const rect = canvas.getBoundingClientRect();
+        if (!canvas._roObserved) { ro.observe(canvas); canvas._roObserved = true; }
+        const rect = canvas._cachedRect || canvas.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         const expectedW = Math.round(rect.width * dpr);
         const expectedH = Math.round(rect.height * dpr);
@@ -8020,11 +8156,24 @@
             const offlineVolumeNode = offlineCtx.createGain();
             offlineVolumeNode.gain.value = params.volumeGain;
 
+            let offlineMasterFilter = null;
+            if (typeof masterFilterNode !== 'undefined' && masterFilterNode) {
+                offlineMasterFilter = offlineCtx.createBiquadFilter();
+                offlineMasterFilter.type = masterFilterNode.type;
+                offlineMasterFilter.frequency.value = masterFilterNode.frequency.value;
+                offlineMasterFilter.Q.value = masterFilterNode.Q.value;
+            }
+
             // Connect offline master chain
             offlineMasterGain.connect(offlineLimiter);
             offlineLimiter.connect(offlineMakeup);
             offlineMakeup.connect(offlineVolumeNode);
-            offlineVolumeNode.connect(offlineCtx.destination);
+            if (offlineMasterFilter) {
+                offlineVolumeNode.connect(offlineMasterFilter);
+                offlineMasterFilter.connect(offlineCtx.destination);
+            } else {
+                offlineVolumeNode.connect(offlineCtx.destination);
+            }
 
             // Schedule fade-out over the tail section on the master volume stage
             offlineVolumeNode.gain.setValueAtTime(params.volumeGain, contentDuration);
@@ -8781,7 +8930,11 @@
 
             if (midiLearnActive && midiLearningControl) {
                 midiMappings[midiLearningControl] = { channel, cc };
-                localStorage.setItem('loopmaster_midi_mappings', JSON.stringify(midiMappings));
+                try {
+                    localStorage.setItem('loopmaster_midi_mappings', JSON.stringify(midiMappings));
+                } catch (e) {
+                    console.warn('Failed to save MIDI mappings to localStorage (quota exceeded?):', e);
+                }
                 console.log(`MIDI: Mapped CC ${cc} (Chan ${channel}) to ${midiLearningControl}`);
 
                 const el = findElementByControlId(midiLearningControl);
@@ -9494,26 +9647,30 @@
 
         dot.style.display = 'block';
 
-        const sliderWidth = slider.offsetWidth;
-        const sliderHeight = slider.offsetHeight;
-        const sliderLeft = slider.offsetLeft;
-        const sliderTop = slider.offsetTop;
+        if (!dot._cachedDims) {
+            dot._cachedDims = {
+                sliderWidth: slider.offsetWidth,
+                sliderHeight: slider.offsetHeight,
+                sliderLeft: slider.offsetLeft,
+                sliderTop: slider.offsetTop,
+                isKnob: slider.classList.contains('fx-knob') ||
+                    slider.classList.contains('fx-mini-knob') ||
+                    slider.classList.contains('pan-knob') ||
+                    slider.classList.contains('macro-knob') ||
+                    slider.classList.contains('fx-macro-knob') ||
+                    slider.classList.contains('level-knob')
+            };
+        }
 
-        const isKnob = slider.classList.contains('fx-knob') ||
-            slider.classList.contains('fx-mini-knob') ||
-            slider.classList.contains('pan-knob') ||
-            slider.classList.contains('macro-knob') ||
-            slider.classList.contains('fx-macro-knob') ||
-            slider.classList.contains('level-knob');
-
+        const dims = dot._cachedDims;
         let dotLeft, dotTop;
-        if (isKnob) {
-            dotLeft = sliderLeft + sliderWidth - 4;
-            dotTop = sliderTop - 2;
+        if (dims.isKnob) {
+            dotLeft = dims.sliderLeft + dims.sliderWidth - 4;
+            dotTop = dims.sliderTop - 2;
         } else {
             const pct = Math.max(0, Math.min(1, normalizedVal));
-            dotLeft = sliderLeft + 6 + pct * (sliderWidth - 12);
-            dotTop = sliderTop + sliderHeight / 2;
+            dotLeft = dims.sliderLeft + 6 + pct * (dims.sliderWidth - 12);
+            dotTop = dims.sliderTop + dims.sliderHeight / 2;
         }
 
         dot.style.left = `${dotLeft}px`;
@@ -9624,6 +9781,51 @@
             value: 91
         });
         masterVolSlider.value = 91;
+    }
+
+    // Initialize Master Filter Controls
+    const masterFilterType = document.getElementById('master-filter-type');
+    const masterCutoffSlider = document.getElementById('master-cutoff-slider');
+    const masterResSlider = document.getElementById('master-res-slider');
+
+    if (masterFilterType) {
+        masterFilterType.addEventListener('change', (e) => {
+            if (audioCtx && masterFilterNode) {
+                masterFilterNode.type = e.target.value;
+            }
+        });
+    }
+
+    if (masterCutoffSlider) {
+        initKnob(masterCutoffSlider, (val) => {
+            if (audioCtx && masterFilterNode) {
+                // Map 0-100 to 20Hz-22000Hz logarithmically
+                const minFreq = 20;
+                const maxFreq = 22000;
+                const logMin = Math.log(minFreq);
+                const logMax = Math.log(maxFreq);
+                const scale = (logMax - logMin) / 100;
+                const freq = Math.exp(logMin + scale * val);
+                masterFilterNode.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.01);
+            }
+        }, { min: 0, max: 100, step: 1, defaultVal: 100, value: 100 });
+        masterCutoffSlider.value = 100;
+    }
+
+    if (masterResSlider) {
+        initKnob(masterResSlider, (val) => {
+            if (audioCtx && masterFilterNode) {
+                // Map 0-100 to Q 0.1 - 20 logarithmically
+                const minQ = 0.1;
+                const maxQ = 20;
+                const logMin = Math.log(minQ);
+                const logMax = Math.log(maxQ);
+                const scale = (logMax - logMin) / 100;
+                const qVal = Math.exp(logMin + scale * val);
+                masterFilterNode.Q.setTargetAtTime(qVal, audioCtx.currentTime, 0.01);
+            }
+        }, { min: 0, max: 100, step: 1, defaultVal: 30, value: 30 });
+        masterResSlider.value = 30; // 30 maps to roughly Q=0.5
     }
 
     // --- Initialize MIDI and Modulators ---

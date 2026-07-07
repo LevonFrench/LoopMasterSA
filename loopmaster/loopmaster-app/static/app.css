@@ -1083,17 +1083,25 @@ body::before {
 
 @keyframes lock-breath {
     0%, 100% {
-        box-shadow: 0 0 4px rgba(245, 158, 11, 0.2);
-        border-color: rgba(245, 158, 11, 0.4);
+        opacity: 0.2;
     }
     50% {
-        box-shadow: 0 0 12px rgba(245, 158, 11, 0.45);
-        border-color: rgba(245, 158, 11, 0.75);
+        opacity: 0.6;
     }
 }
 
 .audio-card.card-is-locked {
     background: rgba(245, 158, 11, 0.03);
+    position: relative;
+}
+.audio-card.card-is-locked::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    border: 1px solid rgb(245, 158, 11);
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.45);
+    pointer-events: none;
     animation: lock-breath 3s ease-in-out infinite;
 }
 
@@ -1404,6 +1412,32 @@ body.split-mode .card-split-line {
     letter-spacing: 0.08em;
     font-family: var(--font-sans);
 }
+
+.master-filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 12px;
+    border-right: 1px solid var(--border-subtle);
+}
+
+.master-filter-select {
+    background: #1e1e28;
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 3px;
+    font-size: 0.7rem;
+    padding: 2px 4px;
+    outline: none;
+    cursor: pointer;
+}
+
+.master-filter-knob {
+    /* Slightly smaller or standard size if needed, but level-knob default might be fine */
+    width: 20px;
+    height: 20px;
+}
+
 
 .master-meter-container {
     background: #0e0e14;
@@ -2381,8 +2415,16 @@ body.split-mode .card-split-line {
     box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
 }
 @keyframes pulse-glow {
-    0% { box-shadow: 0 0 4px rgba(59, 130, 246, 0.15); }
-    100% { box-shadow: 0 0 12px rgba(59, 130, 246, 0.45); }
+    0% { opacity: 0.3; transform: scale(1); }
+    100% { opacity: 1; transform: scale(1.05); }
+}
+/* For pulse-glow usage we need relative position and pseudo-element */
+.btn-random-prompt-wrapper { position: relative; }
+#btn-random-prompt { position: relative; z-index: 1; box-shadow: none !important; }
+#btn-random-prompt:hover::after {
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.45); pointer-events: none;
+    animation: pulse-glow 2s infinite alternate; z-index: -1;
 }
 
 .midi-mappable {
