@@ -455,6 +455,8 @@ class DiffusionTransformer(nn.Module):
         elif self.diffusion_objective in ["rectified_flow", "rf_denoiser"]:
             sigma = t
 
+        sigma_val = float(sigma.max().item())
+
         # LoRA interval
         if has_lora(self):
             if lora_configs is not None:
@@ -463,20 +465,20 @@ class DiffusionTransformer(nn.Module):
                     idx = lora_config["lora_index"]
                     interval = lora_config.get("interval", (0, 1))
                     layer_filter = lora_config.get("layer_filter", "")
-                    if interval[0] <= sigma[0] <= interval[1]:
+                    if interval[0] <= sigma_val <= interval[1]:
                         enable_lora(self, lora_index=idx)
                         filter_lora_layers(self, layer_filter, lora_index=idx)
                     else:
                         disable_lora(self, lora_index=idx)
             else:
                 # Legacy single-LoRA path
-                if lora_interval[0] <= sigma[0] <= lora_interval[1]:
+                if lora_interval[0] <= sigma_val <= lora_interval[1]:
                     enable_lora(self)
                     filter_lora_layers(self, lora_layer_filter)
                 else:
                     disable_lora(self)
 
-        if cfg_scale != 1.0 and (cross_attn_cond is not None or prepend_cond is not None) and (cfg_interval[0] <= sigma[0] <= cfg_interval[1]):
+        if cfg_scale != 1.0 and (cross_attn_cond is not None or prepend_cond is not None) and (cfg_interval[0] <= sigma_val <= cfg_interval[1]):
 
             # Classifier-free guidance
             # Concatenate conditioned and unconditioned inputs on the batch dimension            

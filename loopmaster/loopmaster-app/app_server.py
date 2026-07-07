@@ -143,7 +143,7 @@ def _execute_model_task(job_id, prompt, bpm, duration, loop, steps, cfg_scale, t
         global first_generation_completed
         with jobs_lock:
             if not first_generation_completed:
-                jobs[job_id]["progress"] = "Compiling Diffusion Transformer (45-60s on first run)…"
+                jobs[job_id]["progress"] = "Warming up diffusion model (first run)…"
             else:
                 jobs[job_id]["progress"] = "Running diffusion model (0% done)…"
 
@@ -169,9 +169,9 @@ def _execute_model_task(job_id, prompt, bpm, duration, loop, steps, cfg_scale, t
         start_gen = time.time()
 
         seed_audio = None
+        gen_duration = duration + (2.0 if loop else 0.0)
         if init_audio_path:
-            sanitized_path = os.path.normpath(init_audio_path).replace("..", "")
-            full_init_path = os.path.join(OUTPUT_DIR, sanitized_path)
+            full_init_path = os.path.join(OUTPUT_DIR, init_audio_path)
             if os.path.exists(full_init_path) and os.path.isfile(full_init_path):
                 try:
                     init_waveform, init_sr = torchaudio.load(full_init_path)
@@ -195,7 +195,10 @@ def _execute_model_task(job_id, prompt, bpm, duration, loop, steps, cfg_scale, t
                     seed_audio = (init_sr, init_waveform)
                     print(f"[Seed Audio] Loaded {full_init_path} successfully on device {model.device} for mode '{remix_mode}'.")
                 except Exception as load_err:
-                    print(f"[Seed Audio] Error loading {full_init_path}: {load_err}")
+                    err_msg = f"Error loading {full_init_path}: {load_err}"
+                    print(f"[Seed Audio] {err_msg}")
+                    with jobs_lock:
+                        jobs[job_id]["progress"] = f"[Seed Audio] {err_msg}"
 
         with model_lock:
             with torch.inference_mode():
@@ -211,6 +214,7 @@ def _execute_model_task(job_id, prompt, bpm, duration, loop, steps, cfg_scale, t
                     "duration_padding_sec": pad_sec,
                     "truncate_output_to_duration": False,
                     "callback": progress_callback,
+                    "chunked_decode": True,
                 }
                 
                 if seed_audio is not None:
@@ -383,9 +387,9 @@ def _execute_model_task(job_id, prompt, bpm, duration, loop, steps, cfg_scale, t
                         print(f"[{'Regen' if is_regeneration else 'Generation'}] Error deleting old file {old_f_path}: {del_err}")
 
             if prompt_slug:
-                filename = f"track_{track_num}_{prompt_slug}_var_{target_idx + 1}_{timestamp}.wav"
+                filename = f"track_{track_num}_{bpm}bpm_{prompt_slug}_var_{target_idx + 1}_{timestamp}.wav"
             else:
-                filename = f"track_{track_num}_var_{target_idx + 1}_{timestamp}.wav"
+                filename = f"track_{track_num}_{bpm}bpm_var_{target_idx + 1}_{timestamp}.wav"
             file_path = os.path.join(out_dir, filename)
             torchaudio.save(file_path, audio[gen_i].cpu(), sample_rate)
             
@@ -413,6 +417,11 @@ def _execute_model_task(job_id, prompt, bpm, duration, loop, steps, cfg_scale, t
                 "prompt": final_prompt,
                 "track_num": track_num,
             })
+            completed = [jid for jid, j in jobs.items() if j.get("status") in ["done", "error"]]
+            if len(completed) > 50:
+                oldest_completed = sorted(completed, key=lambda x: list(jobs.keys()).index(x))[:-50]
+                for jid in oldest_completed:
+                    del jobs[jid]
 
     except Exception as e:
         import traceback
@@ -420,6 +429,20 @@ def _execute_model_task(job_id, prompt, bpm, duration, loop, steps, cfg_scale, t
         with jobs_lock:
             jobs[job_id]["status"] = "error"
             jobs[job_id]["error"] = str(e)
+            completed = [jid for jid, j in jobs.items() if j.get("status") in ["done", "error"]]
+            if len(completed) > 50:
+                oldest_completed = sorted(completed, key=lambda x: list(jobs.keys()).index(x))[:-50]
+                for jid in oldest_completed:
+                    del jobs[jid]
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    finally:
+        if 'audio' in locals():
+            del audio
+        if 'init_waveform' in locals():
+            del init_waveform
+        if 'seed_audio' in locals():
+            del seed_audio
 
 # ---------------------------------------------------------------------------
 # Model loading
@@ -466,6 +489,7 @@ def warmup_model():
 # ---------------------------------------------------------------------------
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
 
 @app.route("/")
 @app.route("/grid")
@@ -488,15 +512,21 @@ def api_generate():
         return jsonify({"error": "Prompt is required"}), 400
 
     bpm = max(40, min(300, int(data.get("bpm", 120))))
-    num_variants = max(1, min(32, int(data.get("num_variants", 4))))
+    num_variants = max(1, min(8, int(data.get("num_variants", 4))))
     loop = bool(data.get("loop", True))
     steps = int(data.get("steps", 8))
     cfg_scale = float(data.get("cfg_scale", 1.0))
     seed = int(data.get("seed", -1))
     duration_padding_sec = float(data.get("duration_padding_sec", 0.0))
-    duration = float(data.get("duration", 960.0 / bpm))
+    duration = max(1.0, min(60.0, float(data.get("duration", 960.0 / bpm))))
 
     init_audio_path = data.get("init_audio_path")
+    if init_audio_path:
+        safe_path = os.path.normpath(init_audio_path).lstrip(os.path.sep)
+        if safe_path.startswith("..") or os.path.isabs(safe_path):
+            return jsonify({"error": "Invalid init_audio_path"}), 400
+        init_audio_path = safe_path
+
     init_noise_level = float(data.get("init_noise_level", 0.6))
     remix_mode = data.get("remix_mode", "variation")
     inpaint_start = float(data.get("inpaint_start", 0.0))
@@ -504,7 +534,7 @@ def api_generate():
     continue_start = float(data.get("continue_start", 0.0))
     invert_timing = bool(data.get("invert_timing", False))
 
-    # Determine track number sequentially
+    job_id = uuid.uuid4().hex[:12]
     with jobs_lock:
         track_num = get_next_track_index()
         # Prevent collision if multiple generate tasks are started concurrently
@@ -512,8 +542,6 @@ def api_generate():
         while track_num in active_tracks:
             track_num += 1
 
-    job_id = uuid.uuid4().hex[:12]
-    with jobs_lock:
         jobs[job_id] = {
             "status": "queued",
             "progress": None,
@@ -589,6 +617,10 @@ def api_regenerate():
     ).start()
 
     return jsonify({"job_id": job_id})
+
+@app.route("/status")
+def server_status():
+    return "OK", 200
 
 @app.route("/api/status/<job_id>")
 def api_status(job_id):
@@ -694,8 +726,7 @@ def api_convert():
             # Run ffmpeg
             import subprocess
             quality_arg = "4" if target_format == "ogg" else "2"
-            subprocess.run(["ffmpeg", "-y", "-i", input_path, "-q:a", quality_arg, output_path], check=True)
-            
+
             @after_this_request
             def remove_file(response):
                 try:
@@ -703,6 +734,14 @@ def api_convert():
                 except Exception as e:
                     print(f"Error removing temp file {output_path}: {e}")
                 return response
+
+            try:
+                subprocess.run(["ffmpeg", "-y", "-i", input_path, "-q:a", quality_arg, output_path], check=True, timeout=120)
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError) as e:
+                err_msg = str(e)
+                if isinstance(e, FileNotFoundError):
+                    err_msg = "ffmpeg not found on PATH"
+                return jsonify({"error": f"FFmpeg conversion failed: {err_msg}"}), 500
                 
             return send_file(output_path, as_attachment=True, download_name=out_filename)
 
@@ -734,16 +773,23 @@ def api_convert():
         import subprocess
         # Use -q:a 2 for lame mp3, or -q:a 4 for vorbis ogg to ensure high quality
         quality_arg = "4" if target_format == "ogg" else "2"
-        subprocess.run(["ffmpeg", "-y", "-i", temp_in, "-q:a", quality_arg, temp_out], check=True)
 
         @after_this_request
         def clean_all(response):
             try:
-                os.remove(temp_in)
-                os.remove(temp_out)
+                if os.path.exists(temp_in): os.remove(temp_in)
+                if os.path.exists(temp_out): os.remove(temp_out)
             except Exception as e:
                 print(f"Error cleaning temp files: {e}")
             return response
+
+        try:
+            subprocess.run(["ffmpeg", "-y", "-i", temp_in, "-q:a", quality_arg, temp_out], check=True, timeout=120)
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError) as e:
+            err_msg = str(e)
+            if isinstance(e, FileNotFoundError):
+                err_msg = "ffmpeg not found on PATH"
+            return jsonify({"error": f"FFmpeg conversion failed: {err_msg}"}), 500
 
         return send_file(temp_out, as_attachment=True, download_name=out_name)
 
@@ -774,5 +820,12 @@ if __name__ == "__main__":
     load_model(args.model, args.device, args.no_half)
     warmup_model()
 
-    print(f"\n  [OK] Grid Generator running at http://127.0.0.1:{args.port}\n")
-    app.run(host=args.host, port=args.port, debug=False, threaded=True)
+    try:
+        print(f"\n  [OK] Grid Generator running at http://127.0.0.1:{args.port}\n")
+        app.run(host=args.host, port=args.port, debug=False, threaded=True)
+    except OSError as e:
+        if 'EADDRINUSE' in str(e) or 'WinError 10048' in str(e) or 'address already in use' in str(e).lower():
+            print(f"\n[ERROR] Port {args.port} is already in use. Is LoopMaster Optimized already running? Close it first.\n")
+            import sys
+            sys.exit(1)
+        raise

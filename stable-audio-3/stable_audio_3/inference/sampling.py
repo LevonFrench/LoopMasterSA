@@ -516,7 +516,23 @@ def sample_diffusion(
         print(f"\n[VAE] Starting VAE decoding of {sampled.shape[0]} latent variants on device {device}...")
         start_vae = time.time()
         sampled = sampled.to(next(pretransform.parameters()).dtype)
-        sampled = pretransform.decode(sampled, chunked=chunked_decode)
+        
+        # Clear CUDA cache before VAE decoding to reclaim VRAM from the diffusion step
+        if torch.cuda.is_available():
+            free_mem, _ = torch.cuda.mem_get_info()
+            if free_mem < 2 * 1024 * 1024 * 1024:
+                torch.cuda.empty_cache()
+        # Decode sequentially to avoid VRAM exhaustion/hanging on large batches
+        decoded_variants = []
+        for i in range(sampled.shape[0]):
+            single_latent = sampled[i:i+1]
+            # Enforce a smaller chunk_size (64 instead of default 128) for 12GB cards
+            # 32 was causing a range() error because overlap defaults to 32 (32 - 32 = 0)
+            decoded = pretransform.decode(single_latent, chunked=chunked_decode, chunk_size=64)
+            decoded_variants.append(decoded)
+            
+        sampled = torch.cat(decoded_variants, dim=0)
+        
         print(f"[VAE] VAE decoding completed in {time.time() - start_vae:.2f}s.")
         if callback is not None:
             try:

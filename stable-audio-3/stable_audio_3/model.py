@@ -1,5 +1,16 @@
 import json
 import numpy as np
+
+# LRU Cache for conditioning tensors
+_cond_cache = {}
+_cond_cache_max = 16
+
+def _get_cond_key(prompt, negative_prompt, duration):
+    p_key = tuple(prompt) if isinstance(prompt, list) else prompt
+    n_key = tuple(negative_prompt) if isinstance(negative_prompt, list) else negative_prompt
+    d_key = tuple(duration) if isinstance(duration, list) else duration
+    return (p_key, n_key, d_key)
+
 import torch
 import typing as tp
 from torch.nn.functional import interpolate
@@ -64,8 +75,9 @@ class StableAudioModel:
         model.use_lora = False
         model.lora_names = []
         
-        # Enable torch.compile on diffusion model if CUDA is active
-        if device == "cuda" and hasattr(torch, "compile"):
+        # Enable torch.compile on diffusion model if CUDA is active (and not on Windows)
+        import os
+        if device == "cuda" and hasattr(torch, "compile") and os.name != 'nt':
             try:
                 print("Compiling DiT (Diffusion Transformer) model using torch.compile...")
                 model.model = torch.compile(model.model, mode="reduce-overhead", dynamic=False)
@@ -163,6 +175,7 @@ class StableAudioModel:
         """
 
         device = str(self.device)
+        assert chunked_decode is not False, "The app must never disable chunked decoding on the 12GB backend."
 
         # Build conditioning from prompt string if not provided directly
         if conditioning is None and conditioning_tensors is None:
@@ -253,24 +266,46 @@ class StableAudioModel:
 
         # Seed and noise
         seed = seed if seed != -1 else np.random.randint(0, 99999)
-        torch.manual_seed(seed)
+        g = torch.Generator(device=device).manual_seed(seed)
         noise = torch.randn(
-            [batch_size, self.model.io_channels, latent_sample_size], device=device
+            [batch_size, self.model.io_channels, latent_sample_size], device=device, generator=g
         )
 
         # Encode conditioning
-        if conditioning_tensors is None:
-            conditioning_tensors = self.model.conditioner(conditioning, device)
-        if (
-            negative_conditioning is not None
-            or negative_conditioning_tensors is not None
-        ):
-            if negative_conditioning_tensors is None:
-                negative_conditioning_tensors = self.model.conditioner(
-                    negative_conditioning, device
-                )
+        cache_key = _get_cond_key(prompt, negative_prompt, duration) if prompt is not None else None
+        global _cond_cache
+        if cache_key and cache_key in _cond_cache:
+            print('[Generation] Cache hit for text conditioning')
+            conditioning_tensors, negative_conditioning_tensors = _cond_cache[cache_key]
+            # Move to end for LRU
+            _cond_cache[cache_key] = _cond_cache.pop(cache_key)
         else:
-            negative_conditioning_tensors = {}
+            if conditioning_tensors is None:
+                conditioning_tensors = self.model.conditioner(conditioning, device)
+            if (
+                negative_conditioning is not None
+                or negative_conditioning_tensors is not None
+            ):
+                if negative_conditioning_tensors is None:
+                    negative_conditioning_tensors = self.model.conditioner(
+                        negative_conditioning, device
+                    )
+            else:
+                negative_conditioning_tensors = {}
+            if cache_key is not None:
+                # detach tensors before caching to prevent memory leaks;
+                # conditioner values may be tensors or (embedding, mask) tuples
+                def _detach_value(v):
+                    if torch.is_tensor(v):
+                        return v.detach()
+                    if isinstance(v, (tuple, list)):
+                        return type(v)(x.detach() if torch.is_tensor(x) else x for x in v)
+                    return v
+                detached_cond = {k: _detach_value(v) for k, v in conditioning_tensors.items()} if conditioning_tensors else {}
+                detached_neg = {k: _detach_value(v) for k, v in negative_conditioning_tensors.items()} if negative_conditioning_tensors else {}
+                _cond_cache[cache_key] = (detached_cond, detached_neg)
+                if len(_cond_cache) > _cond_cache_max:
+                    _cond_cache.pop(next(iter(_cond_cache)))
 
         # Process init audio
         if init_audio is not None:
@@ -358,6 +393,9 @@ class StableAudioModel:
         )
 
         if not return_latents:
+            if torch.isnan(result).any():
+                print("Warning: NaN detected in generation output. Replacing with 0.0...")
+            result = torch.nan_to_num(result, nan=0.0, posinf=1.0, neginf=-1.0)
             result = result.to(torch.float32).clamp(-1, 1)
 
         if not return_latents and truncate_output_to_duration:
