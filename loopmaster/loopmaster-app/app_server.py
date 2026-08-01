@@ -6,6 +6,7 @@ Ripped out Gradio dependencies to focus on custom web interface.
 import os
 import sys
 import re
+import ntpath
 
 os.environ["HF_HOME"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "huggingface"))
 os.environ["TORCH_HOME"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "torch"))
@@ -45,6 +46,13 @@ from flask import Flask, request, jsonify, send_from_directory, send_file, after
 
 from stable_audio_3 import StableAudioModel
 from stable_audio_3.verbose import set_verbose
+from generation_executor import GenerationExecutor, GenerationRuntime, GenerationTask
+from generation_queue import (
+    GenerationCancelResult,
+    GenerationQueue,
+    GenerationQueueFull,
+)
+from job_history import JobHistory
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -67,10 +75,23 @@ os.makedirs(SESSION_DIR, exist_ok=True)
 model = None
 model_lock = threading.Lock()
 
-jobs = {}
+job_history = JobHistory(OUTPUT_DIR, max_terminal=50)
+jobs = job_history.recover()
 jobs_lock = threading.Lock()
 
 first_generation_completed = False
+
+MAX_DURATION_SECONDS = 60.0
+MAX_STEPS = 100
+MAX_CFG_SCALE = 15.0
+MAX_PADDING_SECONDS = 10.0
+VALID_REMIX_MODES = {"variation", "inpaint", "response", "continuation"}
+try:
+    GENERATION_QUEUE_CAPACITY = max(
+        1, int(os.environ.get("GENERATION_QUEUE_CAPACITY", "4"))
+    )
+except ValueError:
+    GENERATION_QUEUE_CAPACITY = 4
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -97,6 +118,91 @@ def get_next_track_index():
                 pass
     return max_idx + 1
 
+
+def bounded_number(data, key, default, converter, minimum, maximum):
+    """Parse a JSON number and keep it within the limits supported by the UI."""
+    raw_value = data.get(key, default)
+    if isinstance(raw_value, bool):
+        raise ValueError(f"{key} must be a number")
+    try:
+        value = converter(raw_value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{key} must be a number") from None
+    return max(minimum, min(maximum, value))
+
+
+def parse_loop(value):
+    """Accept JSON booleans and common form encodings without truthy-string bugs."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.lower() in {"true", "false"}:
+        return value.lower() == "true"
+    raise ValueError("loop must be a boolean")
+
+
+def resolve_output_path(value, field_name="file path"):
+    """Resolve a client-supplied relative path and keep it inside OUTPUT_DIR."""
+    if not isinstance(value, str) or not value or "\x00" in value:
+        raise ValueError(f"{field_name} must be a non-empty relative path")
+
+    # Treat both slash styles as separators even when the server runs on POSIX.
+    # ntpath also recognizes Windows drive-relative paths and UNC shares.
+    portable_path = value.replace("\\", "/")
+    drive, _ = ntpath.splitdrive(portable_path)
+    parts = portable_path.split("/")
+    if drive or portable_path.startswith("/") or any(part == ".." for part in parts):
+        raise ValueError(f"Invalid {field_name}")
+
+    output_root = os.path.realpath(os.path.abspath(OUTPUT_DIR))
+    candidate = os.path.realpath(os.path.join(output_root, *parts))
+    try:
+        contained = os.path.normcase(os.path.commonpath([output_root, candidate])) == os.path.normcase(output_root)
+    except ValueError:
+        contained = False
+    if not contained or candidate == output_root:
+        raise ValueError(f"Invalid {field_name}")
+    return candidate
+
+
+def validate_init_audio_path(value):
+    if value is None:
+        return None
+    full_path = resolve_output_path(value, "init_audio_path")
+    output_root = os.path.realpath(os.path.abspath(OUTPUT_DIR))
+    return os.path.relpath(full_path, output_root)
+
+
+def _normalize_blend_indices(generated_length, seed_length, *indices):
+    """Clamp blend extents to the samples shared by generated and seed audio."""
+    shared_length = max(0, min(generated_length, seed_length))
+    return shared_length, tuple(max(0, min(shared_length, index)) for index in indices)
+
+
+def _save_variant_atomically(file_path, waveform, sample_rate, bpm, duration, is_loop, prompt, old_file_path=None):
+    """Fully write and tag a same-directory temp WAV before publishing it."""
+    temp_path = os.path.join(
+        os.path.dirname(file_path),
+        f".{os.path.basename(file_path)}.{uuid.uuid4().hex}.tmp.wav",
+    )
+    try:
+        torchaudio.save(temp_path, waveform, sample_rate)
+        acidize_wav_file(temp_path, bpm, duration, is_loop, prompt)
+        os.replace(temp_path, file_path)
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+    if old_file_path and os.path.normcase(os.path.abspath(old_file_path)) != os.path.normcase(os.path.abspath(file_path)):
+        try:
+            os.remove(old_file_path)
+        except FileNotFoundError:
+            pass
+        except OSError as error:
+            print(f"[Generation] Error deleting replaced file {old_file_path}: {error}")
+
 # ---------------------------------------------------------------------------
 # WAV Loop Metadata & Beat Grid Generation
 # ---------------------------------------------------------------------------
@@ -106,343 +212,117 @@ from wav_metadata import (
     pack_cue_chunk, find_data_chunk_offset, acidize_wav_file, enhance_prompt
 )
 
-def _execute_model_task(job_id, prompt, bpm, duration, loop, steps, cfg_scale, track_num, num_variants=4, unlocked_indices=None, duration_padding_sec=0.0, init_audio_path=None, init_noise_level=0.6, seed=-1, remix_mode="variation", inpaint_start=0.0, inpaint_end=0.0, continue_start=0.0, invert_timing=False):
-    global model
-    is_regeneration = unlocked_indices is not None
-    target_indices = unlocked_indices if is_regeneration else list(range(num_variants))
-    num_to_generate = len(target_indices)
+def _is_generation_warm():
+    return first_generation_completed
 
-    try:
-        with jobs_lock:
-            jobs[job_id]["status"] = "generating"
-            jobs[job_id]["progress"] = "Preparing prompt…"
 
-        final_prompt = enhance_prompt(prompt, bpm, duration, loop)
-        
-        prompts_list = []
-        is_drum = is_drum_prompt(prompt)
-        for target_idx in target_indices:
-            if target_idx == 3 and is_drum:
-                fill_prompt = enhance_prompt(prompt, bpm, duration, loop=False)
-                fill_prompt = re.sub(r'\bseamless loop\b', 'drum fill, drum roll', fill_prompt, flags=re.IGNORECASE)
-                fill_prompt = re.sub(r'\blooping\b', 'transition', fill_prompt, flags=re.IGNORECASE)
-                fill_prompt = re.sub(r'\bloop\b', 'fill', fill_prompt, flags=re.IGNORECASE)
-                fill_prompt = re.sub(r'\bbreakbeats?\b', 'drum fill', fill_prompt, flags=re.IGNORECASE)
-                fill_prompt = re.sub(r'\bbeats?\b', 'fill', fill_prompt, flags=re.IGNORECASE)
-                if "fill" not in fill_prompt.lower():
-                    fill_prompt += ", drum fill, transition fill"
-                prompts_list.append(fill_prompt)
-            else:
-                prompts_list.append(final_prompt)
+def _mark_generation_warm():
+    global first_generation_completed
+    first_generation_completed = True
 
-        print(f"\n[Prompt Enhancement] Original: '{prompt}'")
-        for i, target_idx in enumerate(target_indices):
-            print(f"[Prompt Enhancement] Variant {target_idx+1} Enhanced: '{prompts_list[i]}'")
-        print()
 
-        global first_generation_completed
-        with jobs_lock:
-            if not first_generation_completed:
-                jobs[job_id]["progress"] = "Warming up diffusion model (first run)…"
-            else:
-                jobs[job_id]["progress"] = "Running diffusion model (0% done)…"
+def _make_generation_runtime():
+    return GenerationRuntime(
+        model=model,
+        jobs=jobs,
+        jobs_lock=jobs_lock,
+        model_lock=model_lock,
+        session_dir=SESSION_DIR,
+        session_dir_name=SESSION_DIR_NAME,
+        resolve_output_path=resolve_output_path,
+        normalize_blend_indices=_normalize_blend_indices,
+        save_variant_atomically=_save_variant_atomically,
+        slugify_prompt=slugify_prompt,
+        enhance_prompt=enhance_prompt,
+        is_drum_prompt=is_drum_prompt,
+        is_warm=_is_generation_warm,
+        mark_warm=_mark_generation_warm,
+        update_job=_mutate_job,
+        prune_terminal_jobs=_prune_terminal_jobs,
+    )
 
-        def progress_callback(info):
-            if "stage" in info:
-                stage = info["stage"]
-                if stage == "vae_start":
-                    progress_msg = "Decoding audio latents using VAE (30-40s)…"
-                elif stage == "vae_end":
-                    progress_msg = "VAE decoding completed…"
-                else:
-                    progress_msg = f"Stage: {stage}…"
-                with jobs_lock:
-                    jobs[job_id]["progress"] = progress_msg
-                return
-            step = info.get('i', 0)
-            pct = int((step + 1) / steps * 100)
-            with jobs_lock:
-                jobs[job_id]["progress"] = f"Generating diffusion model (step {step + 1}/{steps} - {pct}%)…"
 
-        start_gen = time.time()
+def _register_job(job_id, job, allocate_track=False):
+    """Create a job and durably publish its queued state through one seam."""
+    with jobs_lock:
+        if allocate_track:
+            track_num = get_next_track_index()
+            active_tracks = [
+                existing.get("track_num")
+                for existing in jobs.values()
+                if existing.get("status") in {"queued", "generating"}
+            ]
+            while track_num in active_tracks:
+                track_num += 1
+            job["track_num"] = track_num
+        jobs[job_id] = job
+        snapshot = dict(job)
+    job_history.record(job_id, snapshot)
+    return snapshot.get("track_num")
 
-        start_gen = time.time()
 
-        seed_audio = None
-        gen_duration = duration + (2.0 if loop else 0.0)
-        if init_audio_path:
-            full_init_path = os.path.join(OUTPUT_DIR, init_audio_path)
-            if os.path.exists(full_init_path) and os.path.isfile(full_init_path):
-                try:
-                    init_waveform, init_sr = torchaudio.load(full_init_path)
-                    
-                    if invert_timing:
-                        init_waveform = torch.flip(init_waveform, dims=[-1])
-                        print(f"[Seed Audio] Inverted timing/progression (reversed waveform along time dimension) for {full_init_path}.")
+def _mutate_job(job_id, **changes):
+    """Mutate in-memory state and persist only meaningful status transitions."""
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            return None
+        previous_status = job.get("status")
+        job.update(changes)
+        current_status = job.get("status")
+        snapshot = dict(job)
+    if previous_status != current_status:
+        job_history.record(job_id, snapshot)
+    return snapshot
 
-                    if remix_mode in ["inpaint", "response", "continuation"]:
-                        current_samples = init_waveform.shape[1]
-                        target_samples = int(gen_duration * init_sr)
-                        if current_samples < target_samples:
-                            padding_samples = target_samples - current_samples
-                            padding = torch.zeros((init_waveform.shape[0], padding_samples), dtype=init_waveform.dtype)
-                            init_waveform = torch.cat([init_waveform, padding], dim=-1)
-                            print(f"[Seed Audio] Padded seed audio from {current_samples} to {target_samples} samples ({gen_duration}s) for mode '{remix_mode}'.")
-                        
-                    if model.model_half:
-                        init_waveform = init_waveform.half()
-                    init_waveform = init_waveform.to(model.device)
-                    seed_audio = (init_sr, init_waveform)
-                    print(f"[Seed Audio] Loaded {full_init_path} successfully on device {model.device} for mode '{remix_mode}'.")
-                except Exception as load_err:
-                    err_msg = f"Error loading {full_init_path}: {load_err}"
-                    print(f"[Seed Audio] {err_msg}")
-                    with jobs_lock:
-                        jobs[job_id]["progress"] = f"[Seed Audio] {err_msg}"
 
-        with model_lock:
-            with torch.inference_mode():
-                pad_sec = 2.0 if loop else 0.0
-                gen_kwargs = {
-                    "prompt": prompts_list,
-                    "negative_prompt": "poor quality, bad quality, low quality, noise, distortion, artifact",
-                    "duration": duration,
-                    "steps": steps,
-                    "cfg_scale": cfg_scale,
-                    "batch_size": num_to_generate,
-                    "seed": seed,
-                    "duration_padding_sec": pad_sec,
-                    "truncate_output_to_duration": False,
-                    "callback": progress_callback,
-                    "chunked_decode": True,
-                }
-                
-                if seed_audio is not None:
-                    if remix_mode == "variation":
-                        gen_kwargs["init_audio"] = seed_audio
-                        gen_kwargs["init_noise_level"] = init_noise_level
-                        print(f"[Generation] Running variation with noise level {init_noise_level}.")
-                    elif remix_mode == "inpaint" or remix_mode == "response":
-                        gen_kwargs["inpaint_audio"] = seed_audio
-                        overlap_sec = 0.3
-                        if remix_mode == "response":
-                            mask_start = max(0.0, (duration / 2.0) - overlap_sec)
-                            gen_kwargs["inpaint_mask_start_seconds"] = mask_start
-                            gen_kwargs["inpaint_mask_end_seconds"] = duration + 10.0
-                            print(f"[Generation] Running Call & Response. Masking {mask_start}s to {duration + 10.0}s (overlap: {overlap_sec}s).")
-                        else:
-                            mask_start = max(0.0, inpaint_start - overlap_sec)
-                            mask_end = min(duration, inpaint_end + overlap_sec)
-                            gen_kwargs["inpaint_mask_start_seconds"] = mask_start
-                            gen_kwargs["inpaint_mask_end_seconds"] = mask_end
-                            print(f"[Generation] Running inpaint with range {mask_start}s to {mask_end}s (overlap: {overlap_sec}s).")
-                    elif remix_mode == "continuation":
-                        gen_kwargs["inpaint_audio"] = seed_audio
-                        overlap_sec = 0.3
-                        mask_start = max(0.0, continue_start - overlap_sec)
-                        gen_kwargs["inpaint_mask_start_seconds"] = mask_start
-                        gen_kwargs["inpaint_mask_end_seconds"] = max(duration, gen_duration) + 10.0
-                        print(f"[Generation] Running continuation keeping first {mask_start}s (overlap: {overlap_sec}s).")
-                
-                audio = model.generate(**gen_kwargs)
-                first_generation_completed = True
+def _remove_job(job_id):
+    """Remove work rejected before queue admission from memory and history."""
+    with jobs_lock:
+        removed = jobs.pop(job_id, None)
+    if removed is not None:
+        job_history.remove(job_id)
+    return removed
 
-        audio = audio.clone()
-        with jobs_lock:
-            jobs[job_id]["progress"] = "Processing audio & blending loop transitions…"
-        elapsed = time.time() - start_gen
 
-        sample_rate = model.model.sample_rate
-        exact_samples = int(duration * sample_rate)
-        
-        if loop:
-            # The model generated exact_samples + padding samples.
-            # To create a seamless loop, we take the tail (everything after exact_samples)
-            # and add it back to the beginning of the audio.
-            if audio.shape[-1] > exact_samples:
-                tail = audio[..., exact_samples:]
-                
-                # We can only add as much tail as there is head
-                mix_len = min(tail.shape[-1], exact_samples)
-                audio[..., :mix_len] += tail[..., :mix_len]
-            
-            # Truncate strictly to exact_samples to maintain perfect tempo alignment
-            audio = audio[..., :exact_samples]
-            
-            # We still need to ensure it's exactly exact_samples in case the model generated too few
-            if audio.shape[-1] < exact_samples:
-                padding = torch.zeros((*audio.shape[:-1], exact_samples - audio.shape[-1]), device=audio.device, dtype=audio.dtype)
-                audio = torch.cat([audio, padding], dim=-1)
-        else:
-            if audio.shape[-1] > exact_samples:
-                audio = audio[..., :exact_samples]
-            elif audio.shape[-1] < exact_samples:
-                padding = torch.zeros((*audio.shape[:-1], exact_samples - audio.shape[-1]), device=audio.device, dtype=audio.dtype)
-                audio = torch.cat([audio, padding], dim=-1)
+def _record_queue_worker_error(job_id, error):
+    _mutate_job(
+        job_id,
+        status="error",
+        progress=None,
+        error=str(error),
+        queue_position=None,
+    )
 
-        if init_audio_path and remix_mode in ["continuation", "response", "inpaint"]:
-            try:
-                import torchaudio.transforms as T
-                if init_sr != sample_rate:
-                    resampler = T.Resample(init_sr, sample_rate).to(audio.device)
-                    init_waveform_resampled = resampler(init_waveform.to(audio.device))
-                else:
-                    init_waveform_resampled = init_waveform.to(audio.device)
-                
-                if init_waveform_resampled.ndim == 2:
-                    if init_waveform_resampled.shape[0] == 1 and audio.shape[1] == 2:
-                        init_waveform_resampled = init_waveform_resampled.repeat(2, 1)
-                    elif init_waveform_resampled.shape[0] > 2:
-                        init_waveform_resampled = init_waveform_resampled[:2, :]
-                
-                overlap_sec = 0.3
-                orig_len = init_waveform_resampled.shape[1]
-                gen_len = audio.shape[2]
-                
-                if remix_mode in ["continuation", "response"]:
-                    boundary_sec = continue_start if remix_mode == "continuation" else (duration / 2.0)
-                    mask_start_sec = max(0.0, boundary_sec - overlap_sec)
-                    
-                    boundary_idx = min(gen_len, int(boundary_sec * sample_rate))
-                    mask_start_idx = min(gen_len, int(mask_start_sec * sample_rate))
-                    
-                    boundary_idx = min(boundary_idx, orig_len)
-                    mask_start_idx = min(mask_start_idx, orig_len)
-                    
-                    overlap_samples = boundary_idx - mask_start_idx
-                    if overlap_samples > 0:
-                        w = torch.linspace(0.0, 1.0, steps=overlap_samples, device=audio.device, dtype=audio.dtype).unsqueeze(0)
-                        for i in range(num_to_generate):
-                            audio[i, :, :mask_start_idx] = init_waveform_resampled[:, :mask_start_idx]
-                            orig_seg = init_waveform_resampled[:, mask_start_idx:boundary_idx]
-                            gen_seg = audio[i, :, mask_start_idx:boundary_idx]
-                            audio[i, :, mask_start_idx:boundary_idx] = (1.0 - w) * orig_seg + w * gen_seg
-                            
-                elif remix_mode == "inpaint":
-                    boundary1_sec = inpaint_start
-                    mask_start_sec = max(0.0, inpaint_start - overlap_sec)
-                    boundary2_sec = inpaint_end
-                    mask_end_sec = min(duration, inpaint_end + overlap_sec)
-                    
-                    boundary1_idx = min(gen_len, int(boundary1_sec * sample_rate))
-                    mask_start_idx = min(gen_len, int(mask_start_sec * sample_rate))
-                    boundary2_idx = min(gen_len, int(boundary2_sec * sample_rate))
-                    mask_end_idx = min(gen_len, int(mask_end_sec * sample_rate))
-                    
-                    boundary1_idx = min(boundary1_idx, orig_len)
-                    mask_start_idx = min(mask_start_idx, orig_len)
-                    boundary2_idx = min(boundary2_idx, orig_len)
-                    mask_end_idx = min(mask_end_idx, orig_len)
-                    
-                    overlap1_samples = boundary1_idx - mask_start_idx
-                    overlap2_samples = mask_end_idx - boundary2_idx
-                    
-                    for i in range(num_to_generate):
-                        audio[i, :, :mask_start_idx] = init_waveform_resampled[:, :mask_start_idx]
-                        
-                        if overlap1_samples > 0:
-                            w1 = torch.linspace(0.0, 1.0, steps=overlap1_samples, device=audio.device, dtype=audio.dtype).unsqueeze(0)
-                            orig_seg1 = init_waveform_resampled[:, mask_start_idx:boundary1_idx]
-                            gen_seg1 = audio[i, :, mask_start_idx:boundary1_idx]
-                            audio[i, :, mask_start_idx:boundary1_idx] = (1.0 - w1) * orig_seg1 + w1 * gen_seg1
-                            
-                        if overlap2_samples > 0:
-                            w2 = torch.linspace(0.0, 1.0, steps=overlap2_samples, device=audio.device, dtype=audio.dtype).unsqueeze(0)
-                            orig_seg2 = init_waveform_resampled[:, boundary2_idx:mask_end_idx]
-                            gen_seg2 = audio[i, :, boundary2_idx:mask_end_idx]
-                            audio[i, :, boundary2_idx:mask_end_idx] = (1.0 - w2) * gen_seg2 + w2 * orig_seg2
-                            
-                        if mask_end_idx < orig_len:
-                            audio[i, :, mask_end_idx:orig_len] = init_waveform_resampled[:, mask_end_idx:orig_len]
-            except Exception as blend_err:
-                print(f"[Blending] Error crossfading audio boundaries: {blend_err}")
 
-        with jobs_lock:
-            jobs[job_id]["progress"] = "Saving and metadata tagging WAV files…"
-        track_dir_name = f"track_{track_num}"
-        out_dir = os.path.join(SESSION_DIR, track_dir_name)
-        os.makedirs(out_dir, exist_ok=True)
+def _prune_terminal_jobs_locked(retain=50):
+    """Retain recent terminal records, including cancelled jobs.
 
-        prompt_slug = slugify_prompt(prompt, 16)
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        
-        # Scan out_dir for all existing files matching this track
-        existing_files = {}
-        for f in os.listdir(out_dir):
-            if f.endswith(".wav"):
-                for var_idx in range(1, num_variants + 1):
-                    if f"_var_{var_idx}_" in f:
-                        existing_files[var_idx - 1] = f
-                        break
-        
-        for gen_i, target_idx in enumerate(target_indices):
-            # Delete old file if exists
-            old_f = existing_files.get(target_idx)
-            if old_f:
-                old_f_path = os.path.join(out_dir, old_f)
-                if os.path.exists(old_f_path):
-                    try:
-                        os.remove(old_f_path)
-                    except Exception as del_err:
-                        print(f"[{'Regen' if is_regeneration else 'Generation'}] Error deleting old file {old_f_path}: {del_err}")
+    The caller must hold ``jobs_lock``. Cancellation records stay queryable in
+    exactly the same bounded in-memory history as successful and failed jobs.
+    """
+    terminal_job_ids = [
+        job_id
+        for job_id, job in jobs.items()
+        if job.get("status") in {"done", "error", "cancelled"}
+    ]
+    for terminal_job_id in terminal_job_ids[:-retain]:
+        jobs.pop(terminal_job_id, None)
 
-            if prompt_slug:
-                filename = f"track_{track_num}_{bpm}bpm_{prompt_slug}_var_{target_idx + 1}_{timestamp}.wav"
-            else:
-                filename = f"track_{track_num}_{bpm}bpm_var_{target_idx + 1}_{timestamp}.wav"
-            file_path = os.path.join(out_dir, filename)
-            torchaudio.save(file_path, audio[gen_i].cpu(), sample_rate)
-            
-            is_var_loop = loop
-            if target_idx == 3 and is_drum:
-                is_var_loop = False
-            acidize_wav_file(file_path, bpm, duration, is_var_loop, prompt)
-            
-            existing_files[target_idx] = filename
 
-        files = []
-        for i in range(num_variants):
-            f_name = existing_files.get(i)
-            if f_name:
-                files.append(f"{SESSION_DIR_NAME}/{track_dir_name}/{f_name}")
-            else:
-                files.append("")
+def _prune_terminal_jobs(retain=50):
+    with jobs_lock:
+        _prune_terminal_jobs_locked(retain=retain)
 
-        with jobs_lock:
-            jobs[job_id].update({
-                "status": "done",
-                "progress": None,
-                "elapsed": elapsed,
-                "files": files,
-                "prompt": final_prompt,
-                "track_num": track_num,
-            })
-            completed = [jid for jid, j in jobs.items() if j.get("status") in ["done", "error"]]
-            if len(completed) > 50:
-                oldest_completed = sorted(completed, key=lambda x: list(jobs.keys()).index(x))[:-50]
-                for jid in oldest_completed:
-                    del jobs[jid]
 
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        with jobs_lock:
-            jobs[job_id]["status"] = "error"
-            jobs[job_id]["error"] = str(e)
-            completed = [jid for jid, j in jobs.items() if j.get("status") in ["done", "error"]]
-            if len(completed) > 50:
-                oldest_completed = sorted(completed, key=lambda x: list(jobs.keys()).index(x))[:-50]
-                for jid in oldest_completed:
-                    del jobs[jid]
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-    finally:
-        if 'audio' in locals():
-            del audio
-        if 'init_waveform' in locals():
-            del init_waveform
-        if 'seed_audio' in locals():
-            del seed_audio
+generation_executor = GenerationExecutor(_make_generation_runtime)
+generation_queue = GenerationQueue(
+    generation_executor.execute,
+    capacity=GENERATION_QUEUE_CAPACITY,
+    on_error=_record_queue_worker_error,
+)
+generation_queue.start()
+
 
 # ---------------------------------------------------------------------------
 # Model loading
@@ -507,116 +387,159 @@ def serve_output(filename):
 @app.post("/api/generate")
 def api_generate():
     data = request.json or {}
-    prompt = data.get("prompt", "").strip()
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+    prompt_value = data.get("prompt", "")
+    if not isinstance(prompt_value, str):
+        return jsonify({"error": "Prompt must be text"}), 400
+    prompt = prompt_value.strip()
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
 
-    bpm = max(40, min(300, int(data.get("bpm", 120))))
-    num_variants = max(1, min(8, int(data.get("num_variants", 4))))
-    loop = bool(data.get("loop", True))
-    steps = int(data.get("steps", 8))
-    cfg_scale = float(data.get("cfg_scale", 1.0))
-    seed = int(data.get("seed", -1))
-    duration_padding_sec = float(data.get("duration_padding_sec", 0.0))
-    duration = max(1.0, min(60.0, float(data.get("duration", 960.0 / bpm))))
-
-    init_audio_path = data.get("init_audio_path")
-    if init_audio_path:
-        safe_path = os.path.normpath(init_audio_path).lstrip(os.path.sep)
-        if safe_path.startswith("..") or os.path.isabs(safe_path):
-            return jsonify({"error": "Invalid init_audio_path"}), 400
-        init_audio_path = safe_path
-
-    init_noise_level = float(data.get("init_noise_level", 0.6))
-    remix_mode = data.get("remix_mode", "variation")
-    inpaint_start = float(data.get("inpaint_start", 0.0))
-    inpaint_end = float(data.get("inpaint_end", 0.0))
-    continue_start = float(data.get("continue_start", 0.0))
-    invert_timing = bool(data.get("invert_timing", False))
+    try:
+        bpm = bounded_number(data, "bpm", 120, int, 40, 300)
+        num_variants = bounded_number(data, "num_variants", 4, int, 1, 8)
+        loop = parse_loop(data.get("loop", True))
+        steps = bounded_number(data, "steps", 8, int, 1, MAX_STEPS)
+        cfg_scale = bounded_number(data, "cfg_scale", 1.0, float, 0.0, MAX_CFG_SCALE)
+        seed = bounded_number(data, "seed", -1, int, -1, 2_147_483_647)
+        duration_padding_sec = bounded_number(data, "duration_padding_sec", 2.0 if loop else 0.0, float, 0.0, MAX_PADDING_SECONDS)
+        duration = bounded_number(data, "duration", 960.0 / bpm, float, 1.0, MAX_DURATION_SECONDS)
+        init_audio_path = validate_init_audio_path(data.get("init_audio_path"))
+        init_noise_level = bounded_number(data, "init_noise_level", 0.6, float, 0.0, 1.0)
+        remix_mode = data.get("remix_mode", "variation")
+        if remix_mode not in VALID_REMIX_MODES:
+            raise ValueError("remix_mode is invalid")
+        inpaint_start = bounded_number(data, "inpaint_start", 0.0, float, 0.0, duration)
+        inpaint_end = bounded_number(data, "inpaint_end", duration, float, 0.0, duration)
+        continue_start = bounded_number(data, "continue_start", 0.0, float, 0.0, duration)
+        invert_timing = parse_loop(data.get("invert_timing", False))
+        if remix_mode == "inpaint" and init_audio_path and inpaint_start >= inpaint_end:
+            raise ValueError("inpaint_start must be before inpaint_end")
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
 
     job_id = uuid.uuid4().hex[:12]
-    with jobs_lock:
-        track_num = get_next_track_index()
-        # Prevent collision if multiple generate tasks are started concurrently
-        active_tracks = [j.get("track_num") for j in jobs.values() if j.get("status") in ["queued", "generating"]]
-        while track_num in active_tracks:
-            track_num += 1
+    track_num = _register_job(job_id, {
+        "status": "queued",
+        "progress": "Waiting for the generation worker…",
+        "error": None,
+        "elapsed": None,
+        "files": None,
+        "prompt": prompt,
+        "track_num": None,
+        "queue_position": None,
+    }, allocate_track=True)
 
-        jobs[job_id] = {
-            "status": "queued",
-            "progress": None,
-            "error": None,
-            "elapsed": None,
-            "files": None,
-            "prompt": prompt,
-            "track_num": track_num,
-        }
+    task = GenerationTask(
+        job_id=job_id,
+        prompt=prompt,
+        bpm=bpm,
+        duration=duration,
+        loop=loop,
+        steps=steps,
+        cfg_scale=cfg_scale,
+        track_num=track_num,
+        num_variants=num_variants,
+        duration_padding_sec=duration_padding_sec,
+        init_audio_path=init_audio_path,
+        init_noise_level=init_noise_level,
+        seed=seed,
+        remix_mode=remix_mode,
+        inpaint_start=inpaint_start,
+        inpaint_end=inpaint_end,
+        continue_start=continue_start,
+        invert_timing=invert_timing,
+    )
+    try:
+        generation_queue.submit(job_id, task)
+    except GenerationQueueFull:
+        _remove_job(job_id)
+        return jsonify({
+            "error": "Generation queue is full. Try again after a job finishes.",
+            "queue_capacity": generation_queue.capacity,
+        }), 429
 
-    threading.Thread(
-        target=_execute_model_task,
-        args=(job_id, prompt, bpm, duration, loop, steps, cfg_scale, track_num),
-        kwargs={
-            "num_variants": num_variants,
-            "duration_padding_sec": duration_padding_sec,
-            "init_audio_path": init_audio_path,
-            "init_noise_level": init_noise_level,
-            "seed": seed,
-            "remix_mode": remix_mode,
-            "inpaint_start": inpaint_start,
-            "inpaint_end": inpaint_end,
-            "continue_start": continue_start,
-            "invert_timing": invert_timing
-        },
-        daemon=True,
-    ).start()
-
-    return jsonify({"job_id": job_id})
+    return jsonify({
+        "job_id": job_id,
+        "status": "queued",
+        "queue_position": generation_queue.position(job_id),
+    }), 202
 
 @app.post("/api/regenerate")
 def api_regenerate():
     data = request.json or {}
-    track_num = int(data.get("track_num"))
-    prompt = data.get("prompt", "").strip()
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+    prompt_value = data.get("prompt", "")
+    if not isinstance(prompt_value, str):
+        return jsonify({"error": "Prompt must be text"}), 400
+    prompt = prompt_value.strip()
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
 
-    bpm = max(40, min(300, int(data.get("bpm", 120))))
-    loop = bool(data.get("loop", True))
-    steps = int(data.get("steps", 8))
-    cfg_scale = float(data.get("cfg_scale", 1.0))
-    seed = int(data.get("seed", -1))
-    duration_padding_sec = float(data.get("duration_padding_sec", 0.0))
-    duration = float(data.get("duration", 960.0 / bpm))
+    try:
+        track_num = bounded_number(data, "track_num", None, int, 1, 1_000_000)
+        bpm = bounded_number(data, "bpm", 120, int, 40, 300)
+        loop = parse_loop(data.get("loop", True))
+        steps = bounded_number(data, "steps", 8, int, 1, MAX_STEPS)
+        cfg_scale = bounded_number(data, "cfg_scale", 1.0, float, 0.0, MAX_CFG_SCALE)
+        seed = bounded_number(data, "seed", -1, int, -1, 2_147_483_647)
+        duration_padding_sec = bounded_number(data, "duration_padding_sec", 2.0 if loop else 0.0, float, 0.0, MAX_PADDING_SECONDS)
+        duration = bounded_number(data, "duration", 960.0 / bpm, float, 1.0, MAX_DURATION_SECONDS)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
 
     
     unlocked_indices = data.get("unlocked_indices", [])
-    if not unlocked_indices:
+    if not isinstance(unlocked_indices, list) or not unlocked_indices:
         return jsonify({"error": "No unlocked indices provided"}), 400
+    try:
+        unlocked_indices = sorted({int(index) for index in unlocked_indices})
+    except (TypeError, ValueError):
+        return jsonify({"error": "unlocked_indices must contain integers"}), 400
+    if any(index < 0 or index >= 4 for index in unlocked_indices):
+        return jsonify({"error": "unlocked_indices must be between 0 and 3"}), 400
 
     job_id = uuid.uuid4().hex[:12]
-    with jobs_lock:
-        jobs[job_id] = {
-            "status": "queued",
-            "progress": None,
-            "error": None,
-            "elapsed": None,
-            "files": None,
-            "prompt": prompt,
-            "track_num": track_num,
-        }
+    _register_job(job_id, {
+        "status": "queued",
+        "progress": "Waiting for the generation worker…",
+        "error": None,
+        "elapsed": None,
+        "files": None,
+        "prompt": prompt,
+        "track_num": track_num,
+        "queue_position": None,
+    })
 
-    threading.Thread(
-        target=_execute_model_task,
-        args=(job_id, prompt, bpm, duration, loop, steps, cfg_scale, track_num),
-        kwargs={
-            "unlocked_indices": unlocked_indices,
-            "duration_padding_sec": duration_padding_sec,
-            "seed": seed
-        },
-        daemon=True
-    ).start()
+    task = GenerationTask(
+        job_id=job_id,
+        prompt=prompt,
+        bpm=bpm,
+        duration=duration,
+        loop=loop,
+        steps=steps,
+        cfg_scale=cfg_scale,
+        track_num=track_num,
+        unlocked_indices=tuple(unlocked_indices),
+        duration_padding_sec=duration_padding_sec,
+        seed=seed,
+    )
+    try:
+        generation_queue.submit(job_id, task)
+    except GenerationQueueFull:
+        _remove_job(job_id)
+        return jsonify({
+            "error": "Generation queue is full. Try again after a job finishes.",
+            "queue_capacity": generation_queue.capacity,
+        }), 429
 
-    return jsonify({"job_id": job_id})
+    return jsonify({
+        "job_id": job_id,
+        "status": "queued",
+        "queue_position": generation_queue.position(job_id),
+    }), 202
 
 @app.route("/status")
 def server_status():
@@ -626,9 +549,72 @@ def server_status():
 def api_status(job_id):
     with jobs_lock:
         job = jobs.get(job_id)
-    if not job:
+        response = dict(job) if job is not None else None
+    if response is None:
         return jsonify({"error": "Unknown job"}), 404
-    return jsonify(job)
+    queue_state = generation_queue.snapshot()
+    response["queue_position"] = generation_queue.position(job_id)
+    response["queue_depth"] = queue_state["queue_depth"]
+    response["queue_capacity"] = queue_state["capacity"]
+    response["active_job_id"] = queue_state["active_job_id"]
+    return jsonify(response)
+
+
+@app.post("/api/cancel/<job_id>")
+def api_cancel(job_id):
+    """Cancel only work that is still waiting in the generation queue."""
+    with jobs_lock:
+        job = jobs.get(job_id)
+        if job is None:
+            return jsonify({
+                "error": "Unknown job",
+                "job_id": job_id,
+                "cancelled": False,
+            }), 404
+        status = job.get("status", "unknown")
+
+    result = generation_queue.cancel(job_id)
+    if result is GenerationCancelResult.CANCELLED:
+        _mutate_job(
+            job_id,
+            status="cancelled",
+            progress=None,
+            error=None,
+            queue_position=None,
+        )
+        _prune_terminal_jobs()
+        return jsonify({
+            "job_id": job_id,
+            "status": "cancelled",
+            "cancelled": True,
+        }), 200
+
+    with jobs_lock:
+        current_job = jobs.get(job_id)
+        status = current_job.get("status", status) if current_job else status
+
+    if status == "cancelled":
+        return jsonify({
+            "job_id": job_id,
+            "status": "cancelled",
+            "cancelled": False,
+            "reason": "already_cancelled",
+        }), 200
+
+    if result is GenerationCancelResult.RUNNING:
+        return jsonify({
+            "error": "Job is already running and cannot be cancelled",
+            "job_id": job_id,
+            "status": "generating",
+            "cancelled": False,
+        }), 409
+
+    return jsonify({
+        "error": "Job is no longer pending and cannot be cancelled",
+        "job_id": job_id,
+        "status": status,
+        "cancelled": False,
+    }), 409
 
 @app.route("/api/delete_track/<int:track_num>", methods=["POST"])
 def api_delete_track(track_num):
@@ -646,16 +632,17 @@ def api_delete_track(track_num):
 @app.post("/api/delete_variant")
 def api_delete_variant():
     data = request.json or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
     file_path = data.get("file_path")
     if not file_path:
         return jsonify({"error": "File path is required"}), 400
 
-    # Prevent directory traversal attacks
-    safe_path = os.path.normpath(file_path).lstrip(os.path.sep)
-    if safe_path.startswith("..") or os.path.isabs(safe_path):
-        return jsonify({"error": "Invalid file path"}), 400
+    try:
+        full_path = resolve_output_path(file_path)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
 
-    full_path = os.path.join(OUTPUT_DIR, safe_path)
     if os.path.exists(full_path) and os.path.isfile(full_path):
         try:
             os.remove(full_path)
@@ -708,17 +695,16 @@ def api_convert():
         # Case A: Local file path on the server
         file_path = request.form.get("file_path")
         if file_path:
-            # Prevent directory traversal attacks
-            safe_path = os.path.normpath(file_path).lstrip(os.path.sep)
-            if safe_path.startswith("..") or os.path.isabs(safe_path):
-                return jsonify({"error": "Invalid file path"}), 400
-                
-            input_path = os.path.join(OUTPUT_DIR, safe_path)
-            if not os.path.exists(input_path):
+            try:
+                input_path = resolve_output_path(file_path)
+            except ValueError as error:
+                return jsonify({"error": str(error)}), 400
+
+            if not os.path.isfile(input_path):
                 return jsonify({"error": "File not found"}), 404
 
             if target_format == "wav":
-                return send_from_directory(OUTPUT_DIR, safe_path, as_attachment=True)
+                return send_file(input_path, as_attachment=True, download_name=os.path.basename(input_path))
                 
             out_filename = os.path.splitext(os.path.basename(input_path))[0] + f".{target_format}"
             output_path = os.path.join(OUTPUT_DIR, f"conv_{uuid.uuid4().hex}.{target_format}")

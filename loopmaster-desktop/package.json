@@ -4,7 +4,8 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "qa:frontend": "electron qa/frontend-qa.js"
   },
   "keywords": [],
   "author": "",

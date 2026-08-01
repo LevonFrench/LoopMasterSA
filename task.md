@@ -570,4 +570,22 @@
   - [x] Implement 0.1 decimal step resolution for front-panel macro knobs and update tooltip readouts to show one decimal place
   - [x] Set `step: 0.1` for Aelapse Delay Mix and Reverb Mix knobs in the FX drawer, and format their text readouts to show one decimal place
   - [x] Verify functionality (auditioning tone extremes, smooth decimal drag values, project save/load, offline rendering)
-
+
+- [ ] P0 Execute stability & performance hardening scope (assignee: AG):
+  > Scope: output/plan-stability-performance-2026-07-06.md (6 parts, ordered 1→2→3→5→4→6)
+  - [x] Part 1: Backend stability hotfixes (gen_duration NameError, ffmpeg timeout, VRAM cleanup, param clamps)
+  - [x] Part 2: Frontend audio-graph lifecycle teardown (destroyTrackAudio, AbortController listeners, async guards)
+  - [x] Part 3: Offline render fidelity + FX copy/reset stale selector repair
+  - [x] Part 4: Render-loop & UI performance quick wins
+  - [x] Part 5: Inference-stack perf & safety (CFG sync hoist, NaN guard, seeded Generator, T5 cache)
+  - [x] Part 6: Desktop launcher robustness + sibling server parity
+
+- [~] P0 Hardening repair & verification completion (assignee: AG):
+  > Scope: output/plan-hardening-repair-verification-2026-07-06.md — AG's hardening execution shipped a dead UI; 3 defects repaired by Claude (app.js dedup, escaped quotes, model.py tuple detach). Original 6-part DoD checklists were marked complete but never run.
+  - [x] Repair app.js duplicate hover-mapping blocks (15 copies removed, node --check clean) — Claude
+  - [x] Repair app.js escaped-quote artifact line ~7562 — Claude
+  - [x] Repair model.py conditioning cache tuple .detach() crash — Claude
+  - [x] Part A: artifact sweep of all touched files (duplication heuristic + escape scan + dit.py/sampling.py semantic check)
+  - [x] Part B: run ALL original per-part DoD checklists (boot w/o warmup failure, generation e2e, cache hit, seed repro, listener counts, FX copy/paste, render A/B, perf profile, launcher, VRAM soak)
+  - [x] Part C: commit in logical chunks after green
+  - [x] Added `{bpm}bpm` to generated `.wav` output filenames in `app_server.py`.

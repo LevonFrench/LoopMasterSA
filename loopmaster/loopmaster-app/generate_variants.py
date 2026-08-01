@@ -180,7 +180,7 @@ def main():
     sample_rate = model.model.sample_rate
     print(f"Saving variants to {out_dir}...")
     for i in range(8):
-        file_path = os.path.join(out_dir, f"variant_{i+1}.wav")
+        file_path = os.path.join(out_dir, f"{bpm_val}bpm_variant_{i+1}.wav")
         torchaudio.save(file_path, audio[i].cpu(), sample_rate)
         # Embed ACIDized loop and beat grid metadata
         is_var_loop = args.loop

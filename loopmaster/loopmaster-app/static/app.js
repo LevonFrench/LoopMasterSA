@@ -38,6 +38,76 @@
     const recordLogDrawer = document.getElementById('record-log-drawer');
     const recordLogList = document.getElementById('record-log-list');
     const btnClearRecordLog = document.getElementById('btn-clear-record-log');
+    const btnCancelGeneration = document.getElementById('btn-cancel-generation');
+
+    // CSP-safe presentation state.  Dynamic values live in data attributes and
+    // are consumed by CSS; code never creates inline style attributes.
+    function setPresentation(el, values) {
+        if (!el) return;
+        Object.entries(values).forEach(([key, value]) => {
+            if (key === 'transform') {
+                const rotation = String(value).match(/^rotate\(([^)]+)\)$/);
+                if (rotation) el.setAttribute('data-rotation', rotation[1]);
+                else el.removeAttribute('data-rotation');
+                return;
+            }
+            if (key === 'boxShadow') {
+                el.toggleAttribute('data-glow-active', Boolean(value && value !== 'none'));
+                return;
+            }
+            const name = `data-${key.replace(/[A-Z]/g, char => `-${char.toLowerCase()}`)}`;
+            if (value === null || value === undefined || value === '') el.removeAttribute(name);
+            else el.setAttribute(name, String(value));
+        });
+    }
+
+    function setHidden(el, hidden) {
+        if (!el) return;
+        el.hidden = Boolean(hidden);
+        el.classList.toggle('is-hidden', Boolean(hidden));
+    }
+
+    let activeGenerationJob = null;
+    function setGenerationCancelState(jobId, state = 'active') {
+        activeGenerationJob = jobId ? { id: jobId, state } : null;
+        if (!btnCancelGeneration) return;
+        setHidden(btnCancelGeneration, !activeGenerationJob);
+        btnCancelGeneration.disabled = !activeGenerationJob || state === 'cancelling';
+        btnCancelGeneration.textContent = state === 'cancelling' ? 'Cancelling…' : 'Cancel generation';
+        btnCancelGeneration.setAttribute('aria-label', state === 'cancelling'
+            ? 'Cancelling queued generation'
+            : 'Cancel queued generation. Running audio generation cannot be interrupted.');
+    }
+
+    async function cancelActiveGeneration() {
+        if (!activeGenerationJob || activeGenerationJob.state === 'cancelling') return;
+        const jobId = activeGenerationJob.id;
+        setGenerationCancelState(jobId, 'cancelling');
+        try {
+            const response = await fetch(`/api/cancel/${encodeURIComponent(jobId)}`, { method: 'POST' });
+            if (response.status === 200) {
+                activeGenerationJob = { id: jobId, state: 'cancelled' };
+                showStatus('Queued generation cancelled.', 'done');
+                return;
+            }
+            if (response.status === 409) {
+                setGenerationCancelState(jobId, 'active');
+                showStatus('Generation is already running and cannot be cancelled.', 'error');
+                return;
+            }
+            if (response.status === 404) {
+                setGenerationCancelState(null);
+                showStatus('Generation is no longer available.', 'error');
+                return;
+            }
+            throw new Error(`Cancel failed: ${response.status}`);
+        } catch (error) {
+            console.error('Unable to cancel generation:', error);
+            setGenerationCancelState(jobId, 'active');
+            showStatus('Could not cancel generation. It may still be running.', 'error');
+        }
+    }
+    if (btnCancelGeneration) btnCancelGeneration.addEventListener('click', cancelActiveGeneration);
 
 
 
@@ -148,7 +218,7 @@
         if (mapBtn) mapBtn.classList.add('active');
 
         const color = ['#10b981', '#00f2fe', '#facc15', '#ec4899'][num - 1];
-        document.body.style.setProperty('--lfo-mapping-color', color);
+        document.body.dataset.lfoMapping = String(num);
 
         const targets = document.querySelectorAll('.level-knob, .filtr-cutoff, .aelapse-delay-mix, .aelapse-reverb-mix, .pan-knob, .chorus-rate, .chorus-depth, .chorus-feedback, .phaser-rate, .phaser-depth, .phaser-feedback, .crusher-bits, .crusher-normfreq, #master-volume-slider');
         targets.forEach(target => {
@@ -360,6 +430,265 @@
         };
     }
 
+    /*
+     * TrackEffectGraph is the seam shared by the live AudioContext and the
+     * OfflineAudioContext renderer.  Its small interface accepts a source node
+     * plus the persisted track settings, and returns the nodes that callers
+     * need for UI updates or offline automation.  Keeping the wet/dry routing,
+     * effect order, and setting-to-node mapping here prevents the two playback
+     * adapters from silently drifting apart.
+     */
+    function normalizeTrackEffectSettings(settings = {}) {
+        const number = (value, fallback) => Number.isFinite(value) ? value : fallback;
+        const enabled = (value, fallback) => typeof value === 'boolean' ? value : fallback;
+        const oscillatorType = (value, fallback) => (
+            ['sine', 'square', 'sawtooth', 'triangle'].includes(value) ? value : fallback
+        );
+
+        return {
+            chorus: {
+                enabled: enabled(settings.tunaChorusEnabled, false),
+                rate: number(settings.tunaChorusRate, 1.5),
+                depth: number(settings.tunaChorusDepth, 0.7),
+                feedback: number(settings.tunaChorusFeedback, 0.2),
+                mix: number(settings.tunaChorusMix, 0.5)
+            },
+            phaser: {
+                enabled: enabled(settings.tunaPhaserEnabled, false),
+                rate: number(settings.tunaPhaserRate, 1.2),
+                depth: number(settings.tunaPhaserDepth, 0.6),
+                feedback: number(settings.tunaPhaserFeedback, 0.2),
+                mix: number(settings.tunaPhaserMix, 0.5)
+            },
+            crusher: {
+                enabled: enabled(settings.tunaBitcrusherEnabled, false),
+                bits: number(settings.tunaBitcrusherBits, 8),
+                normfreq: number(settings.tunaBitcrusherNormfreq, 0.1),
+                mix: number(settings.tunaBitcrusherMix, 0.5)
+            },
+            delay: {
+                enabled: enabled(settings.aelapseDelayEnabled, true),
+                time: number(settings.aelapseDelayTime, 0.3),
+                feedback: number(settings.aelapseFeedback, 0.3),
+                mix: number(settings.aelapseDelayMix, 0),
+                wowRate: number(settings.aelapseDelayWowRate, 2.0),
+                wowDepth: number(settings.aelapseDelayWowDepth, 0)
+            },
+            reverb: {
+                enabled: enabled(settings.aelapseReverbEnabled, true),
+                mix: number(settings.aelapseReverbMix, 0),
+                size: number(settings.aelapseReverbSize, 2.0),
+                preDelay: number(settings.aelapseReverbPreDelay, 0),
+                damp: number(settings.aelapseReverbDamp, 20000)
+            },
+            tremolo: {
+                enabled: enabled(settings.tremoloEnabled, false),
+                rate: number(settings.tremoloRate, 5.0),
+                depth: number(settings.tremoloDepth, 0),
+                shape: oscillatorType(settings.tremoloShape, 'sine')
+            },
+            gate: {
+                enabled: enabled(settings.gateEnabled, false),
+                syncIndex: number(settings.gateSyncIndex, 2),
+                width: number(settings.gateWidth, 0.5),
+                shape: oscillatorType(settings.gateShape, 'square'),
+                mix: number(settings.gateMix, 0.5)
+            }
+        };
+    }
+
+    function getTempoGateFrequency(bpm, rawSyncIndex) {
+        const syncBeats = [0.25, 0.333, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0];
+        const syncIndex = Math.max(0, Math.min(syncBeats.length - 1, Math.round(rawSyncIndex)));
+        const safeBpm = Number.isFinite(bpm) && bpm > 0 ? bpm : 120;
+        return 1.0 / ((60.0 / safeBpm) * syncBeats[syncIndex]);
+    }
+
+    const TrackEffectGraph = Object.freeze({
+        buildInsertChain(ctx, input, rawSettings = {}) {
+            const settings = normalizeTrackEffectSettings(rawSettings);
+            const createWetDryStage = (source, effectNode, isEnabled, mix) => {
+                const dry = ctx.createGain();
+                const wet = ctx.createGain();
+                const sum = ctx.createGain();
+                const safeMix = Math.max(0, Math.min(1, mix));
+                dry.gain.value = isEnabled ? 1.0 - safeMix : 1.0;
+                wet.gain.value = isEnabled ? safeMix : 0.0;
+                source.connect(dry);
+                dry.connect(sum);
+                source.connect(effectNode.input);
+                effectNode.output.connect(wet);
+                wet.connect(sum);
+                return { dry, wet, sum };
+            };
+
+            const chorusNode = createNativeChorus(ctx);
+            chorusNode.rate = settings.chorus.rate;
+            chorusNode.depth = settings.chorus.depth;
+            chorusNode.feedback = settings.chorus.feedback;
+            const chorus = createWetDryStage(input, chorusNode, settings.chorus.enabled, settings.chorus.mix);
+
+            const phaserNode = createNativePhaser(ctx);
+            phaserNode.rate = settings.phaser.rate;
+            phaserNode.depth = settings.phaser.depth;
+            phaserNode.feedback = settings.phaser.feedback;
+            const phaser = createWetDryStage(chorus.sum, phaserNode, settings.phaser.enabled, settings.phaser.mix);
+
+            const crusherNode = createNativeBitcrusher(ctx);
+            crusherNode.bits = settings.crusher.bits;
+            crusherNode.normfreq = settings.crusher.normfreq;
+            const crusher = createWetDryStage(phaser.sum, crusherNode, settings.crusher.enabled, settings.crusher.mix);
+
+            return {
+                input,
+                output: crusher.sum,
+                tunaChorusNode: chorusNode,
+                tunaChorusDryGain: chorus.dry,
+                tunaChorusWetGain: chorus.wet,
+                tunaChorusSum: chorus.sum,
+                tunaPhaserNode: phaserNode,
+                tunaPhaserDryGain: phaser.dry,
+                tunaPhaserWetGain: phaser.wet,
+                tunaPhaserSum: phaser.sum,
+                tunaBitcrusherNode: crusherNode,
+                tunaBitcrusherDryGain: crusher.dry,
+                tunaBitcrusherWetGain: crusher.wet,
+                tunaBitcrusherSum: crusher.sum
+            };
+        },
+
+        // Tremolo and gate are one ordered modulation stage for both realtime
+        // playback and OfflineAudioContext rendering.  Callers retain the
+        // returned nodes for their existing realtime controls and automation.
+        buildModulationChain(ctx, input, rawSettings = {}, bpm = 120) {
+            const settings = normalizeTrackEffectSettings(rawSettings);
+            const tremoloGainNode = ctx.createGain();
+            tremoloGainNode.gain.value = 1.0;
+            const tremoloLfoNode = ctx.createOscillator();
+            tremoloLfoNode.type = settings.tremolo.shape;
+            tremoloLfoNode.frequency.value = settings.tremolo.rate;
+            const tremoloLfoGainNode = ctx.createGain();
+            tremoloLfoGainNode.gain.value = settings.tremolo.enabled ? settings.tremolo.depth : 0.0;
+            tremoloLfoNode.connect(tremoloLfoGainNode);
+            tremoloLfoGainNode.connect(tremoloGainNode.gain);
+            tremoloLfoNode.start();
+
+            const gateInputNode = ctx.createGain();
+            const gateOutputNode = ctx.createGain();
+            const gateDryGainNode = ctx.createGain();
+            const gateWetGainNode = ctx.createGain();
+            const gateGatedGainNode = ctx.createGain();
+            const gateLfoNode = ctx.createOscillator();
+            gateLfoNode.type = settings.gate.shape;
+            gateLfoNode.frequency.value = getTempoGateFrequency(bpm, settings.gate.syncIndex);
+            const gateBiasNode = ctx.createGain();
+            gateBiasNode.gain.value = 2.0 * (settings.gate.width - 0.5);
+            const gateDcSource = ctx.createConstantSource ? ctx.createConstantSource() : null;
+            if (gateDcSource) {
+                gateDcSource.offset.value = 1.0;
+                gateDcSource.start();
+                gateDcSource.connect(gateBiasNode);
+            }
+            const gateSumNode = ctx.createGain();
+            const gateShaperNode = ctx.createWaveShaper();
+            gateShaperNode.curve = Float32Array.from([0.0, 1.0]);
+
+            gateLfoNode.connect(gateSumNode);
+            gateBiasNode.connect(gateSumNode);
+            gateSumNode.connect(gateShaperNode);
+            gateShaperNode.connect(gateGatedGainNode.gain);
+            gateLfoNode.start();
+
+            const safeGateMix = Math.max(0, Math.min(1, settings.gate.mix));
+            gateDryGainNode.gain.value = settings.gate.enabled ? 1.0 - safeGateMix : 1.0;
+            gateWetGainNode.gain.value = settings.gate.enabled ? safeGateMix : 0.0;
+            input.connect(tremoloGainNode);
+            tremoloGainNode.connect(gateInputNode);
+            gateInputNode.connect(gateDryGainNode);
+            gateDryGainNode.connect(gateOutputNode);
+            gateInputNode.connect(gateWetGainNode);
+            gateWetGainNode.connect(gateGatedGainNode);
+            gateGatedGainNode.connect(gateOutputNode);
+
+            return {
+                input,
+                output: gateOutputNode,
+                tremoloGainNode,
+                tremoloLfoNode,
+                tremoloLfoGainNode,
+                gateInputNode,
+                gateOutputNode,
+                gateDryGainNode,
+                gateWetGainNode,
+                gateGatedGainNode,
+                gateLfoNode,
+                gateBiasNode,
+                gateSumNode,
+                gateShaperNode,
+                gateDcSource
+            };
+        },
+
+        buildSendChain(ctx, input, rawSettings = {}) {
+            const settings = normalizeTrackEffectSettings(rawSettings);
+            const dryGain = ctx.createGain();
+            dryGain.gain.value = 1.0;
+            const sum = ctx.createGain();
+            input.connect(dryGain);
+            dryGain.connect(sum);
+
+            const delay = ctx.createDelay(5.0);
+            delay.delayTime.value = settings.delay.time;
+            const delayFeedback = ctx.createGain();
+            delayFeedback.gain.value = settings.delay.feedback;
+            const delayGain = ctx.createGain();
+            delayGain.gain.value = settings.delay.enabled ? settings.delay.mix : 0.0;
+            const delayLfo = ctx.createOscillator();
+            delayLfo.frequency.value = settings.delay.wowRate;
+            const delayLfoGain = ctx.createGain();
+            delayLfoGain.gain.value = settings.delay.wowDepth;
+            delayLfo.connect(delayLfoGain);
+            delayLfoGain.connect(delay.delayTime);
+            delayLfo.start();
+            input.connect(delay);
+            delay.connect(delayFeedback);
+            delayFeedback.connect(delay);
+            delay.connect(delayGain);
+            delayGain.connect(sum);
+
+            const reverbPreDelay = ctx.createDelay(1.0);
+            reverbPreDelay.delayTime.value = settings.reverb.preDelay;
+            const reverb = ctx.createConvolver();
+            reverb.buffer = createSpringImpulseResponse(ctx, settings.reverb.size, 2.5);
+            const reverbDampFilter = ctx.createBiquadFilter();
+            reverbDampFilter.type = 'lowpass';
+            reverbDampFilter.frequency.value = settings.reverb.damp;
+            const reverbGain = ctx.createGain();
+            reverbGain.gain.value = settings.reverb.enabled ? settings.reverb.mix : 0.0;
+            input.connect(reverbPreDelay);
+            reverbPreDelay.connect(reverb);
+            reverb.connect(reverbDampFilter);
+            reverbDampFilter.connect(reverbGain);
+            reverbGain.connect(sum);
+
+            return {
+                input,
+                output: sum,
+                aelapseDryGain: dryGain,
+                aelapseDelay: delay,
+                aelapseFeedbackNode: delayFeedback,
+                aelapseDelayGain: delayGain,
+                aelapseLFO: delayLfo,
+                aelapseLFOGain: delayLfoGain,
+                reverbPreDelay,
+                aelapseReverb: reverb,
+                reverbDampFilter,
+                aelapseReverbGain: reverbGain,
+                sendSumGain: sum
+            };
+        }
+    });
+
     function createSpringImpulseResponse(audioCtx, duration, decay) {
         const sampleRate = audioCtx.sampleRate;
         const len = sampleRate * duration;
@@ -386,15 +715,22 @@
     function toggleGlobalModulators() {
         const modulatorsPanel = document.getElementById('modulators-panel');
         if (!modulatorsPanel) return;
-        const isHidden = modulatorsPanel.style.display === 'none';
-        const nextState = isHidden ? 'block' : 'none';
-        modulatorsPanel.style.display = nextState;
+        const isOpen = !modulatorsPanel.classList.contains('is-open');
+        modulatorsPanel.classList.toggle('is-open', isOpen);
 
         // Update all MOD buttons to match the drawer open state
-        const isOpen = nextState === 'block';
         document.querySelectorAll('.mod-btn').forEach(btn => {
             btn.classList.toggle('is-on', isOpen);
+            setToggleButtonPressed(btn, isOpen);
         });
+    }
+
+    function setToggleButtonPressed(button, pressed) {
+        if (button) button.setAttribute('aria-pressed', String(Boolean(pressed)));
+    }
+
+    function syncTrackTogglePressed(track, selector, pressed) {
+        setToggleButtonPressed(track.wrapper?.querySelector(selector), pressed);
     }
 
     function calcDuration(bpm) { return 960 / bpm; }
@@ -489,7 +825,7 @@
             // Show master meter section
             const masterMeterSection = document.getElementById('master-meter-section');
             if (masterMeterSection) {
-                masterMeterSection.style.display = 'flex';
+                setPresentation(masterMeterSection, { display: 'flex' });
             }
 
             // Start meter animation loop
@@ -550,9 +886,9 @@
                 if (el) el.textContent = ['1/16', '1/8T', '1/8', 'd8th', '1/4', 'd1/4', '1/2', 'd1/2', '1/1'][track.delaySyncIndex];
             }
             if (track.gateLfoNode && track.gateSyncIndex !== undefined) {
-                const period = (60.0 / bpm) * syncBeats[track.gateSyncIndex];
-                const freq = 1.0 / period;
-                track.gateLfoNode.frequency.setValueAtTime(freq, ctx.currentTime);
+                track.gateLfoNode.frequency.setValueAtTime(
+                    getTempoGateFrequency(bpm, track.gateSyncIndex), ctx.currentTime
+                );
                 const el = track.wrapper?.querySelector('.gate-sync-val');
                 if (el) el.textContent = ['1/16', '1/8T', '1/8', 'd8th', '1/4', 'd1/4', '1/2', 'd1/2', '1/1'][track.gateSyncIndex];
             }
@@ -569,7 +905,7 @@
         const DEADZONE = 3;
         let pending = false, activated = false, startY = 0, startVal = 0;
 
-        inputEl.style.cursor = 'ns-resize';
+        setPresentation(inputEl, { cursor: 'ns-resize' });
 
         inputEl.addEventListener('mousedown', (e) => {
             // If already focused (typing), don't interfere
@@ -587,7 +923,7 @@
             if (!activated && dy >= DEADZONE) {
                 activated = true;
                 inputEl.blur();
-                document.body.style.cursor = 'ns-resize';
+                setPresentation(document.body, { cursor: 'ns-resize' });
             }
             if (activated) {
                 const delta = (startY - e.clientY) * (sensitivity || 1);
@@ -607,7 +943,7 @@
                 }
                 pending = false;
                 activated = false;
-                document.body.style.cursor = '';
+                setPresentation(document.body, { cursor: null });
             }
         });
 
@@ -762,7 +1098,7 @@
                 destroyTrackAudio(old.data.track);
             }
         }
-        if (btnUndo) btnUndo.style.display = 'inline-flex';
+        if (btnUndo) setPresentation(btnUndo, { display: 'inline-flex' });
     }
 
     function performUndo() {
@@ -799,12 +1135,12 @@
                 startTrackSource(t);
             }
         }
-        if (undoStack.length === 0 && btnUndo) btnUndo.style.display = 'none';
+        if (undoStack.length === 0 && btnUndo) setPresentation(btnUndo, { display: 'none' });
     }
 
     if (btnUndo) {
         btnUndo.addEventListener('click', performUndo);
-        btnUndo.style.display = 'none';
+        setPresentation(btnUndo, { display: 'none' });
     }
 
     function deleteTrackRow(track) {
@@ -1358,7 +1694,7 @@
             if (panKnob) {
                 const deg = pan * 135;
                 const indicator = panKnob.querySelector('.pan-knob-indicator');
-                if (indicator) indicator.style.transform = `rotate(${deg}deg)`;
+                if (indicator) setPresentation(indicator, { transform: `rotate(${deg}deg)` });
                 const panText = track.wrapper.querySelector('.pan-value');
                 const displayVal = Math.round(pan * 100);
                 if (panText) {
@@ -1488,7 +1824,7 @@
 
     function renderLFOVisualizers(currentTime) {
         const modulatorsPanel = document.getElementById('modulators-panel');
-        if (!modulatorsPanel || modulatorsPanel.style.display === 'none') return;
+        if (!modulatorsPanel || !modulatorsPanel.classList.contains('is-open')) return;
 
         const bpm = parseInt(bpmInput.value) || 120;
         const colors = ['#10b981', '#00f2fe', '#facc15', '#ec4899'];
@@ -1539,13 +1875,13 @@
             if (led) {
                 if (lfo.enabled) {
                     const intensity = (val + 1.0) / 2.0; // 0 to 1
-                    led.style.opacity = (0.2 + 0.8 * intensity).toString();
-                    led.style.boxShadow = `0 0 ${Math.round(2 + 8 * intensity)}px ${colors[num - 1]}`;
-                    led.style.color = colors[num - 1];
+                    setPresentation(led, { opacity: (0.2 + 0.8 * intensity).toString() });
+                    setPresentation(led, { boxShadow: `0 0 ${Math.round(2 + 8 * intensity)}px ${colors[num - 1]}` });
+                    setPresentation(led, { color: colors[num - 1] });
                 } else {
-                    led.style.opacity = '0.15';
-                    led.style.boxShadow = 'none';
-                    led.style.color = 'var(--text-tertiary)';
+                    setPresentation(led, { opacity: '0.15' });
+                    setPresentation(led, { boxShadow: 'none' });
+                    setPresentation(led, { color: 'var(--text-tertiary)' });
                 }
             }
 
@@ -1694,7 +2030,7 @@
                 if (v.seekBarEl) {
                     const dur = (v.loopMultiplier || 1) * globalDuration;
                     const localProgress = (currentTime % dur) / dur;
-                    v.seekBarEl.style.setProperty('--progress', localProgress.toString());
+                    setPresentation(v.seekBarEl, { progress: localProgress.toString() });
                 }
             });
         });
@@ -1702,11 +2038,11 @@
         if (arrangerModeActive) {
             const playheadLine = document.getElementById('arranger-playhead-line');
             if (playheadLine) {
-                playheadLine.style.left = `${pct * 100}%`;
+                setPresentation(playheadLine, { left: `${pct * 100}%` });
             }
             const timeBarProgress = document.getElementById('arranger-time-bar-progress');
             if (timeBarProgress) {
-                timeBarProgress.style.width = `${pct * 100}%`;
+                setPresentation(timeBarProgress, { width: `${pct * 100}%` });
             }
         }
     }
@@ -1798,6 +2134,7 @@
 
     function updateEqBypass(track) {
         const ctx = ensureAudioCtx();
+        syncTrackTogglePressed(track, '.eq-toggle', track.eqEnabled);
         if (track.eqEnabled) {
             track.eqDryGainNode.gain.setTargetAtTime(0.0, ctx.currentTime, 0.01);
             track.eqWetGainNode.gain.setTargetAtTime(1.0, ctx.currentTime, 0.01);
@@ -1811,6 +2148,8 @@
 
     function updateAelapseBypass(track) {
         const ctx = ensureAudioCtx();
+        syncTrackTogglePressed(track, '.aelapse-delay-toggle', track.aelapseDelayEnabled);
+        syncTrackTogglePressed(track, '.aelapse-reverb-toggle', track.aelapseReverbEnabled);
         const delayMix = track.aelapseDelayEnabled ? track.aelapseDelayMix : 0.0;
         const reverbMix = track.aelapseReverbEnabled ? track.aelapseReverbMix : 0.0;
         track.aelapseDelayGainNode.gain.setTargetAtTime(delayMix, ctx.currentTime, 0.01);
@@ -1820,6 +2159,7 @@
 
     function updateFiltrBypass(track) {
         const ctx = ensureAudioCtx();
+        syncTrackTogglePressed(track, '.filtr-toggle', track.filtrEnabled);
         if (track.filtrEnabled) {
             const mix = track.filtrMix;
             track.filtrDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
@@ -1832,6 +2172,7 @@
 
     function updateScreamBypass(track) {
         const ctx = ensureAudioCtx();
+        syncTrackTogglePressed(track, '.scream-toggle', track.screamEnabled);
         if (track.screamEnabled) {
             const mix = track.screamMix;
             track.screamDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
@@ -1844,6 +2185,7 @@
 
     function updateTunaChorusBypass(track) {
         const ctx = ensureAudioCtx();
+        syncTrackTogglePressed(track, '.chorus-toggle', track.tunaChorusEnabled);
         if (track.tunaChorusEnabled) {
             const mix = track.tunaChorusMix;
             track.tunaChorusDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
@@ -1856,6 +2198,7 @@
 
     function updateTunaPhaserBypass(track) {
         const ctx = ensureAudioCtx();
+        syncTrackTogglePressed(track, '.phaser-toggle', track.tunaPhaserEnabled);
         if (track.tunaPhaserEnabled) {
             const mix = track.tunaPhaserMix;
             track.tunaPhaserDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
@@ -1868,6 +2211,7 @@
 
     function updateTunaBitcrusherBypass(track) {
         const ctx = ensureAudioCtx();
+        syncTrackTogglePressed(track, '.crusher-toggle', track.tunaBitcrusherEnabled);
         if (track.tunaBitcrusherEnabled) {
             const mix = track.tunaBitcrusherMix;
             track.tunaBitcrusherDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
@@ -1880,6 +2224,7 @@
 
     function updateTremoloBypass(track) {
         const ctx = ensureAudioCtx();
+        syncTrackTogglePressed(track, '.tremolo-toggle', track.tremoloEnabled);
         if (track.tremoloEnabled) {
             track.tremoloLfoGainNode.gain.setTargetAtTime(track.tremoloDepth, ctx.currentTime, 0.01);
         } else {
@@ -1889,6 +2234,7 @@
 
     function updateGateBypass(track) {
         const ctx = ensureAudioCtx();
+        syncTrackTogglePressed(track, '.gate-toggle', track.gateEnabled);
         if (track.gateEnabled) {
             const mix = track.gateMix;
             track.gateDryGainNode.gain.setTargetAtTime(1.0 - mix, ctx.currentTime, 0.01);
@@ -1902,11 +2248,10 @@
     function updateGateFrequency(track) {
         const ctx = ensureAudioCtx();
         const bpm = parseInt(bpmInput.value) || 120;
-        const syncBeats = [0.25, 0.333, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0];
         const syncIdx = track.gateSyncIndex !== undefined ? track.gateSyncIndex : 2;
-        const period = (60.0 / bpm) * syncBeats[syncIdx];
-        const freq = 1.0 / period;
-        track.gateLfoNode.frequency.setTargetAtTime(freq, ctx.currentTime, 0.02);
+        track.gateLfoNode.frequency.setTargetAtTime(
+            getTempoGateFrequency(bpm, syncIdx), ctx.currentTime, 0.02
+        );
     }
 
     function updateGateWidth(track) {
@@ -1998,6 +2343,40 @@
         }
     }
 
+    function setupKeyboardSlider(knobEl, options) {
+        const { min, max, step, getValue, setValue, label, isDisabled, signal } = options;
+        knobEl.setAttribute('role', 'slider');
+        knobEl.setAttribute('tabindex', '0');
+        knobEl.setAttribute('aria-label', label || knobEl.title || 'Audio control');
+        knobEl.setAttribute('aria-valuemin', String(min));
+        knobEl.setAttribute('aria-valuemax', String(max));
+
+        const sync = () => {
+            const value = getValue();
+            knobEl.setAttribute('aria-valuenow', String(value));
+            knobEl.setAttribute('aria-valuetext', String(value));
+        };
+        const listenerOptions = signal ? { signal } : undefined;
+        knobEl.addEventListener('keydown', (e) => {
+            if (isDisabled && isDisabled()) return;
+            const value = getValue();
+            const multiplier = e.shiftKey ? 10 : 1;
+            let nextValue = null;
+            if (e.key === 'ArrowUp' || e.key === 'ArrowRight') nextValue = value + step * multiplier;
+            else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') nextValue = value - step * multiplier;
+            else if (e.key === 'PageUp') nextValue = value + step * 10;
+            else if (e.key === 'PageDown') nextValue = value - step * 10;
+            else if (e.key === 'Home') nextValue = min;
+            else if (e.key === 'End') nextValue = max;
+            if (nextValue === null) return;
+            e.preventDefault();
+            setValue(Math.max(min, Math.min(max, nextValue)));
+            sync();
+        }, listenerOptions);
+        sync();
+        return sync;
+    }
+
     function initKnob(knobEl, onChange, options = {}) {
         const min = options.min !== undefined ? options.min : 0;
         const max = options.max !== undefined ? options.max : 100;
@@ -2005,28 +2384,54 @@
         const defaultVal = options.defaultVal !== undefined ? options.defaultVal : min;
         let value = options.value !== undefined ? options.value : defaultVal;
         const sensitivity = options.sensitivity || 0.005;
+        const ariaLabel = options.ariaLabel || knobEl.getAttribute('aria-label') || knobEl.title || 'Audio control';
 
         function updateKnobRotation(val) {
             const fraction = (val - min) / (max - min);
             const deg = -135 + fraction * 270;
             const indicator = knobEl.querySelector('.knob-indicator, .macro-knob-indicator, .pan-knob-indicator, .mini-knob-indicator');
             if (indicator) {
-                indicator.style.transform = `rotate(${deg}deg)`;
+                setPresentation(indicator, { transform: `rotate(${deg}deg)` });
             }
         }
 
+        function updateAccessibility(val) {
+            syncKnobAccessibility();
+            knobEl.setAttribute('aria-valuenow', String(val));
+            knobEl.setAttribute('aria-valuetext', options.formatValue ? options.formatValue(val) : String(val));
+        }
+
+        function setValue(nextValue, emitInput = false) {
+            const parsed = parseFloat(nextValue);
+            if (Number.isNaN(parsed)) return false;
+            value = Math.max(min, Math.min(max, parsed));
+            updateKnobRotation(value);
+            onChange(value);
+            updateAccessibility(value);
+            if (emitInput) knobEl.dispatchEvent(new Event('input'));
+            return true;
+        }
+
+        const syncKnobAccessibility = setupKeyboardSlider(knobEl, {
+            min,
+            max,
+            step,
+            label: ariaLabel,
+            getValue: () => value,
+            setValue: (nextValue) => setValue(nextValue, true),
+            isDisabled: () => knobEl.disabled || knobEl.closest('.track-wrapper')?.classList.contains('track-locked'),
+            signal: options.signal
+        });
+
         // Set initial rotation
         updateKnobRotation(value);
+        updateAccessibility(value);
 
         // Define .value property on the DOM element
         Object.defineProperty(knobEl, 'value', {
             get: () => value,
             set: (val) => {
-                const parsed = parseFloat(val);
-                if (isNaN(parsed)) return;
-                value = Math.max(min, Math.min(max, parsed));
-                updateKnobRotation(value);
-                onChange(value);
+                setValue(val);
             },
             configurable: true
         });
@@ -2043,7 +2448,7 @@
             dragging = true;
             startY = e.clientY;
             startVal = value;
-            document.body.style.cursor = 'ns-resize';
+            setPresentation(document.body, { cursor: 'ns-resize' });
         });
 
         const listenerOpts = options.signal ? { signal: options.signal } : undefined;
@@ -2059,16 +2464,13 @@
             }
             newVal = Math.max(min, Math.min(max, newVal));
 
-            value = newVal;
-            updateKnobRotation(value);
-            onChange(value);
-            knobEl.dispatchEvent(new Event('input'));
+            setValue(newVal, true);
         }, listenerOpts);
 
         document.addEventListener('mouseup', () => {
             if (dragging) {
                 dragging = false;
-                document.body.style.cursor = '';
+                setPresentation(document.body, { cursor: null });
             }
         }, listenerOpts);
 
@@ -2076,14 +2478,12 @@
             e.stopPropagation();
             if (knobEl.disabled) return;
             if (knobEl.closest('.track-wrapper')?.classList.contains('track-locked')) return;
-            value = defaultVal;
-            updateKnobRotation(value);
-            onChange(value);
-            knobEl.dispatchEvent(new Event('input'));
+            setValue(defaultVal, true);
         });
 
         knobEl.addEventListener('input', () => {
             updateKnobRotation(value);
+            updateAccessibility(value);
         });
 
         return knobEl;
@@ -2145,9 +2545,9 @@ function updateTrackLockState(track) {
         const panKnobEl = track.el.querySelector('.pan-knob');
         if (levelKnobEl) {
             levelKnobEl.disabled = isLocked;
-            levelKnobEl.style.pointerEvents = isLocked ? 'none' : '';
+            setPresentation(levelKnobEl, { pointerEvents: isLocked ? 'none' : '' });
         }
-        if (panKnobEl) panKnobEl.style.pointerEvents = isLocked ? 'none' : '';
+        if (panKnobEl) setPresentation(panKnobEl, { pointerEvents: isLocked ? 'none' : '' });
         const pasteTrackBtnEl = track.el.querySelector('.paste-track-btn');
         if (pasteTrackBtnEl) pasteTrackBtnEl.disabled = isLocked;
 
@@ -2389,174 +2789,35 @@ function updateTrackLockState(track) {
         screamShaper.connect(screamWetGain);
         screamWetGain.connect(screamSum);
 
-        // 3. Native DSP Nodes (Chorus, Phaser, Bitcrusher) replacing Tuna.js
-        const tunaChorusNode = createNativeChorus(ctx);
-        tunaChorusNode.rate = 1.5;
-        tunaChorusNode.depth = 0.7;
+        // 3. Shared native insert stages. The offline renderer uses this same
+        // interface, so the chorus -> phaser -> crusher route has one source.
+        const liveInsertEffects = TrackEffectGraph.buildInsertChain(ctx, screamSum);
+        const {
+            tunaChorusNode, tunaChorusDryGain, tunaChorusWetGain, tunaChorusSum,
+            tunaPhaserNode, tunaPhaserDryGain, tunaPhaserWetGain, tunaPhaserSum,
+            tunaBitcrusherNode, tunaBitcrusherDryGain, tunaBitcrusherWetGain, tunaBitcrusherSum
+        } = liveInsertEffects;
 
-        const tunaChorusDryGain = ctx.createGain();
-        tunaChorusDryGain.gain.value = 0.5;
-        const tunaChorusWetGain = ctx.createGain();
-        tunaChorusWetGain.gain.value = 0.5;
-        const tunaChorusSum = ctx.createGain();
+        // 4.5. Shared tremolo -> gate stage.  This is deliberately built by
+        // TrackEffectGraph as well, so live playback and export cannot drift.
+        const liveModulationEffects = TrackEffectGraph.buildModulationChain(
+            ctx, liveInsertEffects.output, {}, parseInt(bpmInput.value) || 120
+        );
+        const {
+            tremoloGainNode, tremoloLfoNode, tremoloLfoGainNode,
+            gateInputNode, gateOutputNode, gateDryGainNode, gateWetGainNode,
+            gateGatedGainNode, gateLfoNode, gateBiasNode, gateSumNode,
+            gateShaperNode, gateDcSource
+        } = liveModulationEffects;
 
-        screamSum.connect(tunaChorusDryGain);
-        tunaChorusDryGain.connect(tunaChorusSum);
-        screamSum.connect(tunaChorusNode.input);
-        tunaChorusNode.output.connect(tunaChorusWetGain);
-        tunaChorusWetGain.connect(tunaChorusSum);
-
-        const tunaPhaserNode = createNativePhaser(ctx);
-        tunaPhaserNode.rate = 1.2;
-        tunaPhaserNode.depth = 0.6;
-
-        const tunaPhaserDryGain = ctx.createGain();
-        tunaPhaserDryGain.gain.value = 0.5;
-        const tunaPhaserWetGain = ctx.createGain();
-        tunaPhaserWetGain.gain.value = 0.5;
-        const tunaPhaserSum = ctx.createGain();
-
-        tunaChorusSum.connect(tunaPhaserDryGain);
-        tunaPhaserDryGain.connect(tunaPhaserSum);
-        tunaChorusSum.connect(tunaPhaserNode.input);
-        tunaPhaserNode.output.connect(tunaPhaserWetGain);
-        tunaPhaserWetGain.connect(tunaPhaserSum);
-
-        const tunaBitcrusherNode = createNativeBitcrusher(ctx);
-        tunaBitcrusherNode.bits = 8;
-        tunaBitcrusherNode.normfreq = 0.1;
-
-        const tunaBitcrusherDryGain = ctx.createGain();
-        tunaBitcrusherDryGain.gain.value = 0.5;
-        const tunaBitcrusherWetGain = ctx.createGain();
-        tunaBitcrusherWetGain.gain.value = 0.5;
-        const tunaBitcrusherSum = ctx.createGain();
-
-        tunaPhaserSum.connect(tunaBitcrusherDryGain);
-        tunaBitcrusherDryGain.connect(tunaBitcrusherSum);
-        tunaPhaserSum.connect(tunaBitcrusherNode.input);
-        tunaBitcrusherNode.output.connect(tunaBitcrusherWetGain);
-        tunaBitcrusherWetGain.connect(tunaBitcrusherSum);
-
-        // 4. DSP Chain Stage C: Aelapse Delay & Spring Reverb (SEND EFFECT setup)
-        const aelapseDryGain = ctx.createGain();
-        aelapseDryGain.gain.value = 1.0; // Dry path always 1.0
-
-        const aelapseDelay = ctx.createDelay(5.0);
-        aelapseDelay.delayTime.value = 0.3;
-
-        const aelapseFeedbackNode = ctx.createGain();
-        aelapseFeedbackNode.gain.value = 0.3;
-
-        const aelapseDelayGain = ctx.createGain();
-        aelapseDelayGain.gain.value = 0.0; // mix 0%
-
-        // Wow/flutter drift LFO modulation
-        const aelapseLFO = ctx.createOscillator();
-        aelapseLFO.frequency.value = 2.0;
-        const aelapseLFOGain = ctx.createGain();
-        aelapseLFOGain.gain.value = 0.0;
-        aelapseLFO.connect(aelapseLFOGain);
-        aelapseLFOGain.connect(aelapseDelay.delayTime);
-        aelapseLFO.start();
-
-        // Spring Reverb with Pre-delay and Damp filter
-        const reverbPreDelay = ctx.createDelay(1.0);
-        reverbPreDelay.delayTime.value = 0.0; // default pre-delay 0s
-
-        const aelapseReverb = ctx.createConvolver();
-        aelapseReverb.buffer = createSpringImpulseResponse(ctx, 2.0, 2.5);
-
-        const reverbDampFilter = ctx.createBiquadFilter();
-        reverbDampFilter.type = 'lowpass';
-        reverbDampFilter.frequency.value = 20000; // default damp 20kHz
-
-        const aelapseReverbGain = ctx.createGain();
-        aelapseReverbGain.gain.value = 0.0; // mix 0%
-
-        const sendSumGain = ctx.createGain();
-
-        // 4.5. Tremolo Setup
-        const tremoloGainNode = ctx.createGain();
-        tremoloGainNode.gain.value = 1.0;
-
-        const tremoloLfoNode = ctx.createOscillator();
-        tremoloLfoNode.type = 'sine';
-        tremoloLfoNode.frequency.value = 5.0;
-
-        const tremoloLfoGainNode = ctx.createGain();
-        tremoloLfoGainNode.gain.value = 0.0; // depth 0
-
-        tremoloLfoNode.connect(tremoloLfoGainNode);
-        tremoloLfoGainNode.connect(tremoloGainNode.gain);
-        tremoloLfoNode.start();
-
-        // 4.6. Gate Setup
-        const gateInputNode = ctx.createGain();
-        gateInputNode.gain.value = 1.0;
-        const gateOutputNode = ctx.createGain();
-        gateOutputNode.gain.value = 1.0;
-
-        const gateDryGainNode = ctx.createGain();
-        const gateWetGainNode = ctx.createGain();
-        const gateGatedGainNode = ctx.createGain();
-        gateGatedGainNode.gain.value = 0.0;
-
-        const gateLfoNode = ctx.createOscillator();
-        gateLfoNode.type = 'triangle';
-
-        const gateBiasNode = ctx.createGain();
-        gateBiasNode.gain.value = 0.0; // 50% width
-
-        const gateDcSource = ctx.createConstantSource ? ctx.createConstantSource() : null;
-        if (gateDcSource) {
-            gateDcSource.offset.value = 1.0;
-            gateDcSource.start();
-            gateDcSource.connect(gateBiasNode);
-        }
-
-        const gateSumNode = ctx.createGain();
-        gateLfoNode.connect(gateSumNode);
-        gateBiasNode.connect(gateSumNode);
-
-        const gateShaperNode = ctx.createWaveShaper();
-        const compCurve = new Float32Array(2);
-        compCurve[0] = 0.0;
-        compCurve[1] = 1.0;
-        gateShaperNode.curve = compCurve;
-
-        gateSumNode.connect(gateShaperNode);
-        gateShaperNode.connect(gateGatedGainNode.gain);
-
-        gateLfoNode.start();
-
-        gateInputNode.connect(gateDryGainNode);
-        gateDryGainNode.connect(gateOutputNode);
-        gateInputNode.connect(gateWetGainNode);
-        gateWetGainNode.connect(gateGatedGainNode);
-        gateGatedGainNode.connect(gateOutputNode);
-
-        // Connections in-series for Tremolo and Gate
-        tunaBitcrusherSum.connect(tremoloGainNode);
-        tremoloGainNode.connect(gateInputNode);
-
-        // Gate output splits into sends
-        gateOutputNode.connect(aelapseDryGain);
-        aelapseDryGain.connect(sendSumGain);
-
-        gateOutputNode.connect(aelapseDelay);
-        aelapseDelay.connect(aelapseFeedbackNode);
-        aelapseFeedbackNode.connect(aelapseDelay);
-        aelapseDelay.connect(aelapseDelayGain);
-        aelapseDelayGain.connect(sendSumGain);
-
-        gateOutputNode.connect(reverbPreDelay);
-        reverbPreDelay.connect(aelapseReverb);
-        aelapseReverb.connect(reverbDampFilter);
-        reverbDampFilter.connect(aelapseReverbGain);
-        aelapseReverbGain.connect(sendSumGain);
-
-        const fxOutputNode = sendSumGain;
+        // The send graph is also shared with OfflineAudioContext rendering.
+        const liveSendEffects = TrackEffectGraph.buildSendChain(ctx, gateOutputNode);
+        const {
+            aelapseDryGain, aelapseDelay, aelapseFeedbackNode, aelapseDelayGain,
+            aelapseLFO, aelapseLFOGain, reverbPreDelay, aelapseReverb,
+            reverbDampFilter, aelapseReverbGain, sendSumGain
+        } = liveSendEffects;
+        const fxOutputNode = liveSendEffects.output;
 
         // Connect final DSP output to pan node
         fxOutputNode.connect(panNode);
@@ -2760,7 +3021,7 @@ function updateTrackLockState(track) {
         const mixerEl = document.createElement('div');
         mixerEl.className = 'mixer-strip';
         mixerEl.innerHTML = `
-            <div class="mixer-label" title="${prompt}">${prompt}</div>
+            <div class="mixer-label"></div>
             <div class="mixer-buttons">
                 <button class="mixer-btn solo-btn" title="Solo">S</button>
                 <button class="mixer-btn mute-btn" title="Mute">M</button>
@@ -2804,6 +3065,10 @@ function updateTrackLockState(track) {
                 </div>
             </div>
         `;
+        const mixerLabel = mixerEl.querySelector('.mixer-label');
+        mixerLabel.textContent = prompt;
+        mixerLabel.title = prompt;
+
         const meterEl = document.createElement('div');
         meterEl.className = 'mixer-meter vertical';
         meterEl.innerHTML = `<canvas class="meter-canvas vertical" width="8"></canvas>`;
@@ -2819,12 +3084,12 @@ function updateTrackLockState(track) {
             <!-- Row 1 -->
             <!-- 1. Macro Controls A -->
             <div class="fx-section macros-section a-group">
-                <div class="fx-section-title" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <div class="fx-section-title" class="fx-section-title-row">
                     <span>Macros A</span>
-                    <div class="fx-clipboard-btns" style="display: flex; gap: 6px;">
-                        <button class="fx-copy-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Copy FX Settings">Copy</button>
-                        <button class="fx-paste-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Paste FX Settings">Paste</button>
-                        <button class="fx-reset-btn" type="button" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 3px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-input); color: var(--text-primary); cursor: pointer; transition: all 0.15s ease;" title="Reset FX to Defaults">Reset</button>
+                    <div class="fx-clipboard-btns" class="fx-clipboard-btns">
+                        <button class="fx-copy-btn" type="button" class="fx-title-action" title="Copy FX Settings">Copy</button>
+                        <button class="fx-paste-btn" type="button" class="fx-title-action" title="Paste FX Settings">Paste</button>
+                        <button class="fx-reset-btn" type="button" class="fx-title-action" title="Reset FX to Defaults">Reset</button>
                     </div>
                 </div>
                 <div class="macros-knobs-grid">
@@ -2935,7 +3200,7 @@ function updateTrackLockState(track) {
                         </div>
                         <span class="fx-knob-value filtr-hp-reso-val">0.7</span>
                     </div>
-                    <div class="fx-knob-group" style="visibility: hidden;"></div>
+                    <div class="fx-knob-group" class="fx-knob-group is-visibility-hidden"></div>
                 </div>
             </div>
 
@@ -3307,9 +3572,9 @@ function updateTrackLockState(track) {
                         </div>
                         <span class="fx-knob-value tremolo-depth-val">0%</span>
                     </div>
-                    <div class="fx-knob-group" style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                        <span class="fx-knob-label" style="margin-bottom: 2px; font-size: 0.55rem;">Shape</span>
-                        <select class="tremolo-shape" style="width: 50px; height: 18px; font-size: 0.55rem; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-input); border-radius: 3px; padding: 0 2px;">
+                    <div class="fx-knob-group fx-knob-group-compact">
+                        <span class="fx-knob-label fx-knob-label-compact">Shape</span>
+                        <select class="tremolo-shape fx-shape-select">
                             <option value="sine">Sine</option>
                             <option value="triangle">Tri</option>
                             <option value="sawtooth">Saw</option>
@@ -3346,9 +3611,9 @@ function updateTrackLockState(track) {
                         </div>
                         <span class="fx-knob-value gate-width-val">50%</span>
                     </div>
-                    <div class="fx-knob-group" style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                        <span class="fx-knob-label" style="margin-bottom: 2px; font-size: 0.55rem;">Shape</span>
-                        <select class="gate-shape" style="width: 50px; height: 18px; font-size: 0.55rem; background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-input); border-radius: 3px; padding: 0 2px;">
+                    <div class="fx-knob-group fx-knob-group-compact">
+                        <span class="fx-knob-label fx-knob-label-compact">Shape</span>
+                        <select class="gate-shape fx-shape-select">
                             <option value="square">Square</option>
                             <option value="sine">Sine</option>
                             <option value="triangle">Tri</option>
@@ -3372,10 +3637,18 @@ function updateTrackLockState(track) {
         const panKnob = mixerEl.querySelector('.pan-knob');
         const panValue = mixerEl.querySelector('.pan-value');
 
+        setToggleButtonPressed(soloBtn, track.soloed);
+        setToggleButtonPressed(muteBtn, track.muted);
+        setToggleButtonPressed(fxBtn, !fxDrawerEl.classList.contains('is-collapsed'));
+        fxDrawerEl.querySelectorAll('.fx-toggle-btn').forEach(button => {
+            setToggleButtonPressed(button, !button.classList.contains('is-off'));
+        });
+
         soloBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             track.soloed = !track.soloed;
             soloBtn.classList.toggle('is-on', track.soloed);
+            setToggleButtonPressed(soloBtn, track.soloed);
             updateMixerState();
         });
 
@@ -3383,6 +3656,7 @@ function updateTrackLockState(track) {
             e.stopPropagation();
             track.muted = !track.muted;
             muteBtn.classList.toggle('is-on', track.muted);
+            setToggleButtonPressed(muteBtn, track.muted);
             updateMixerState();
         });
 
@@ -3394,16 +3668,19 @@ function updateTrackLockState(track) {
             if (isCollapsed) {
                 fxDrawerEl.classList.remove('is-collapsed');
                 fxBtn.classList.add('is-on');
+                setToggleButtonPressed(fxBtn, true);
             } else {
                 fxDrawerEl.classList.add('is-collapsed');
                 fxBtn.classList.remove('is-on');
+                setToggleButtonPressed(fxBtn, false);
             }
         });
 
         if (modBtn) {
             const modulatorsPanel = document.getElementById('modulators-panel');
-            const modIsOpen = modulatorsPanel ? modulatorsPanel.style.display !== 'none' : false;
+            const modIsOpen = modulatorsPanel ? modulatorsPanel.classList.contains('is-open') : false;
             modBtn.classList.toggle('is-on', modIsOpen);
+            setToggleButtonPressed(modBtn, modIsOpen);
 
             modBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -3516,9 +3793,8 @@ function updateTrackLockState(track) {
                     }
                 };
 
-                const originalColor = copyTrackBtn.style.color;
-                copyTrackBtn.style.color = '#10b981'; // Green accent
-                setTimeout(() => { copyTrackBtn.style.color = originalColor; }, 1000);
+                copyTrackBtn.classList.add('is-feedback-success');
+                setTimeout(() => copyTrackBtn.classList.remove('is-feedback-success'), 1000);
             });
         }
 
@@ -3779,9 +4055,8 @@ function updateTrackLockState(track) {
                     }
                 }
 
-                const originalColor = pasteTrackBtn.style.color;
-                pasteTrackBtn.style.color = '#10b981'; // Green accent
-                setTimeout(() => { pasteTrackBtn.style.color = originalColor; }, 1000);
+                pasteTrackBtn.classList.add('is-feedback-success');
+                setTimeout(() => pasteTrackBtn.classList.remove('is-feedback-success'), 1000);
             });
         }
 
@@ -3829,7 +4104,7 @@ function updateTrackLockState(track) {
                         cfg_scale: track.originalParams?.cfgScale ?? 1.0,
                         steps: track.originalParams?.steps ?? 8,
                         unlocked_indices: unlockedIndices,
-                        duration_padding_sec: 0.0,
+                        duration_padding_sec: 2.0,
                         duration: trackDuration,
                         loop: true
                     };
@@ -3846,9 +4121,10 @@ function updateTrackLockState(track) {
                     }
 
                     const { job_id } = await res.json();
+                    setGenerationCancelState(job_id);
                     const result = await pollJob(job_id);
                     if (!tracks.includes(track)) return;
-                    if (result.status === 'error') throw new Error(result.error || 'Failed');
+                    if (result.status !== 'done') throw new Error(result.error || 'Failed');
 
                     for (let idx of unlockedIndices) {
                         const newFilePath = result.files[idx];
@@ -3876,14 +4152,15 @@ function updateTrackLockState(track) {
                     }
 
                 } catch (err) {
-                    console.error('Regeneration failed:', err);
-                    showStatus(`Regeneration failed: ${err.message}`, 'error');
+                    if (err.name !== 'GenerationCancelledError') console.error('Regeneration failed:', err);
+                    showStatus(err.name === 'GenerationCancelledError' ? 'Queued generation cancelled.' : `Regeneration failed: ${err.message}`, err.name === 'GenerationCancelledError' ? 'done' : 'error');
                     unlockedVariants.forEach(v => {
                         v.el.classList.remove('is-loading');
                         const titleEl = v.el.querySelector('.card-title');
                         if (titleEl) titleEl.textContent = v.name;
                     });
                 } finally {
+                    setGenerationCancelState(null);
                     regenBtn.disabled = false;
                     regenBtn.classList.remove('is-generating');
                 }
@@ -3897,14 +4174,26 @@ function updateTrackLockState(track) {
             updateMixerState();
         }, { min: 0, max: 100, defaultVal: 80, value: Math.round(track.level * 100) });
 
+        const syncPanKnobAccessibility = setupKeyboardSlider(panKnob, {
+            min: -100,
+            max: 100,
+            step: 1,
+            label: 'Track pan',
+            getValue: () => Math.round(track.pan * 100),
+            setValue: (value) => updatePanKnob(value),
+            isDisabled: () => track.locked,
+            signal: trackAbort.signal
+        });
+
         // Pan knob drag interaction
         function updatePanKnob(panVal) {
             track.pan = panVal / 100;
             track.panNode.pan.value = track.pan;
             const deg = (panVal / 100) * 135; // -135 to +135
-            panKnob.querySelector('.pan-knob-indicator').style.transform = `rotate(${deg}deg)`;
+            setPresentation(panKnob.querySelector('.pan-knob-indicator'), { transform: `rotate(${deg}deg)` });
             panKnob.title = `Pan: ${panVal === 0 ? 'C' : panVal < 0 ? 'L' + Math.abs(panVal) : 'R' + panVal}`;
             panValue.textContent = panVal === 0 ? 'C' : panVal < 0 ? `L${Math.abs(panVal)}` : `R${panVal}`;
+            syncPanKnobAccessibility();
         }
 
         let panDragging = false;
@@ -3917,7 +4206,7 @@ function updateTrackLockState(track) {
             panDragging = true;
             panStartY = e.clientY;
             panStartVal = Math.round(track.pan * 100);
-            document.body.style.cursor = 'ns-resize';
+            setPresentation(document.body, { cursor: 'ns-resize' });
         });
 
         document.addEventListener('mousemove', (e) => {
@@ -3930,7 +4219,7 @@ function updateTrackLockState(track) {
         document.addEventListener('mouseup', () => {
             if (panDragging) {
                 panDragging = false;
-                document.body.style.cursor = '';
+                setPresentation(document.body, { cursor: null });
             }
         }, { signal: trackAbort.signal });
 
@@ -3953,7 +4242,7 @@ function updateTrackLockState(track) {
                 if (indicator) {
                     // Bipolar: -100 to +100. Left = LP (cutoff sweeps down), Right = HP (cutoff sweeps up)
                     const deg = (value / 100) * 135;
-                    indicator.style.transform = `rotate(${deg}deg)`;
+                    setPresentation(indicator, { transform: `rotate(${deg}deg)` });
                 }
                 if (value === 0) {
                     if (knobEl) knobEl.title = 'Filter: Off';
@@ -3998,7 +4287,7 @@ function updateTrackLockState(track) {
                 // Unipolar 0-100
                 if (indicator) {
                     const deg = -135 + (value / 100) * 270;
-                    indicator.style.transform = `rotate(${deg}deg)`;
+                    setPresentation(indicator, { transform: `rotate(${deg}deg)` });
                 }
 
                 if (param === 'reso') {
@@ -4045,6 +4334,7 @@ function updateTrackLockState(track) {
                     if (knobEl) knobEl.title = `Reverb: ${value.toFixed(1)}%`;
                 }
             }
+            if (knobEl && knobEl._syncSliderAria) knobEl._syncSliderAria();
         }
 
         macroKnobs.forEach(knobEl => {
@@ -4052,6 +4342,21 @@ function updateTrackLockState(track) {
             const isBipolar = param === 'filter';
             const defaultVal = param === 'tone' ? 50 : 0;
             macroKnobState[param] = { value: defaultVal, dragging: false, startY: 0, startVal: 0 };
+            const macroMin = isBipolar ? -100 : 0;
+            const syncMacroAccessibility = setupKeyboardSlider(knobEl, {
+                min: macroMin,
+                max: 100,
+                step: 1,
+                label: `${param} macro control`,
+                getValue: () => macroKnobState[param].value,
+                setValue: (value) => {
+                    macroKnobState[param].value = value;
+                    applyMacroKnob(param, value);
+                },
+                isDisabled: () => track.locked,
+                signal: trackAbort.signal
+            });
+            knobEl._syncSliderAria = syncMacroAccessibility;
 
             knobEl.addEventListener('mousedown', (e) => {
                 if (track.locked) return;
@@ -4061,7 +4366,7 @@ function updateTrackLockState(track) {
                 st.dragging = true;
                 st.startY = e.clientY;
                 st.startVal = st.value;
-                document.body.style.cursor = 'ns-resize';
+                setPresentation(document.body, { cursor: 'ns-resize' });
             });
 
             document.addEventListener('mousemove', (e) => {
@@ -4077,13 +4382,14 @@ function updateTrackLockState(track) {
                 newVal = Math.max(min, Math.min(max, newVal));
                 st.value = newVal;
                 applyMacroKnob(param, newVal);
+                syncMacroAccessibility();
             }, { signal: trackAbort.signal });
 
             document.addEventListener('mouseup', () => {
                 const st = macroKnobState[param];
                 if (st.dragging) {
                     st.dragging = false;
-                    document.body.style.cursor = '';
+                    setPresentation(document.body, { cursor: null });
                 }
             }, { signal: trackAbort.signal });
 
@@ -4092,14 +4398,15 @@ function updateTrackLockState(track) {
                 if (track.locked) return;
                 macroKnobState[param].value = defaultVal;
                 applyMacroKnob(param, defaultVal);
+                syncMacroAccessibility();
             });
 
             // Init indicator position
             if (isBipolar) {
-                knobEl.querySelector('.macro-knob-indicator').style.transform = 'rotate(0deg)';
+                setPresentation(knobEl.querySelector('.macro-knob-indicator'), { transform: 'rotate(0deg)' });
             } else {
                 const initDeg = -135 + (defaultVal / 100) * 270;
-                knobEl.querySelector('.macro-knob-indicator').style.transform = `rotate(${initDeg}deg)`;
+                setPresentation(knobEl.querySelector('.macro-knob-indicator'), { transform: `rotate(${initDeg}deg)` });
             }
 
             // Wire hover highlighting for mixer macro knobs
@@ -4145,20 +4452,8 @@ function updateTrackLockState(track) {
             });
         });
 
-        // Wire Filtr controls
-        const filtrToggle = fxDrawerEl.querySelector('.filtr-toggle');
-        if (filtrToggle) {
-            filtrToggle.addEventListener('click', (e) => {
-                e.stopPropagation();
-                track.filtrEnabled = !track.filtrEnabled;
-                filtrToggle.classList.toggle('is-off', !track.filtrEnabled);
-                filtrToggle.classList.toggle('is-on', track.filtrEnabled);
-                filtrToggle.textContent = track.filtrEnabled ? 'On' : 'Off';
-                const section = fxDrawerEl.querySelector('.filtr-section');
-                if (section) section.classList.toggle('is-bypassed', !track.filtrEnabled);
-                updateFiltrBypass(track);
-            });
-        }
+        // The shared FX bypass wiring below owns the Filtr toggle.  Keeping
+        // one listener prevents a click from immediately toggling it twice.
 
         const filtrLpCutoffSlider = fxDrawerEl.querySelector('.filtr-lp-cutoff');
         const filtrLpCutoffVal = fxDrawerEl.querySelector('.filtr-lp-cutoff-val');
@@ -4679,6 +4974,7 @@ function updateTrackLockState(track) {
                 tremoloToggle.classList.toggle('is-off', !track.tremoloEnabled);
                 tremoloToggle.classList.toggle('is-on', track.tremoloEnabled);
                 tremoloToggle.textContent = track.tremoloEnabled ? 'On' : 'Off';
+                setToggleButtonPressed(tremoloToggle, track.tremoloEnabled);
                 const section = fxDrawerEl.querySelector('.tremolo-section');
                 if (section) section.classList.toggle('is-bypassed', !track.tremoloEnabled);
                 updateTremoloBypass(track);
@@ -4731,6 +5027,7 @@ function updateTrackLockState(track) {
                 gateToggle.classList.toggle('is-off', !track.gateEnabled);
                 gateToggle.classList.toggle('is-on', track.gateEnabled);
                 gateToggle.textContent = track.gateEnabled ? 'On' : 'Off';
+                setToggleButtonPressed(gateToggle, track.gateEnabled);
                 const section = fxDrawerEl.querySelector('.gate-section');
                 if (section) section.classList.toggle('is-bypassed', !track.gateEnabled);
                 updateGateBypass(track);
@@ -4835,7 +5132,7 @@ function updateTrackLockState(track) {
 
             if (macroName === 'tone') {
                 const deg = -135 + (value / 100) * 270;
-                indicator.style.transform = `rotate(${deg}deg)`;
+                setPresentation(indicator, { transform: `rotate(${deg}deg)` });
                 if (value === 50) {
                     knobEl.title = 'Tone: Flat';
                 } else if (value < 50) {
@@ -4859,7 +5156,7 @@ function updateTrackLockState(track) {
                 }
             } else if (macroName === 'filter') {
                 const deg = -135 + (value / 100) * 270;
-                indicator.style.transform = `rotate(${deg}deg)`;
+                setPresentation(indicator, { transform: `rotate(${deg}deg)` });
                 const ctx = ensureAudioCtx();
                 if (value === 50) {
                     knobEl.title = 'Filter: Off';
@@ -4892,7 +5189,7 @@ function updateTrackLockState(track) {
                 }
             } else {
                 const deg = -135 + (value / 100) * 270;
-                indicator.style.transform = `rotate(${deg}deg)`;
+                setPresentation(indicator, { transform: `rotate(${deg}deg)` });
                 knobEl.title = `${macroName.charAt(0).toUpperCase() + macroName.slice(1)}: ${value}%`;
 
                 if (macroName === 'space') {
@@ -5161,6 +5458,7 @@ function updateTrackLockState(track) {
             track.filtrEnabled = !track.filtrEnabled;
             filtrToggleBtn.textContent = track.filtrEnabled ? 'On' : 'Off';
             filtrToggleBtn.classList.toggle('is-off', !track.filtrEnabled);
+            setToggleButtonPressed(filtrToggleBtn, track.filtrEnabled);
             filtrSection.classList.toggle('is-bypassed', !track.filtrEnabled);
             updateFiltrBypass(track);
         });
@@ -5172,6 +5470,7 @@ function updateTrackLockState(track) {
             track.eqEnabled = !track.eqEnabled;
             eqToggleBtn.textContent = track.eqEnabled ? 'On' : 'Bypass';
             eqToggleBtn.classList.toggle('is-off', !track.eqEnabled);
+            setToggleButtonPressed(eqToggleBtn, track.eqEnabled);
             eqSection.classList.toggle('is-bypassed', !track.eqEnabled);
             updateEqBypass(track);
         });
@@ -5183,6 +5482,7 @@ function updateTrackLockState(track) {
             track.screamEnabled = !track.screamEnabled;
             screamToggleBtn.textContent = track.screamEnabled ? 'On' : 'Off';
             screamToggleBtn.classList.toggle('is-off', !track.screamEnabled);
+            setToggleButtonPressed(screamToggleBtn, track.screamEnabled);
             screamSection.classList.toggle('is-bypassed', !track.screamEnabled);
             updateScreamBypass(track);
         });
@@ -5194,6 +5494,7 @@ function updateTrackLockState(track) {
             track.aelapseDelayEnabled = !track.aelapseDelayEnabled;
             aeDelayToggleBtn.textContent = track.aelapseDelayEnabled ? 'On' : 'Off';
             aeDelayToggleBtn.classList.toggle('is-off', !track.aelapseDelayEnabled);
+            setToggleButtonPressed(aeDelayToggleBtn, track.aelapseDelayEnabled);
             delaySection.classList.toggle('is-bypassed', !track.aelapseDelayEnabled);
             updateAelapseBypass(track);
         });
@@ -5205,6 +5506,7 @@ function updateTrackLockState(track) {
             track.aelapseReverbEnabled = !track.aelapseReverbEnabled;
             aeReverbToggleBtn.textContent = track.aelapseReverbEnabled ? 'On' : 'Off';
             aeReverbToggleBtn.classList.toggle('is-off', !track.aelapseReverbEnabled);
+            setToggleButtonPressed(aeReverbToggleBtn, track.aelapseReverbEnabled);
             reverbSection.classList.toggle('is-bypassed', !track.aelapseReverbEnabled);
             updateAelapseBypass(track);
         });
@@ -5216,6 +5518,7 @@ function updateTrackLockState(track) {
             track.tunaChorusEnabled = !track.tunaChorusEnabled;
             chorusToggleBtn.textContent = track.tunaChorusEnabled ? 'On' : 'Off';
             chorusToggleBtn.classList.toggle('is-off', !track.tunaChorusEnabled);
+            setToggleButtonPressed(chorusToggleBtn, track.tunaChorusEnabled);
             chorusSection.classList.toggle('is-bypassed', !track.tunaChorusEnabled);
             updateTunaChorusBypass(track);
         });
@@ -5227,6 +5530,7 @@ function updateTrackLockState(track) {
             track.tunaPhaserEnabled = !track.tunaPhaserEnabled;
             phaserToggleBtn.textContent = track.tunaPhaserEnabled ? 'On' : 'Off';
             phaserToggleBtn.classList.toggle('is-off', !track.tunaPhaserEnabled);
+            setToggleButtonPressed(phaserToggleBtn, track.tunaPhaserEnabled);
             phaserSection.classList.toggle('is-bypassed', !track.tunaPhaserEnabled);
             updateTunaPhaserBypass(track);
         });
@@ -5238,6 +5542,7 @@ function updateTrackLockState(track) {
             track.tunaBitcrusherEnabled = !track.tunaBitcrusherEnabled;
             crusherToggleBtn.textContent = track.tunaBitcrusherEnabled ? 'On' : 'Off';
             crusherToggleBtn.classList.toggle('is-off', !track.tunaBitcrusherEnabled);
+            setToggleButtonPressed(crusherToggleBtn, track.tunaBitcrusherEnabled);
             crusherSection.classList.toggle('is-bypassed', !track.tunaBitcrusherEnabled);
             updateTunaBitcrusherBypass(track);
         });
@@ -5634,10 +5939,10 @@ function updateTrackLockState(track) {
 
                 const originalText = resetBtn.textContent;
                 resetBtn.textContent = 'Reset!';
-                resetBtn.style.color = '#ef4444'; // Red accent
+                setPresentation(resetBtn, { color: '#ef4444' }); // Red accent
                 setTimeout(() => {
                     resetBtn.textContent = originalText;
-                    resetBtn.style.color = '';
+                    setPresentation(resetBtn, { color: '' });
                 }, 1000);
             });
         }
@@ -5657,7 +5962,7 @@ function updateTrackLockState(track) {
 
             cardEl.innerHTML = `
                 <div class="card-header">
-                    <span class="card-title" title="${name}">${name}</span>
+                    <span class="card-title"></span>
                     <span class="card-variant-num">#${i + 1}</span>
                 </div>
                 <div class="card-seek-bar">
@@ -5679,6 +5984,10 @@ function updateTrackLockState(track) {
                     </button>
                 </div>
             `;
+
+            const cardTitle = cardEl.querySelector('.card-title');
+            cardTitle.textContent = name;
+            cardTitle.title = name;
 
             const variant = {
                 name,
@@ -5743,6 +6052,7 @@ function updateTrackLockState(track) {
 
             const reverseBtn = cardEl.querySelector('.btn-reverse');
             if (reverseBtn) {
+                setToggleButtonPressed(reverseBtn, false);
                 reverseBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (track.locked) return;
@@ -5754,6 +6064,7 @@ function updateTrackLockState(track) {
                     }
                     v.reversed = !v.reversed;
                     reverseBtn.classList.toggle('is-on', v.reversed);
+                    setToggleButtonPressed(reverseBtn, v.reversed);
                     drawWaveform(v.el.querySelector('.card-waveform'), v.buffer, track.selectedVariant === i, track.originalParams?.bpm);
                     // If this is the playing variant, restart just this track source (not all playback)
                     if (isPlaying && track.selectedVariant === i) {
@@ -5769,11 +6080,14 @@ function updateTrackLockState(track) {
 
             const lockVariantBtn = cardEl.querySelector('.btn-lock-variant');
             if (lockVariantBtn) {
+                setToggleButtonPressed(lockVariantBtn, variant.locked);
                 lockVariantBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     if (track.locked) return;
                     variant.locked = !variant.locked;
                     cardEl.classList.toggle('card-is-locked', variant.locked);
+                    setToggleButtonPressed(lockVariantBtn, variant.locked);
+                    lockVariantBtn.setAttribute('aria-label', variant.locked ? 'Unlock variant' : 'Lock variant');
 
                     if (variant.locked) {
                         lockVariantBtn.innerHTML = `<svg class="btn-icon icon-lock" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
@@ -5916,6 +6230,209 @@ function updateTrackLockState(track) {
 
     // --- Project Save & Load and Record Mode Implementation ---
 
+    const PROJECT_FORMAT_VERSION = '1.0';
+    const PROJECT_MIGRATIONS = Object.freeze({
+        legacy: project => ({ ...project, version: PROJECT_FORMAT_VERSION }),
+        '1.0': project => project
+    });
+
+    function isPlainProjectObject(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        const prototype = Object.getPrototypeOf(value);
+        return prototype === Object.prototype || prototype === null;
+    }
+
+    function requireProjectObject(value, path) {
+        if (!isPlainProjectObject(value)) {
+            throw new Error(`${path} must be an object`);
+        }
+        return value;
+    }
+
+    function normalizeProjectNumber(value, fallback, path, min, max, integer = false) {
+        if (value === undefined) return fallback;
+        if (typeof value !== 'number' || !Number.isFinite(value) || (integer && !Number.isInteger(value)) || value < min || value > max) {
+            throw new Error(`${path} must be ${integer ? 'an integer' : 'a number'} between ${min} and ${max}`);
+        }
+        return value;
+    }
+
+    function normalizeProjectBoolean(value, fallback, path) {
+        if (value === undefined) return fallback;
+        if (typeof value !== 'boolean') throw new Error(`${path} must be a boolean`);
+        return value;
+    }
+
+    function normalizeProjectString(value, fallback, path, maxLength) {
+        if (value === undefined) return fallback;
+        if (typeof value !== 'string' || value.length > maxLength) {
+            throw new Error(`${path} must be a string no longer than ${maxLength} characters`);
+        }
+        return value;
+    }
+
+    function sanitizeProjectValue(value, path, depth = 0) {
+        if (depth > 12) throw new Error(`${path} is nested too deeply`);
+        if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
+        if (typeof value === 'number') {
+            if (!Number.isFinite(value)) throw new Error(`${path} contains a non-finite number`);
+            return value;
+        }
+        if (Array.isArray(value)) {
+            if (value.length > 1024) throw new Error(`${path} contains too many items`);
+            return value.map((item, index) => sanitizeProjectValue(item, `${path}[${index}]`, depth + 1));
+        }
+        requireProjectObject(value, path);
+        const keys = Object.keys(value);
+        if (keys.length > 256) throw new Error(`${path} contains too many properties`);
+        const sanitized = Object.create(null);
+        keys.forEach(key => {
+            if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+                throw new Error(`${path} contains an unsafe property name`);
+            }
+            sanitized[key] = sanitizeProjectValue(value[key], `${path}.${key}`, depth + 1);
+        });
+        return sanitized;
+    }
+
+    function normalizeNumberRecord(value, path) {
+        if (value === undefined) return Object.create(null);
+        requireProjectObject(value, path);
+        if (Object.keys(value).length > 256) throw new Error(`${path} contains too many properties`);
+        const normalized = Object.create(null);
+        Object.keys(value).forEach(key => {
+            if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+                throw new Error(`${path} contains an unsafe property name`);
+            }
+            normalized[key] = normalizeProjectNumber(value[key], 0, `${path}.${key}`, -100000, 100000);
+        });
+        return normalized;
+    }
+
+    function normalizeVariantData(value, path) {
+        const variant = requireProjectObject(value, path);
+        const filePath = normalizeProjectString(variant.filePath, undefined, `${path}.filePath`, 4096);
+        if (!filePath || /[\0?#]/.test(filePath) || /%(?:2e|2f|5c)/i.test(filePath) || /^(?:[a-z]+:|[\\/])/i.test(filePath) || filePath.split(/[\\/]/).some(part => part === '.' || part === '..')) {
+            throw new Error(`${path}.filePath must be a safe relative output path`);
+        }
+        return {
+            filePath,
+            locked: normalizeProjectBoolean(variant.locked, false, `${path}.locked`),
+            loopMultiplier: normalizeProjectNumber(variant.loopMultiplier, 1, `${path}.loopMultiplier`, 1, 64, true)
+        };
+    }
+
+    function normalizeTrackData(value, index, seenIds) {
+        const path = `tracks[${index}]`;
+        const track = requireProjectObject(value, path);
+        const id = normalizeProjectNumber(track.id, undefined, `${path}.id`, 1, 1000000000, true);
+        if (id === undefined) throw new Error(`${path}.id is required`);
+        if (seenIds.has(id)) throw new Error(`${path}.id duplicates track ${id}`);
+        seenIds.add(id);
+
+        if (!Array.isArray(track.variants) || track.variants.length < 1 || track.variants.length > 16) {
+            throw new Error(`${path}.variants must contain between 1 and 16 variants`);
+        }
+        const variants = track.variants.map((variant, variantIndex) => normalizeVariantData(variant, `${path}.variants[${variantIndex}]`));
+        const selectedVariant = normalizeProjectNumber(track.selectedVariant, 0, `${path}.selectedVariant`, 0, variants.length - 1, true);
+        const parentTrackId = track.parentTrackId == null
+            ? null
+            : normalizeProjectNumber(track.parentTrackId, null, `${path}.parentTrackId`, 1, 1000000000, true);
+
+        return {
+            id,
+            prompt: normalizeProjectString(track.prompt, '', `${path}.prompt`, 10000),
+            level: normalizeProjectNumber(track.level, 0.8, `${path}.level`, 0, 1),
+            pan: normalizeProjectNumber(track.pan, 0, `${path}.pan`, -1, 1),
+            muted: normalizeProjectBoolean(track.muted, false, `${path}.muted`),
+            soloed: normalizeProjectBoolean(track.soloed, false, `${path}.soloed`),
+            looping: normalizeProjectBoolean(track.looping, true, `${path}.looping`),
+            locked: normalizeProjectBoolean(track.locked, false, `${path}.locked`),
+            selectedVariant,
+            originalParams: track.originalParams === undefined || track.originalParams === null
+                ? null
+                : sanitizeProjectValue(requireProjectObject(track.originalParams, `${path}.originalParams`), `${path}.originalParams`),
+            parentTrackId,
+            variants,
+            macroValues: normalizeNumberRecord(track.macroValues, `${path}.macroValues`),
+            fxMacros: normalizeNumberRecord(track.fxMacros, `${path}.fxMacros`),
+            fxSettings: track.fxSettings === undefined || track.fxSettings === null
+                ? null
+                : sanitizeProjectValue(requireProjectObject(track.fxSettings, `${path}.fxSettings`), `${path}.fxSettings`)
+        };
+    }
+
+    function normalizeProjectData(rawProject) {
+        requireProjectObject(rawProject, 'project');
+        const sourceVersion = rawProject.version === undefined ? 'legacy' : rawProject.version;
+        if (typeof sourceVersion !== 'string') throw new Error('Project version must be a string');
+        const migrate = PROJECT_MIGRATIONS[sourceVersion];
+        if (!migrate) throw new Error(`Unsupported project version: ${sourceVersion}`);
+
+        const migrated = migrate(rawProject);
+        requireProjectObject(migrated, 'project');
+        if (!Array.isArray(migrated.tracks) || migrated.tracks.length < 1 || migrated.tracks.length > 128) {
+            throw new Error('Project must contain between 1 and 128 tracks');
+        }
+
+        const seenIds = new Set();
+        const normalizedTracks = migrated.tracks.map((track, index) => normalizeTrackData(track, index, seenIds));
+        const totalVariants = normalizedTracks.reduce((total, track) => total + track.variants.length, 0);
+        if (totalVariants > 512) throw new Error('Project contains too many audio variants');
+
+        const arrangerLength = normalizeProjectNumber(migrated.arrangerLengthLoops, 8, 'arrangerLengthLoops', 1, 999, true);
+        let normalizedGrid = null;
+        if (migrated.arrangerGrid !== undefined && migrated.arrangerGrid !== null) {
+            requireProjectObject(migrated.arrangerGrid, 'arrangerGrid');
+            normalizedGrid = Object.create(null);
+            normalizedTracks.forEach(track => {
+                const row = migrated.arrangerGrid[String(track.id)];
+                if (row === undefined) return;
+                if (!Array.isArray(row) || row.length > 999 || row.some(cell => typeof cell !== 'boolean')) {
+                    throw new Error(`arrangerGrid.${track.id} must be an array of booleans`);
+                }
+                normalizedGrid[track.id] = row.slice(0, arrangerLength);
+            });
+        }
+
+        let normalizedSlots = null;
+        if (migrated.modMatrixSlots !== undefined && migrated.modMatrixSlots !== null) {
+            if (!Array.isArray(migrated.modMatrixSlots) || migrated.modMatrixSlots.length > 8) {
+                throw new Error('modMatrixSlots must be an array of at most 8 slots');
+            }
+            normalizedSlots = migrated.modMatrixSlots.map((slot, index) => {
+                requireProjectObject(slot, `modMatrixSlots[${index}]`);
+                const rawTrackId = slot.trackId ?? 'none';
+                if (typeof rawTrackId !== 'string' && typeof rawTrackId !== 'number') {
+                    throw new Error(`modMatrixSlots[${index}].trackId must be a string or number`);
+                }
+                return {
+                    src: normalizeProjectString(slot.src, 'none', `modMatrixSlots[${index}].src`, 32),
+                    trackId: normalizeProjectString(String(rawTrackId), 'none', `modMatrixSlots[${index}].trackId`, 32),
+                    param: normalizeProjectString(slot.param, 'none', `modMatrixSlots[${index}].param`, 64),
+                    depth: normalizeProjectNumber(slot.depth, 0, `modMatrixSlots[${index}].depth`, -100, 100, true)
+                };
+            });
+            while (normalizedSlots.length < 8) {
+                normalizedSlots.push({ src: 'none', trackId: 'none', param: 'none', depth: 0 });
+            }
+        }
+
+        return {
+            version: PROJECT_FORMAT_VERSION,
+            bpm: normalizeProjectNumber(migrated.bpm, 120, 'bpm', 20, 999),
+            globalDuration: normalizeProjectNumber(migrated.globalDuration, 8, 'globalDuration', 0.01, 86400),
+            arrangerModeActive: normalizeProjectBoolean(migrated.arrangerModeActive, false, 'arrangerModeActive'),
+            arrangerLengthLoops: arrangerLength,
+            globalModulators: migrated.globalModulators === undefined || migrated.globalModulators === null
+                ? null
+                : sanitizeProjectValue(requireProjectObject(migrated.globalModulators, 'globalModulators'), 'globalModulators'),
+            modMatrixSlots: normalizedSlots,
+            arrangerGrid: normalizedGrid,
+            tracks: normalizedTracks
+        };
+    }
+
     function saveProject() {
         if (tracks.length === 0) {
             alert('No tracks to save!');
@@ -5923,7 +6440,7 @@ function updateTrackLockState(track) {
         }
 
         const projectData = {
-            version: '1.0',
+            version: PROJECT_FORMAT_VERSION,
             bpm: parseInt(bpmInput.value) || 120,
             globalDuration,
             arrangerModeActive,
@@ -6028,7 +6545,10 @@ function updateTrackLockState(track) {
         URL.revokeObjectURL(url);
     }
 
-    function loadProject(projectData) {
+    function loadProject(rawProjectData) {
+        // Validation and migration must complete before any active audio or UI state is destroyed.
+        const projectData = normalizeProjectData(rawProjectData);
+
         // 1. Clear active state
         tracks.forEach(t => {
             stopTrackSource(t);
@@ -6042,7 +6562,7 @@ function updateTrackLockState(track) {
         tracksContainer.innerHTML = '';
         tracks = [];
         undoStack = [];
-        if (btnUndo) btnUndo.style.display = 'none';
+        if (btnUndo) setPresentation(btnUndo, { display: 'none' });
 
         isProjectLoading = true;
         totalVariantsToLoad = projectData.tracks.reduce((acc, t) => acc + (t.variants ? t.variants.length : 0), 0);
@@ -6061,10 +6581,10 @@ function updateTrackLockState(track) {
         const arrangerPanel = document.getElementById('arranger-panel');
         if (toggleArranger && arrangerPanel) {
             toggleArranger.checked = arrangerModeActive;
-            arrangerPanel.style.display = arrangerModeActive ? 'flex' : 'none';
+            setPresentation(arrangerPanel, { display: arrangerModeActive ? 'flex' : 'none' });
             const playheadLine = document.getElementById('arranger-playhead-line');
             if (playheadLine) {
-                playheadLine.style.display = arrangerModeActive ? 'block' : 'none';
+                setPresentation(playheadLine, { display: arrangerModeActive ? 'block' : 'none' });
             }
         }
 
@@ -6122,9 +6642,10 @@ function updateTrackLockState(track) {
                     const cardEl = track.variants[idx].el;
                     if (cardEl) {
                         cardEl.classList.toggle('card-locked', vData.locked);
-                        const lockBtn = cardEl.querySelector('.lock-btn');
+                        const lockBtn = cardEl.querySelector('.btn-lock-variant');
                         if (lockBtn) {
-                            lockBtn.classList.toggle('is-locked', vData.locked);
+                            setToggleButtonPressed(lockBtn, Boolean(vData.locked));
+                            lockBtn.setAttribute('aria-label', vData.locked ? 'Unlock variant' : 'Lock variant');
                             lockBtn.innerHTML = vData.locked ?
                                 `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>` :
                                 `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
@@ -6413,7 +6934,7 @@ function updateTrackLockState(track) {
                     bpm: params.bpm,
                     num_variants: track.variants.length,
                     loop: track.looping,
-                    duration_padding_sec: 0.0,
+                    duration_padding_sec: track.looping ? 2.0 : 0.0,
                     seed: params.seed ?? -1,
                     cfg_scale: params.cfgScale ?? 1.0,
                     steps: params.steps ?? 8,
@@ -6449,9 +6970,10 @@ function updateTrackLockState(track) {
                 }
 
                 const { job_id } = await res.json();
+                setGenerationCancelState(job_id);
                 const result = await pollJob(job_id);
                 if (!tracks.includes(track)) return;
-                if (result.status === 'error') {
+                if (result.status !== 'done') {
                     throw new Error(result.error || 'Failed generating track');
                 }
 
@@ -6477,9 +6999,10 @@ function updateTrackLockState(track) {
 
             showStatus('All missing audio remade!', 'done');
         } catch (err) {
-            console.error('Error remaking missing audio:', err);
-            showStatus(`Remake failed: ${err.message}`, 'error');
+            if (err.name !== 'GenerationCancelledError') console.error('Error remaking missing audio:', err);
+            showStatus(err.name === 'GenerationCancelledError' ? 'Queued generation cancelled.' : `Remake failed: ${err.message}`, err.name === 'GenerationCancelledError' ? 'done' : 'error');
         } finally {
+            setGenerationCancelState(null);
             btnGenerate.disabled = false;
             btnGenerate.classList.remove('is-generating');
         }
@@ -6511,13 +7034,14 @@ function updateTrackLockState(track) {
                 if (rateFreeVal) rateFreeVal.textContent = lfoState.freeRate.toFixed(1) + 'Hz';
             }
             const isSync = (lfoState.mode === 'sync');
-            if (rateSyncRow) rateSyncRow.style.display = isSync ? 'flex' : 'none';
-            if (rateFreeRow) rateFreeRow.style.display = isSync ? 'none' : 'flex';
+            if (rateSyncRow) setPresentation(rateSyncRow, { display: isSync ? 'flex' : 'none' });
+            if (rateFreeRow) setPresentation(rateFreeRow, { display: isSync ? 'none' : 'flex' });
 
             if (toggleBtn) {
                 const enabled = lfoState.enabled !== false;
                 toggleBtn.textContent = enabled ? 'On' : 'Off';
                 toggleBtn.classList.toggle('is-off', !enabled);
+                setToggleButtonPressed(toggleBtn, enabled);
                 if (section) {
                     section.classList.toggle('is-bypassed', !enabled);
                 }
@@ -6567,8 +7091,12 @@ function updateTrackLockState(track) {
     function captureTrackStates(loopIndex, eventType) {
         const timestamp = formatTime(isPlaying && audioCtx ? (audioCtx.currentTime - playStartCtxTime) : playOffset);
 
-        let logHtml = `<div class="record-log-entry">`;
-        logHtml += `<div class="record-log-header">[${timestamp}] Loop ${loopIndex} - ${eventType}</div>`;
+        const logEntry = document.createElement('div');
+        logEntry.className = 'record-log-entry';
+        const logHeader = document.createElement('div');
+        logHeader.className = 'record-log-header';
+        logHeader.textContent = `[${timestamp}] Loop ${loopIndex} - ${eventType}`;
+        logEntry.appendChild(logHeader);
 
         tracks.forEach((track, idx) => {
             const trackNum = idx + 1;
@@ -6581,24 +7109,31 @@ function updateTrackLockState(track) {
             const dlyMixVal = track.macroKnobState.dlyMix ? track.macroKnobState.dlyMix.value : 0;
             const revMixVal = track.macroKnobState.revMix ? track.macroKnobState.revMix.value : 0;
 
-            logHtml += `
-                <div class="record-log-track-row">
-                    <span class="log-track-name">T${trackNum} (${track.prompt.substring(0, 12)}...):</span>
-                    <span class="log-track-param">Vol: ${volDb} dB</span> |
-                    <span class="log-track-param">Pan: ${panVal > 0 ? 'R' : panVal < 0 ? 'L' : ''}${Math.abs(panVal)}</span> |
-                    <span class="log-track-param">Flt: ${filterVal}</span> |
-                    <span class="log-track-param">Res: ${resoVal}</span> |
-                    <span class="log-track-param">Ton: ${toneVal}</span> |
-                    <span class="log-track-param">Dly: ${dlyMixVal}%</span> |
-                    <span class="log-track-param">Rev: ${revMixVal}%</span>
-                </div>
-            `;
+            const trackRow = document.createElement('div');
+            trackRow.className = 'record-log-track-row';
+            const values = [
+                ['log-track-name', `T${trackNum} (${track.prompt.substring(0, 12)}...):`],
+                ['log-track-param', `Vol: ${volDb} dB`],
+                ['log-track-param', `Pan: ${panVal > 0 ? 'R' : panVal < 0 ? 'L' : ''}${Math.abs(panVal)}`],
+                ['log-track-param', `Flt: ${filterVal}`],
+                ['log-track-param', `Res: ${resoVal}`],
+                ['log-track-param', `Ton: ${toneVal}`],
+                ['log-track-param', `Dly: ${dlyMixVal}%`],
+                ['log-track-param', `Rev: ${revMixVal}%`]
+            ];
+            values.forEach(([className, textValue], valueIndex) => {
+                if (valueIndex === 1) trackRow.appendChild(document.createTextNode(' '));
+                if (valueIndex > 1) trackRow.appendChild(document.createTextNode(' | '));
+                const valueEl = document.createElement('span');
+                valueEl.className = className;
+                valueEl.textContent = textValue;
+                trackRow.appendChild(valueEl);
+            });
+            logEntry.appendChild(trackRow);
         });
 
-        logHtml += `</div>`;
-
         if (recordLogList) {
-            recordLogList.insertAdjacentHTML('beforeend', logHtml);
+            recordLogList.appendChild(logEntry);
             recordLogList.scrollTop = recordLogList.scrollHeight;
         }
     }
@@ -6736,6 +7271,13 @@ function updateTrackLockState(track) {
         }
     };
 
+    function updateRandomInKeyButton(value) {
+        if (!btnRandomInKey) return;
+        btnRandomInKey.title = `Generate Random Prompt in ${value}`;
+        btnRandomInKey.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L14 9"/></svg>';
+        btnRandomInKey.appendChild(document.createTextNode(value));
+    }
+
     function detectGenre(prompt) {
         if (!prompt) return 'electronic';
         const lowercasePrompt = prompt.toLowerCase();
@@ -6807,10 +7349,7 @@ function updateTrackLockState(track) {
             generated += `, ${prod}`;
         }
 
-        if (btnRandomInKey) {
-            btnRandomInKey.title = `Generate Random Prompt in ${currentKeyOrChord.value}`;
-            btnRandomInKey.innerHTML = `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L14 9"/></svg>${currentKeyOrChord.value}`;
-        }
+        updateRandomInKeyButton(currentKeyOrChord.value);
 
         promptInput.value = generated;
         promptInput.focus();
@@ -6838,10 +7377,7 @@ function updateTrackLockState(track) {
         }
 
         const currentPrompt = promptInput.value.trim();
-        if (btnRandomInKey) {
-            btnRandomInKey.title = `Generate Random Prompt in ${currentKeyOrChord.value}`;
-            btnRandomInKey.innerHTML = `<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px; display: inline-block; vertical-align: middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L14 9"/></svg>${currentKeyOrChord.value}`;
-        }
+        updateRandomInKeyButton(currentKeyOrChord.value);
 
         let newPrompt = currentPrompt;
         const inRegex = /\bin\s+([A-Ga-g][#b]?(?:\s+[a-zA-Z0-9#\/\-\+]+)*)/i;
@@ -7286,7 +7822,7 @@ function updateTrackLockState(track) {
                 bpm,
                 num_variants: numVariants,
                 loop,
-                duration_padding_sec: 0.0,
+                duration_padding_sec: loop ? 2.0 : 0.0,
                 seed,
                 cfg_scale: cfgScale,
                 steps
@@ -7326,10 +7862,11 @@ function updateTrackLockState(track) {
             }
 
             const { job_id } = await res.json();
+            setGenerationCancelState(job_id);
             showStatus('Submitting generation...');
 
             const result = await pollJob(job_id);
-            if (result.status === 'error') throw new Error(result.error || 'Failed');
+            if (result.status !== 'done') throw new Error(result.error || 'Failed');
 
             showStatus(`Done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
             const originalParams = {
@@ -7351,9 +7888,10 @@ function updateTrackLockState(track) {
             clearInitAudio();
 
         } catch (err) {
-            console.error('Generation error:', err);
-            showStatus(`Error: ${err.message}`, 'error');
+            if (err.name !== 'GenerationCancelledError') console.error('Generation error:', err);
+            showStatus(err.name === 'GenerationCancelledError' ? 'Queued generation cancelled.' : `Error: ${err.message}`, err.name === 'GenerationCancelledError' ? 'done' : 'error');
         } finally {
+            setGenerationCancelState(null);
             btnGenerate.disabled = false;
             btnGenerate.classList.remove('is-generating');
             btnGenerate.textContent = 'Generate';
@@ -7387,7 +7925,7 @@ function updateTrackLockState(track) {
                 bpm,
                 num_variants: numVariants,
                 loop: true,
-                duration_padding_sec: 0.0,
+                duration_padding_sec: 2.0,
                 seed: -1,
                 cfg_scale: originalParams.cfgScale,
                 steps: originalParams.steps,
@@ -7409,10 +7947,11 @@ function updateTrackLockState(track) {
             }
 
             const { job_id } = await res.json();
+            setGenerationCancelState(job_id);
             showStatus('Submitting outpaint...');
 
             const result = await pollJob(job_id);
-            if (result.status === 'error') throw new Error(result.error || 'Failed');
+            if (result.status !== 'done') throw new Error(result.error || 'Failed');
 
             showStatus(`Done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
 
@@ -7431,9 +7970,10 @@ function updateTrackLockState(track) {
 
             addTrackRow(result.files, prompt, result.track_num, true, track.id, outpaintParams);
         } catch (err) {
-            console.error('Outpaint error:', err);
-            showStatus(`Error: ${err.message}`, 'error');
+            if (err.name !== 'GenerationCancelledError') console.error('Outpaint error:', err);
+            showStatus(err.name === 'GenerationCancelledError' ? 'Queued generation cancelled.' : `Error: ${err.message}`, err.name === 'GenerationCancelledError' ? 'done' : 'error');
         } finally {
+            setGenerationCancelState(null);
             btnGenerate.disabled = false;
             btnGenerate.classList.remove('is-generating');
             btnGenerate.textContent = 'Generate';
@@ -7442,10 +7982,25 @@ function updateTrackLockState(track) {
 
     async function pollJob(jobId) {
         for (let i = 0; i < 300; i++) {
+            if (activeGenerationJob?.id === jobId && activeGenerationJob.state === 'cancelled') {
+                const cancelled = new Error('Generation cancelled before it started.');
+                cancelled.name = 'GenerationCancelledError';
+                throw cancelled;
+            }
             await new Promise(r => setTimeout(r, 1000));
+            if (activeGenerationJob?.id === jobId && activeGenerationJob.state === 'cancelled') {
+                const cancelled = new Error('Generation cancelled before it started.');
+                cancelled.name = 'GenerationCancelledError';
+                throw cancelled;
+            }
             const res = await fetch(`/api/status/${jobId}`);
             if (!res.ok) throw new Error(`Poll failed: ${res.status}`);
             const data = await res.json();
+            if (data.status === 'cancelled') {
+                const cancelled = new Error('Generation cancelled before it started.');
+                cancelled.name = 'GenerationCancelledError';
+                throw cancelled;
+            }
             if (data.status === 'done' || data.status === 'error') return data;
             if (data.progress) showStatus(data.progress);
         }
@@ -7527,20 +8082,20 @@ function updateTrackLockState(track) {
         statusText.className = 'status-text';
         if (type === 'done') {
             statusText.classList.add('done');
-            statusBar.querySelector('.status-spinner').style.display = 'none';
+            setPresentation(statusBar.querySelector('.status-spinner'), { display: 'none' });
             setTimeout(() => {
                 statusBar.classList.remove('visible');
-                statusBar.querySelector('.status-spinner').style.display = '';
+                setPresentation(statusBar.querySelector('.status-spinner'), { display: '' });
             }, 3000);
         } else if (type === 'error') {
             statusText.classList.add('error');
-            statusBar.querySelector('.status-spinner').style.display = 'none';
+            setPresentation(statusBar.querySelector('.status-spinner'), { display: 'none' });
             setTimeout(() => {
                 statusBar.classList.remove('visible');
-                statusBar.querySelector('.status-spinner').style.display = '';
+                setPresentation(statusBar.querySelector('.status-spinner'), { display: '' });
             }, 5000);
         } else {
-            statusBar.querySelector('.status-spinner').style.display = '';
+            setPresentation(statusBar.querySelector('.status-spinner'), { display: '' });
         }
     }
 
@@ -7566,7 +8121,7 @@ function updateTrackLockState(track) {
     });
     ro.observe(tracksContainer);
     if (vizSpectrumCanvas) ro.observe(vizSpectrumCanvas);
-    if (vizOscilloscopeCanvas) ro.observe(vizOscilloscopeCanvas);
+    if (vizOscCanvas) ro.observe(vizOscCanvas);
 
     // --- Keyboard ---
     document.addEventListener('keydown', (e) => {
@@ -7847,7 +8402,7 @@ function updateTrackLockState(track) {
         const nameEl = document.getElementById('init-audio-name');
         if (badge && nameEl) {
             nameEl.textContent = name;
-            badge.style.display = 'flex';
+            setPresentation(badge, { display: 'flex' });
         }
 
         // Restore the original prompt from the track that generated this audio
@@ -7870,12 +8425,12 @@ function updateTrackLockState(track) {
 
         // Reset subpanel visibility
         document.querySelectorAll('.remix-params-subpanel').forEach(panel => {
-            panel.style.display = panel.id === 'remix-params-variation' ? 'block' : 'none';
+            setPresentation(panel, { display: panel.id === 'remix-params-variation' ? 'block' : 'none' });
         });
 
         const badge = document.getElementById('init-audio-badge');
         if (badge) {
-            badge.style.display = 'none';
+            setPresentation(badge, { display: 'none' });
         }
     }
 
@@ -7903,11 +8458,11 @@ function updateTrackLockState(track) {
 
             // Hide all subpanels, then show selected one
             document.querySelectorAll('.remix-params-subpanel').forEach(panel => {
-                panel.style.display = 'none';
+                setPresentation(panel, { display: 'none' });
             });
             const selectedPanel = document.getElementById(`remix-params-${remixMode}`);
             if (selectedPanel) {
-                selectedPanel.style.display = remixMode === 'inpaint' ? 'flex' : 'block';
+                setPresentation(selectedPanel, { display: remixMode === 'inpaint' ? 'flex' : 'block' });
             }
         });
     });
@@ -8037,31 +8592,48 @@ function updateTrackLockState(track) {
     const btnExportCancel = document.getElementById('btn-export-cancel');
 
     let exportActionType = 'render';
+    let exportModalTrigger = null;
+
+    function getVisibleExportModalControls() {
+        if (!exportModal) return [];
+        return Array.from(exportModal.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )).filter(control => control.getClientRects().length > 0);
+    }
 
     function openExportModal(type) {
+        exportModalTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         exportActionType = type;
         if (type === 'render') {
             if (exportModalTitle) exportModalTitle.textContent = 'Render Mixdown';
             if (exportFilenameInput) exportFilenameInput.value = 'loopmastersa_mix';
-            if (exportLoopsGroup) exportLoopsGroup.style.display = 'flex';
-            if (exportFormatGroup) exportFormatGroup.style.display = 'flex';
+            if (exportLoopsGroup) setPresentation(exportLoopsGroup, { display: 'flex' });
+            if (exportFormatGroup) setPresentation(exportFormatGroup, { display: 'flex' });
             if (btnExportConfirm) btnExportConfirm.textContent = 'Render';
         } else {
             if (exportModalTitle) exportModalTitle.textContent = 'Export Loops (ZIP)';
             if (exportFilenameInput) exportFilenameInput.value = 'loopmastersa_loops';
-            if (exportLoopsGroup) exportLoopsGroup.style.display = 'none';
-            if (exportFormatGroup) exportFormatGroup.style.display = 'none';
+            if (exportLoopsGroup) setPresentation(exportLoopsGroup, { display: 'none' });
+            if (exportFormatGroup) setPresentation(exportFormatGroup, { display: 'none' });
             if (btnExportConfirm) btnExportConfirm.textContent = 'Export';
         }
         if (exportModal) exportModal.classList.add('is-visible');
-        if (exportFilenameInput) {
-            exportFilenameInput.focus();
-            exportFilenameInput.select();
+        // Focus synchronously: hidden Electron windows may never deliver an
+        // animation frame, which left keyboard focus behind the dialog.
+        const firstControl = exportFilenameInput || getVisibleExportModalControls()[0];
+        if (firstControl) {
+            firstControl.focus();
+            if (firstControl === exportFilenameInput) firstControl.select();
         }
     }
 
     function closeExportModal() {
         if (exportModal) exportModal.classList.remove('is-visible');
+        const focusTarget = exportModalTrigger;
+        exportModalTrigger = null;
+        if (focusTarget && focusTarget.isConnected && !focusTarget.disabled) {
+            focusTarget.focus();
+        }
     }
 
     if (btnRenderMix) {
@@ -8090,8 +8662,28 @@ function updateTrackLockState(track) {
     }
 
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && exportModal && exportModal.classList.contains('is-visible')) {
+        if (!exportModal || !exportModal.classList.contains('is-visible')) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
             closeExportModal();
+            return;
+        }
+        if (e.key === 'Tab') {
+            const controls = getVisibleExportModalControls();
+            if (controls.length === 0) {
+                e.preventDefault();
+                return;
+            }
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
         }
     });
 
@@ -8268,143 +8860,18 @@ function updateTrackLockState(track) {
                     lastNode = screamSumNode;
                 }
 
-                // 2. Native DSP Nodes (Chorus, Phaser, Bitcrusher) replacing Tuna.js
-                let offlineTunaChorus = null;
-                let offlineTunaPhaser = null;
-                let offlineTunaBitcrusher = null;
+                // 2. Shared insert, modulation, and send stages. These use
+                // the exact same routing and setting map as live playback.
+                const offlineInsertEffects = TrackEffectGraph.buildInsertChain(offlineCtx, lastNode, t);
+                const offlineModulationEffects = TrackEffectGraph.buildModulationChain(offlineCtx, offlineInsertEffects.output, t, currentBpm);
+                const offlineSendEffects = TrackEffectGraph.buildSendChain(offlineCtx, offlineModulationEffects.output, t);
+                lastNode = offlineSendEffects.output;
 
-                // Chorus
-                const chorusDry = offlineCtx.createGain();
-                const chorusWet = offlineCtx.createGain();
-                const chorusSum = offlineCtx.createGain();
-
-                const chorusMix = t.tunaChorusMix !== undefined ? t.tunaChorusMix : 0.5;
-                if (t.tunaChorusEnabled) {
-                    chorusDry.gain.value = 1.0 - chorusMix;
-                    chorusWet.gain.value = chorusMix;
-                } else {
-                    chorusDry.gain.value = 1.0;
-                    chorusWet.gain.value = 0.0;
-                }
-
-                const chorusNode = createNativeChorus(offlineCtx);
-                chorusNode.rate = t.tunaChorusRate;
-                chorusNode.feedback = t.tunaChorusFeedback;
-                chorusNode.depth = t.tunaChorusDepth;
-                
-                offlineTunaChorus = chorusNode;
-
-                lastNode.connect(chorusDry);
-                chorusDry.connect(chorusSum);
-                lastNode.connect(chorusNode.input);
-                chorusNode.output.connect(chorusWet);
-                chorusWet.connect(chorusSum);
-
-                lastNode = chorusSum;
-
-                // Phaser
-                const phaserDry = offlineCtx.createGain();
-                const phaserWet = offlineCtx.createGain();
-                const phaserSum = offlineCtx.createGain();
-
-                const phaserMix = t.tunaPhaserMix !== undefined ? t.tunaPhaserMix : 0.5;
-                if (t.tunaPhaserEnabled) {
-                    phaserDry.gain.value = 1.0 - phaserMix;
-                    phaserWet.gain.value = phaserMix;
-                } else {
-                    phaserDry.gain.value = 1.0;
-                    phaserWet.gain.value = 0.0;
-                }
-
-                const phaserNode = createNativePhaser(offlineCtx);
-                phaserNode.rate = t.tunaPhaserRate;
-                phaserNode.feedback = t.tunaPhaserFeedback;
-                phaserNode.depth = t.tunaPhaserDepth;
-
-                offlineTunaPhaser = phaserNode;
-
-                lastNode.connect(phaserDry);
-                phaserDry.connect(phaserSum);
-                lastNode.connect(phaserNode.input);
-                phaserNode.output.connect(phaserWet);
-                phaserWet.connect(phaserSum);
-
-                lastNode = phaserSum;
-
-                // Bitcrusher
-                const crusherDry = offlineCtx.createGain();
-                const crusherWet = offlineCtx.createGain();
-                const crusherSum = offlineCtx.createGain();
-
-                const crusherMix = t.tunaBitcrusherMix !== undefined ? t.tunaBitcrusherMix : 0.5;
-                if (t.tunaBitcrusherEnabled) {
-                    crusherDry.gain.value = 1.0 - crusherMix;
-                    crusherWet.gain.value = crusherMix;
-                } else {
-                    crusherDry.gain.value = 1.0;
-                    crusherWet.gain.value = 0.0;
-                }
-
-                const crusherNode = createNativeBitcrusher(offlineCtx);
-                crusherNode.bits = t.tunaBitcrusherBits;
-                crusherNode.normfreq = t.tunaBitcrusherNormfreq;
-                
-                offlineTunaBitcrusher = crusherNode;
-
-                lastNode.connect(crusherDry);
-                crusherDry.connect(crusherSum);
-                lastNode.connect(crusherNode.input);
-                crusherNode.output.connect(crusherWet);
-                crusherWet.connect(crusherSum);
-
-                lastNode = crusherSum;
-
-                // 3. Aelapse Delay & Reverb (SEND EFFECT — dry stays at 1.0)
-                let offlineAelapseDelayGain = null;
-                let offlineAelapseReverbGain = null;
-
-                const aelapseSum = offlineCtx.createGain();
-
-                // Dry path — always 1.0 (send effect, not insert)
-                const aelapseDry = offlineCtx.createGain();
-                aelapseDry.gain.value = 1.0;
-                lastNode.connect(aelapseDry);
-                aelapseDry.connect(aelapseSum);
-
-                // Delay send path
-                if (t.aelapseDelayEnabled && t.aelapseDelayMix > 0) {
-                    const aelapseDelay = offlineCtx.createDelay(5.0);
-                    aelapseDelay.delayTime.setValueAtTime(t.aelapseDelayTime, 0);
-
-                    const aelapseFb = offlineCtx.createGain();
-                    aelapseFb.gain.value = t.aelapseFeedback;
-
-                    const aelapseDelayGain = offlineCtx.createGain();
-                    aelapseDelayGain.gain.value = t.aelapseDelayMix;
-                    offlineAelapseDelayGain = aelapseDelayGain;
-
-                    lastNode.connect(aelapseDelay);
-                    aelapseDelay.connect(aelapseFb);
-                    aelapseFb.connect(aelapseDelay); // feedback loop
-                    aelapseDelay.connect(aelapseDelayGain);
-                    aelapseDelayGain.connect(aelapseSum);
-                }
-
-                // Reverb send path
-                if (t.aelapseReverbEnabled && t.aelapseReverbMix > 0) {
-                    const aelapseReverb = offlineCtx.createConvolver();
-                    aelapseReverb.buffer = createSpringImpulseResponse(offlineCtx, t.aelapseReverbSize || 2.0, 2.5);
-
-                    const aelapseReverbGain = offlineCtx.createGain();
-                    aelapseReverbGain.gain.value = t.aelapseReverbMix;
-                    offlineAelapseReverbGain = aelapseReverbGain;
-
-                    lastNode.connect(aelapseReverb);
-                    aelapseReverb.connect(aelapseReverbGain);
-                    aelapseReverbGain.connect(aelapseSum);
-                }
-
-                lastNode = aelapseSum;
+                const offlineTunaChorus = offlineInsertEffects.tunaChorusNode;
+                const offlineTunaPhaser = offlineInsertEffects.tunaPhaserNode;
+                const offlineTunaBitcrusher = offlineInsertEffects.tunaBitcrusherNode;
+                const offlineAelapseDelayGain = offlineSendEffects.aelapseDelayGain;
+                const offlineAelapseReverbGain = offlineSendEffects.aelapseReverbGain;
 
                 // --- PAN & LEVEL ---
                 const panner = offlineCtx.createStereoPanner();
@@ -8441,8 +8908,10 @@ function updateTrackLockState(track) {
                     gain: gain,
                     panner: panner,
                     filtrBiquad: offlineFiltrBiquad,
-                    aelapseDelayGain: offlineAelapseDelayGain,
-                    aelapseReverbGain: offlineAelapseReverbGain,
+                    // Keep disabled sends out of the automation surface so a
+                    // modulation slot cannot accidentally enable them offline.
+                    aelapseDelayGain: t.aelapseDelayEnabled ? offlineAelapseDelayGain : null,
+                    aelapseReverbGain: t.aelapseReverbEnabled ? offlineAelapseReverbGain : null,
                     tunaChorusNode: offlineTunaChorus,
                     tunaPhaserNode: offlineTunaPhaser,
                     tunaBitcrusherNode: offlineTunaBitcrusher
@@ -8778,7 +9247,7 @@ function updateTrackLockState(track) {
             if (typeof JSZip === 'undefined') {
                 await new Promise((resolve, reject) => {
                     const s = document.createElement('script');
-                    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                    s.src = '/static/vendor/jszip-3.10.1.min.js';
                     s.onload = resolve;
                     s.onerror = reject;
                     document.head.appendChild(s);
@@ -8841,8 +9310,10 @@ function updateTrackLockState(track) {
     const docsToggle = document.getElementById('docs-toggle');
     const docsModule = document.getElementById('docs-module');
     if (docsToggle && docsModule) {
+        docsToggle.setAttribute('aria-expanded', String(docsModule.classList.contains('is-open')));
         docsToggle.addEventListener('click', () => {
-            docsModule.classList.toggle('is-open');
+            const isOpen = docsModule.classList.toggle('is-open');
+            docsToggle.setAttribute('aria-expanded', String(isOpen));
         });
     }
 
@@ -8885,10 +9356,12 @@ function updateTrackLockState(track) {
 
         const btnMidiLearn = document.getElementById('btn-midi-learn');
         if (btnMidiLearn) {
+            setToggleButtonPressed(btnMidiLearn, midiLearnActive);
             btnMidiLearn.addEventListener('click', () => {
                 requestMIDIAccessLazy();
                 midiLearnActive = !midiLearnActive;
                 btnMidiLearn.classList.toggle('active', midiLearnActive);
+                setToggleButtonPressed(btnMidiLearn, midiLearnActive);
                 toggleMidiMappableClasses(midiLearnActive);
                 if (!midiLearnActive) {
                     midiLearningControl = null;
@@ -9004,7 +9477,7 @@ function updateTrackLockState(track) {
             const panKnob = track.wrapper.querySelector('.pan-knob');
             if (panKnob) {
                 const deg = panVal * 135;
-                panKnob.querySelector('.pan-knob-indicator').style.transform = `rotate(${deg}deg)`;
+                setPresentation(panKnob.querySelector('.pan-knob-indicator'), { transform: `rotate(${deg}deg)` });
                 panKnob.title = `Pan: ${panValInt === 0 ? 'C' : panValInt < 0 ? 'L' + Math.abs(panValInt) : 'R' + panValInt}`;
                 const panValue = track.wrapper.querySelector('.pan-value');
                 if (panValue) panValue.textContent = panValInt === 0 ? 'C' : panValInt < 0 ? `L${Math.abs(panValInt)}` : `R${panValInt}`;
@@ -9141,11 +9614,11 @@ function updateTrackLockState(track) {
         const arrangerPanel = document.getElementById('arranger-panel');
         toggleArranger.addEventListener('change', () => {
             arrangerModeActive = toggleArranger.checked;
-            arrangerPanel.style.display = arrangerModeActive ? 'flex' : 'none';
+            setPresentation(arrangerPanel, { display: arrangerModeActive ? 'flex' : 'none' });
 
             const playheadLine = document.getElementById('arranger-playhead-line');
             if (playheadLine) {
-                playheadLine.style.display = arrangerModeActive ? 'block' : 'none';
+                setPresentation(playheadLine, { display: arrangerModeActive ? 'block' : 'none' });
             }
 
             renderArrangerTimeline();
@@ -9192,8 +9665,8 @@ function updateTrackLockState(track) {
                 if (rateFreeVal) rateFreeVal.textContent = lfoState.freeRate.toFixed(1) + 'Hz';
             }
             const isSync = (lfoState.mode === 'sync');
-            if (rateSyncRow) rateSyncRow.style.display = isSync ? 'flex' : 'none';
-            if (rateFreeRow) rateFreeRow.style.display = isSync ? 'none' : 'flex';
+            if (rateSyncRow) setPresentation(rateSyncRow, { display: isSync ? 'flex' : 'none' });
+            if (rateFreeRow) setPresentation(rateFreeRow, { display: isSync ? 'none' : 'flex' });
 
             // On/Off button init
             if (toggleBtn) {
@@ -9201,6 +9674,7 @@ function updateTrackLockState(track) {
                 lfoState.enabled = enabled;
                 toggleBtn.textContent = enabled ? 'On' : 'Off';
                 toggleBtn.classList.toggle('is-off', !enabled);
+                setToggleButtonPressed(toggleBtn, enabled);
                 if (section) {
                     section.classList.toggle('is-bypassed', !enabled);
                 }
@@ -9216,8 +9690,8 @@ function updateTrackLockState(track) {
                 syncToggle.addEventListener('change', () => {
                     const activeSync = syncToggle.checked;
                     globalModulators[`lfo${num}`].mode = activeSync ? 'sync' : 'free';
-                    if (rateSyncRow) rateSyncRow.style.display = activeSync ? 'flex' : 'none';
-                    if (rateFreeRow) rateFreeRow.style.display = activeSync ? 'none' : 'flex';
+                    if (rateSyncRow) setPresentation(rateSyncRow, { display: activeSync ? 'flex' : 'none' });
+                    if (rateFreeRow) setPresentation(rateFreeRow, { display: activeSync ? 'none' : 'flex' });
                     updatePlayheads();
                 });
             }
@@ -9242,6 +9716,7 @@ function updateTrackLockState(track) {
                     globalModulators[`lfo${num}`].enabled = newActive;
                     toggleBtn.textContent = newActive ? 'On' : 'Off';
                     toggleBtn.classList.toggle('is-off', !newActive);
+                    setToggleButtonPressed(toggleBtn, newActive);
                     if (section) {
                         section.classList.toggle('is-bypassed', !newActive);
                     }
@@ -9445,7 +9920,7 @@ function updateTrackLockState(track) {
     function renderArrangerTimeline() {
         const container = document.getElementById('arranger-timeline-container');
         if (!container) return;
-        container.style.position = 'relative';
+        setPresentation(container, { position: 'relative' });
 
         container.innerHTML = '';
         const numLoops = arrangerLengthLoops;
@@ -9458,8 +9933,8 @@ function updateTrackLockState(track) {
 
         const spacer = document.createElement('div');
         spacer.className = 'arranger-track-label';
-        spacer.style.border = 'none';
-        spacer.style.background = 'transparent';
+        setPresentation(spacer, { border: 'none' });
+        setPresentation(spacer, { background: 'transparent' });
         headerRow.appendChild(spacer);
 
         const cellsHeader = document.createElement('div');
@@ -9467,12 +9942,12 @@ function updateTrackLockState(track) {
         for (let l = 0; l < numLoops; l++) {
             const cell = document.createElement('div');
             cell.className = 'arranger-cell';
-            cell.style.border = 'none';
-            cell.style.background = 'transparent';
-            cell.style.fontSize = '0.6rem';
-            cell.style.color = 'var(--text-secondary)';
-            cell.style.textAlign = 'center';
-            cell.style.lineHeight = '28px';
+            setPresentation(cell, { border: 'none' });
+            setPresentation(cell, { background: 'transparent' });
+            setPresentation(cell, { fontSize: '0.6rem' });
+            setPresentation(cell, { color: 'var(--text-secondary)' });
+            setPresentation(cell, { textAlign: 'center' });
+            setPresentation(cell, { lineHeight: '28px' });
             cell.textContent = (l + 1).toString();
             cellsHeader.appendChild(cell);
         }
@@ -9484,7 +9959,7 @@ function updateTrackLockState(track) {
 
         const activeDuration = getActiveDuration();
         const currentProgress = activeDuration > 0 ? (isPlaying ? ((audioCtx.currentTime - playStartCtxTime) % activeDuration) : playOffset) / activeDuration : 0;
-        progressEl.style.width = `${currentProgress * 100}%`;
+        setPresentation(progressEl, { width: `${currentProgress * 100}%` });
         cellsHeader.appendChild(progressEl);
 
         // Add Scrubbing behavior (click and drag to seek playhead)
@@ -9560,18 +10035,18 @@ function updateTrackLockState(track) {
         });
 
         const playheadWrapper = document.createElement('div');
-        playheadWrapper.style.position = 'absolute';
-        playheadWrapper.style.left = '128px';
-        playheadWrapper.style.right = '4px';
-        playheadWrapper.style.top = '0';
-        playheadWrapper.style.bottom = '0';
-        playheadWrapper.style.pointerEvents = 'none';
+        setPresentation(playheadWrapper, { position: 'absolute' });
+        setPresentation(playheadWrapper, { left: '128px' });
+        setPresentation(playheadWrapper, { right: '4px' });
+        setPresentation(playheadWrapper, { top: '0' });
+        setPresentation(playheadWrapper, { bottom: '0' });
+        setPresentation(playheadWrapper, { pointerEvents: 'none' });
 
         const playhead = document.createElement('div');
         playhead.className = 'arranger-playhead';
         playhead.id = 'arranger-playhead-line';
-        playhead.style.left = `${currentProgress * 100}%`;
-        playhead.style.display = arrangerModeActive ? 'block' : 'none';
+        setPresentation(playhead, { left: `${currentProgress * 100}%` });
+        setPresentation(playhead, { display: arrangerModeActive ? 'block' : 'none' });
 
         playheadWrapper.appendChild(playhead);
         container.appendChild(gridEl);
@@ -9634,7 +10109,7 @@ function updateTrackLockState(track) {
         const isMod = isSliderModulated(track.id, paramName);
 
         if (!isMod) {
-            if (dot) dot.style.display = 'none';
+            if (dot) setPresentation(dot, { display: 'none' });
             return;
         }
 
@@ -9642,10 +10117,10 @@ function updateTrackLockState(track) {
             dot = document.createElement('div');
             dot.className = 'lfo-dot';
             slider.parentNode.appendChild(dot);
-            slider.parentNode.style.position = 'relative';
+            setPresentation(slider.parentNode, { position: 'relative' });
         }
 
-        dot.style.display = 'block';
+        setPresentation(dot, { display: 'block' });
 
         if (!dot._cachedDims) {
             dot._cachedDims = {
@@ -9673,8 +10148,8 @@ function updateTrackLockState(track) {
             dotTop = dims.sliderTop + dims.sliderHeight / 2;
         }
 
-        dot.style.left = `${dotLeft}px`;
-        dot.style.top = `${dotTop}px`;
+        setPresentation(dot, { left: `${dotLeft}px` });
+        setPresentation(dot, { top: `${dotTop}px` });
     }
 
     function isSliderModulated(trackId, paramName) {
@@ -9718,8 +10193,16 @@ function updateTrackLockState(track) {
                     const data = JSON.parse(event.target.result);
                     loadProject(data);
                 } catch (err) {
-                    alert('Error parsing project file: ' + err.message);
+                    console.error('Project load rejected:', err);
+                    const message = `Project not loaded: ${err.message}`;
+                    showStatus(message, 'error');
+                    alert(message);
                 }
+            };
+            reader.onerror = () => {
+                const message = 'Project not loaded: the selected file could not be read';
+                showStatus(message, 'error');
+                alert(message);
             };
             reader.readAsText(file);
             projectFileInput.value = '';
@@ -9728,11 +10211,13 @@ function updateTrackLockState(track) {
 
     // --- Record Mode Event Listeners ---
     if (btnRecord) {
+        setToggleButtonPressed(btnRecord, isRecording);
         btnRecord.addEventListener('click', () => {
             isRecording = !isRecording;
             btnRecord.classList.toggle('is-recording', isRecording);
+            setToggleButtonPressed(btnRecord, isRecording);
             if (recordLogDrawer) {
-                recordLogDrawer.style.display = isRecording ? 'block' : 'none';
+                setPresentation(recordLogDrawer, { display: isRecording ? 'block' : 'none' });
             }
             if (isRecording) {
                 if (recordLogList) recordLogList.innerHTML = '';
@@ -9835,9 +10320,9 @@ function updateTrackLockState(track) {
     // --- Keyboard Shortcuts Framework ---
     function takeScreenshot() {
         const oldStatusText = statusText ? statusText.textContent : 'Ready';
-        const oldStatusDisplay = statusBar ? statusBar.style.display : 'none';
+        const hadVisibleStatus = statusBar?.classList.contains('visible');
         
-        if (statusBar) statusBar.style.display = 'flex';
+        if (statusBar) setPresentation(statusBar, { display: 'flex' });
         if (statusText) statusText.textContent = 'Capturing screenshot...';
         
         html2canvas(document.body, {
@@ -9860,7 +10345,7 @@ function updateTrackLockState(track) {
                     if (statusText) statusText.textContent = `Screenshot saved to screenshots/${data.filename}`;
                     console.log('Screenshot saved to', data.path);
                     setTimeout(() => {
-                        if (statusBar) statusBar.style.display = oldStatusDisplay;
+                        if (statusBar && !hadVisibleStatus) setHidden(statusBar, true);
                         if (statusText) statusText.textContent = oldStatusText;
                     }, 4000);
                 } else {
@@ -9871,7 +10356,7 @@ function updateTrackLockState(track) {
                 console.error('Error saving screenshot:', err);
                 if (statusText) statusText.textContent = `Screenshot failed: ${err.message}`;
                 setTimeout(() => {
-                    if (statusBar) statusBar.style.display = oldStatusDisplay;
+                    if (statusBar && !hadVisibleStatus) setHidden(statusBar, true);
                     if (statusText) statusText.textContent = oldStatusText;
                 }, 4000);
             });
@@ -9879,7 +10364,7 @@ function updateTrackLockState(track) {
             console.error('html2canvas capture error:', err);
             if (statusText) statusText.textContent = `Screenshot failed: ${err.message}`;
             setTimeout(() => {
-                if (statusBar) statusBar.style.display = oldStatusDisplay;
+                if (statusBar && !hadVisibleStatus) setHidden(statusBar, true);
                 if (statusText) statusText.textContent = oldStatusText;
             }, 4000);
         });
@@ -9949,23 +10434,28 @@ function updateTrackLockState(track) {
             isCollapsed = false; // Force open before the first generation
         }
         appFooter.classList.toggle('is-collapsed', isCollapsed);
+        btnToggleFooter.setAttribute('aria-expanded', String(!isCollapsed));
 
         btnToggleFooter.addEventListener('click', () => {
             const willCollapse = !appFooter.classList.contains('is-collapsed');
             appFooter.classList.toggle('is-collapsed', willCollapse);
+            btnToggleFooter.setAttribute('aria-expanded', String(!willCollapse));
             localStorage.setItem('loopmaster_footer_collapsed', willCollapse);
         });
     }
 
     // Expose dev variables for testing
     window._dev = {
-        tracks,
-        playAll,
-        audioCtx,
+        // Narrow, read-only seams for the Electron QA harness.  They do not
+        // expose the mutable track collection or AudioContext.
+        trackEffectGraph: TrackEffectGraph,
+        pollGenerationJob: pollJob,
+        requestGenerationCancellation: cancelActiveGeneration,
+        getGenerationCancellationState: () => activeGenerationJob ? { ...activeGenerationJob } : null,
+        openExportModalForQa: () => openExportModal('render'),
         isPlaying: () => isPlaying,
         globalDuration: () => globalDuration,
         getActiveDuration
     };
 
 })();
-

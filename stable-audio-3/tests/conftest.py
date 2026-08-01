@@ -18,6 +18,16 @@ ACCEL_DEVICE = "cuda" if HAS_CUDA else ("mps" if HAS_MPS else "cpu")
 
 
 # ---------------------------------------------------------------------------
+# Test-process configuration
+# ---------------------------------------------------------------------------
+
+
+def pytest_configure(config):
+    """Keep CPU tensor allocation deterministic in the Windows test runner."""
+    torch.set_num_threads(1)
+
+
+# ---------------------------------------------------------------------------
 # CLI options
 # ---------------------------------------------------------------------------
 
