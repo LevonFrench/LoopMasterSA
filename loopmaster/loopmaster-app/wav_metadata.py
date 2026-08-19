@@ -1,6 +1,7 @@
 import os
 import struct
 import re
+import time
 
 def is_drum_prompt(prompt):
     """
@@ -75,6 +76,26 @@ def create_adtl_list(labels):
     # LIST size is 4 bytes list type ID + sub_chunks size
     list_header = struct.pack('<4sI4s', b'LIST', 4 + len(sub_chunks), b'adtl')
     return list_header + sub_chunks
+
+def create_info_list(prompt, bpm):
+    """Packs a LIST/INFO chunk so each WAV self-describes as a library asset.
+
+    ICMT = the generation prompt, ISFT = software tag, ICRD = creation date.
+    Readable by most DAWs and sample managers.
+    """
+    def sub(tag, text):
+        data = text.encode("utf-8")[:1024] + b"\x00"
+        if len(data) % 2 != 0:
+            data += b"\x00"
+        return struct.pack("<4sI", tag, len(data)) + data
+
+    sub_chunks = b""
+    if prompt:
+        sub_chunks += sub(b"ICMT", prompt)
+    sub_chunks += sub(b"ISFT", f"LoopMaster SA3 ({bpm} BPM)")
+    sub_chunks += sub(b"ICRD", time.strftime("%Y-%m-%d"))
+    return struct.pack("<4sI4s", b"LIST", 4 + len(sub_chunks), b"INFO") + sub_chunks
+
 
 def pack_cue_chunk(cue_points):
     """Packs a 'cue ' chunk containing a list of cue points."""
@@ -184,6 +205,11 @@ def acidize_wav_file(file_path, bpm, duration, loop=True, prompt=""):
             metadata_block = acid_chunk + cue_chunk + list_chunk
         else:
             metadata_block = acid_chunk
+
+        # 2b. LIST/INFO chunk: embed the prompt and creation date so the file
+        # stays self-describing once it leaves the session folders (the
+        # generations are the base of the post-session sample library).
+        metadata_block += create_info_list(prompt, bpm)
 
         # Ensure metadata_block size is even
         if len(metadata_block) % 2 != 0:
