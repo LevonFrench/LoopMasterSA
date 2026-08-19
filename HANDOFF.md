@@ -1,5 +1,18 @@
 # Session Handoffs
 
+## [2026-08-19 later] Crossed-session integration, first-gen speed, sample-library metadata (Claude)
+
+### Integrated from a crossed session (HANDOFF-INBOX, now deleted)
+Another Claude session (running on the roblox project) accidentally worked here. Its two files were reviewed, verified, and committed:
+- `c0763b3` wav_metadata.py: beat grid derived from duration x bpm (was hardcoded 16 beats / 17 cues; only correct at 8s@120). Verified by chunk-parsing at 4 tempos.
+- `6cd0eff` app.js: card playheads fixed (data-progress now written to `.card-playhead`/`.card-progress-fill` — CSS attr() does not inherit from the seek-bar parent), and browser Render Mix exports now embed acid+cue+LIST metadata via `buildAcidMetadata` — verified **byte-identical** to the Python tagger. NOT yet eyeballed in a live browser: confirm card playheads move during playback.
+- Loop-flag question from the inbox: `bufferToWav(..., { loop: true })` is correct — the export modal's loops input is a repeat count, and a rendered mix of loops is still a loop.
+- Its research (VAE decode speed, progressive per-variant delivery, batch structure) is preserved verbatim at `output/research-progressive-emit-vae-2026-08-19.md`. Key: progressive emit is buildable via `return_latents=True` + per-slice decode, but FIRST run the batch-invariance test (same seed, batched vs solo, diff waveforms). Also: the chunked-decode trace it asks for is already answered — `chunked_decode=True` reaches `decode_audio` with `chunk_size=64, overlap=32` (sampling.py:531).
+
+### This session, same day (already in HANDOFF above plus):
+- Perf/stability fixes (40f5f78, eaa0786, 2d047ff): first generation was 60s+ and looked hung — torch.compile'd flex_attention recompiled per chunk shape to dynamo's 256 limit. Tier disabled from model.py; first gen now ~4s wall. Launcher runs medium fp16 (fp32 spilled past 12GB VRAM and crashed decode). Checkpoint loader streams with plain reads (safetensors mmap of the 9.2GB file segfaults on this machine). HF token lives in-project at `models/huggingface/token`.
+- Sample-library metadata (user request): every generation now also carries a LIST/INFO chunk — ICMT = generation prompt, ISFT = "LoopMaster SA3 (N BPM)", ICRD = date — so WAVs self-describe after leaving the session folders. Verified: chunks parse back, files still decode.
+
 ## [2026-08-19] Performance Audit Pass 2 + Kit Builder (Claude)
 
 ### Accomplished
