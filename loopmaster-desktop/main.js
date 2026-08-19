@@ -7,6 +7,7 @@ let mainWindow;
 let pythonProcess = null;
 let readinessCheck = null;
 let startupTimeout = null;
+let forceStopTimeout = null;
 let backendAttempt = 0;
 let appIsQuitting = false;
 let stopMessage = null;
@@ -101,11 +102,19 @@ function terminateChild(child) {
     }
 }
 
+function clearForceStopTimeout() {
+    if (forceStopTimeout) {
+        clearTimeout(forceStopTimeout);
+        forceStopTimeout = null;
+    }
+}
+
 function completeStop(attempt, child) {
     if (!isCurrentAttempt(attempt, child)) return;
 
     pythonProcess = null;
     stopReadinessCheck();
+    clearForceStopTimeout();
     const message = stopMessage;
     stopMessage = null;
     backendState = message ? BACKEND_STATE.FAILED : BACKEND_STATE.STOPPED;
@@ -124,7 +133,21 @@ function stopBackend(attempt, message) {
         completeStop(attempt, null);
         return;
     }
-    terminateChild(pythonProcess);
+    const child = pythonProcess;
+    terminateChild(child);
+    // If 'close' never fires (taskkill failed or the process refuses to die),
+    // the launcher would stay STOPPING forever. Force completion after 10s.
+    clearForceStopTimeout();
+    forceStopTimeout = setTimeout(() => {
+        if (!isCurrentAttempt(attempt, child) || backendState !== BACKEND_STATE.STOPPING) return;
+        console.error('Backend did not exit within 10s; forcing kill and unblocking the launcher.');
+        try {
+            child.kill('SIGKILL');
+        } catch (error) {
+            console.error(`Force kill failed: ${error.message}`);
+        }
+        completeStop(attempt, child);
+    }, 10000);
 }
 
 function failBackend(attempt, message) {
@@ -203,7 +226,7 @@ function pollServerReady(attempt, child) {
     readinessCheck = setInterval(() => {
         if (!isCurrentAttempt(attempt, child) || backendState !== BACKEND_STATE.STARTING) return;
 
-        http.get('http://127.0.0.1:7861/', (res) => {
+        const probe = http.get('http://127.0.0.1:7861/status', { timeout: 900 }, (res) => {
             if (res.statusCode === 200 && isCurrentAttempt(attempt, child) && backendState === BACKEND_STATE.STARTING) {
                 stopReadinessCheck();
                 backendState = BACKEND_STATE.READY;
@@ -211,7 +234,9 @@ function pollServerReady(attempt, child) {
                 if (mainWindow && !mainWindow.isDestroyed()) mainWindow.loadURL('http://127.0.0.1:7861/');
             }
             res.resume();
-        }).on('error', () => {
+        });
+        probe.on('timeout', () => probe.destroy());
+        probe.on('error', () => {
             // The backend is still booting.
         });
     }, 1000);
