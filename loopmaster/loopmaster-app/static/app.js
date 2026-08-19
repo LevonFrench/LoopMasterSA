@@ -2119,11 +2119,16 @@
         }
         prevPlayPct = pct;
 
-        // Update card playheads
+        // Update card playheads.
+        // data-progress must land on the elements whose CSS reads it —
+        // .card-playhead and .card-progress-fill. attr() does not inherit,
+        // so writing it to the .card-seek-bar parent leaves both at 0.
         tracks.forEach(t => {
             t.variants.forEach(v => {
                 if (!v.seekBarEl && v.el) {
                     v.seekBarEl = v.el.querySelector('.card-seek-bar');
+                    v.playheadEl = v.el.querySelector('.card-playhead');
+                    v.progressFillEl = v.el.querySelector('.card-progress-fill');
                 }
                 if (v.seekBarEl) {
                     const dur = (v.loopMultiplier || 1) * globalDuration;
@@ -2132,7 +2137,9 @@
                     const localProgress = Math.round(((currentTime % dur) / dur) * 1000) / 1000;
                     if (v._lastProgress !== localProgress) {
                         v._lastProgress = localProgress;
-                        setPresentation(v.seekBarEl, { progress: localProgress.toString() });
+                        const progress = localProgress.toString();
+                        setPresentation(v.playheadEl, { progress });
+                        setPresentation(v.progressFillEl, { progress });
                     }
                 }
             });
@@ -8608,9 +8615,99 @@ function updateTrackLockState(track) {
     }
 
     // --- Render Mix to WAV ---
-    function bufferToWav(buffer) {
+    // Loop + beat-grid metadata, mirroring wav_metadata.acidize_wav_file on the
+    // server. Without this a browser-side render exports a bare 44-byte-header
+    // WAV: no tempo, no loop flag, no beat markers. Anything downloaded from
+    // here lands in a DAW as an untagged one-shot.
+    function buildAcidMetadata(bpm, durationSec, sampleRate, loop) {
+        const beatCount = (bpm > 0 && durationSec > 0)
+            ? Math.round(durationSec * bpm / 60)
+            : 0;
+
+        // 'acid' chunk: 8-byte header + 24-byte payload
+        const acid = new ArrayBuffer(32);
+        const av = new DataView(acid);
+        av.setUint32(0, 0x64696361, true);            // "acid"
+        av.setUint32(4, 24, true);
+        av.setUint32(8, loop ? 1 : 0, true);          // 1 = loop, 0 = one-shot
+        av.setUint16(12, 0xFFFF, true);               // root note: ignore / don't transpose
+        av.setUint16(14, 0, true);                    // reserved
+        av.setInt32(16, loop ? beatCount : 0, true);
+        av.setFloat32(20, 4.0, true);                 // meter numerator
+        av.setFloat32(24, 4.0, true);                 // meter denominator
+        av.setFloat32(28, bpm, true);
+        const parts = [new Uint8Array(acid)];
+
+        if (loop && beatCount > 0) {
+            const samplesPerBeat = (60 / bpm) * sampleRate;
+            const n = beatCount + 1;                  // one per beat, plus an end marker
+
+            // 'cue ' chunk: 24 bytes per cue point
+            const cue = new ArrayBuffer(12 + 24 * n);
+            const cv = new DataView(cue);
+            cv.setUint32(0, 0x20657563, true);        // "cue "
+            cv.setUint32(4, 4 + 24 * n, true);
+            cv.setUint32(8, n, true);
+            const labels = [];
+            for (let k = 0; k < n; k++) {
+                const pos = Math.round(k * samplesPerBeat);
+                const base = 12 + k * 24;
+                cv.setUint32(base, k + 1, true);      // cue id
+                cv.setUint32(base + 4, pos, true);    // play order position
+                cv.setUint32(base + 8, 0x61746164, true); // "data"
+                cv.setUint32(base + 12, 0, true);     // chunk start
+                cv.setUint32(base + 16, 0, true);     // block start
+                cv.setUint32(base + 20, pos, true);   // sample offset
+                labels.push([k + 1, k < beatCount ? `Beat ${k + 1}` : 'End']);
+            }
+            parts.push(new Uint8Array(cue));
+
+            // LIST/adtl chunk of 'labl' sub-chunks naming each cue
+            const enc = new TextEncoder();
+            const subs = labels.map(([id, text]) => {
+                let name = enc.encode(text + '\0');
+                if (name.length % 2 !== 0) {
+                    const padded = new Uint8Array(name.length + 1);
+                    padded.set(name);
+                    name = padded;
+                }
+                const sub = new ArrayBuffer(12 + name.length);
+                const sv = new DataView(sub);
+                sv.setUint32(0, 0x6c62616c, true);    // "labl"
+                sv.setUint32(4, 4 + name.length, true);
+                sv.setUint32(8, id, true);
+                new Uint8Array(sub).set(name, 12);
+                return new Uint8Array(sub);
+            });
+            const subsLen = subs.reduce((total, s) => total + s.length, 0);
+            const list = new Uint8Array(12 + subsLen);
+            const lv = new DataView(list.buffer);
+            lv.setUint32(0, 0x5453494c, true);        // "LIST"
+            lv.setUint32(4, 4 + subsLen, true);
+            lv.setUint32(8, 0x6c746461, true);        // "adtl"
+            let at = 12;
+            subs.forEach(s => { list.set(s, at); at += s.length; });
+            parts.push(list);
+        }
+
+        const total = parts.reduce((sum, p) => sum + p.length, 0);
+        const out = new Uint8Array(total % 2 === 0 ? total : total + 1);
+        let at = 0;
+        parts.forEach(p => { out.set(p, at); at += p.length; });
+        return out;
+    }
+
+    function bufferToWav(buffer, meta) {
         const numOfChan = buffer.numberOfChannels;
-        const length = buffer.length * numOfChan * 2 + 44;
+        const pcmBytes = buffer.length * numOfChan * 2;
+        const bpm = meta && meta.bpm > 0 ? meta.bpm : 0;
+        const loop = !meta || meta.loop !== false;
+        const acidBlock = bpm > 0
+            ? buildAcidMetadata(bpm, buffer.duration, buffer.sampleRate, loop)
+            : new Uint8Array(0);
+        // RIFF(12) + fmt(24) + metadata + data header(8) + samples
+        const headerLen = 44 + acidBlock.length;
+        const length = headerLen + pcmBytes;
         const bufferArr = new ArrayBuffer(length);
         const view = new DataView(bufferArr);
         const channels = [];
@@ -8652,10 +8749,15 @@ function updateTrackLockState(track) {
         setUint16(numOfChan * 2);
         // bits per sample
         setUint16(16);
+        // acid/cue/LIST chunks go BEFORE 'data', same as the server does
+        if (acidBlock.length) {
+            new Uint8Array(bufferArr).set(acidBlock, pos);
+            pos += acidBlock.length;
+        }
         // "data" chunk identifier
         setUint32(0x61746164);
         // chunk length
-        setUint32(buffer.length * numOfChan * 2);
+        setUint32(pcmBytes);
 
         // Fetch channel data
         for (i = 0; i < numOfChan; i++) {
@@ -8668,7 +8770,7 @@ function updateTrackLockState(track) {
             for (i = 0; i < numOfChan; i++) {
                 sample = Math.max(-1, Math.min(1, channels[i][sampleIdx]));
                 sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
-                view.setInt16(44 + offset, sample, true);
+                view.setInt16(headerLen + offset, sample, true);
                 offset += 2;
             }
             sampleIdx++;
@@ -9279,7 +9381,7 @@ function updateTrackLockState(track) {
             }
 
             const renderedBuffer = await offlineCtx.startRendering();
-            const wavBlob = bufferToWav(renderedBuffer);
+            const wavBlob = bufferToWav(renderedBuffer, { bpm, loop: true });
 
             let downloadBlob = wavBlob;
             let downloadFilename = filename || 'loopmastersa_mix';
