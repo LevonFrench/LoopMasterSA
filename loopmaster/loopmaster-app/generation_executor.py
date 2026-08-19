@@ -166,7 +166,7 @@ def _load_seed_audio(task, runtime, generation_duration):
         ) from error
 
 
-def _generate_audio(task, runtime, prompts, seed_audio, padding_sec):
+def _generate_audio(task, runtime, prompts, seed_audio, padding_sec, target_indices=None):
     def progress_callback(info):
         if "stage" in info:
             stage_messages = {
@@ -193,6 +193,9 @@ def _generate_audio(task, runtime, prompts, seed_audio, padding_sec):
         "cfg_scale": task.cfg_scale,
         "batch_size": len(prompts),
         "seed": task.seed,
+        # Per-variant seed streams: variant N re-rolled alone reproduces the
+        # variant N that was generated in the original batch.
+        "seed_offsets": list(target_indices) if target_indices is not None else None,
         "duration_padding_sec": padding_sec,
         "truncate_output_to_duration": False,
         "callback": progress_callback,
@@ -452,7 +455,7 @@ def execute_generation_task(task, runtime):
         seed_audio, waveform, seed_sample_rate = _load_seed_audio(
             task, runtime, task.duration + padding_sec
         )
-        audio = _generate_audio(task, runtime, prompts, seed_audio, padding_sec)
+        audio = _generate_audio(task, runtime, prompts, seed_audio, padding_sec, target_indices=target_indices)
         _update_job(
             runtime,
             task.job_id,

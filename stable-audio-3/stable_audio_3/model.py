@@ -127,6 +127,7 @@ class StableAudioModel:
         negative_conditioning: tp.Optional[tp.List[dict]] = None,
         negative_conditioning_tensors: tp.Optional[dict] = None,
         seed: int = -1,
+        seed_offsets: tp.Optional[tp.List[int]] = None,
         # Audio inputs
         init_audio: tp.Optional[tp.Tuple[int, torch.Tensor]] = None,
         init_noise_level: float = 1.0,
@@ -273,12 +274,23 @@ class StableAudioModel:
         if inpaint_mask is not None:
             inpaint_mask = inpaint_mask.float()
 
-        # Seed and noise
+        # Seed and noise. Each batch item gets its own generator seeded with
+        # seed + offset, so a variant produces identical audio whether it is
+        # generated alone, in a batch, or re-rolled later (batch-invariant).
         seed = seed if seed != -1 else np.random.randint(0, 99999)
-        g = torch.Generator(device=device).manual_seed(seed)
-        noise = torch.randn(
-            [batch_size, self.model.io_channels, latent_sample_size], device=device, generator=g
-        )
+        offsets = list(seed_offsets) if seed_offsets is not None else list(range(batch_size))
+        if len(offsets) != batch_size:
+            raise ValueError("seed_offsets must have one entry per batch item")
+        g = [
+            torch.Generator(device=device).manual_seed(seed + int(offset))
+            for offset in offsets
+        ]
+        noise = torch.stack([
+            torch.randn(
+                [self.model.io_channels, latent_sample_size], device=device, generator=gen
+            )
+            for gen in g
+        ])
 
         # Encode conditioning
         cache_key = _get_cond_key(prompt, negative_prompt, duration) if prompt is not None else None
@@ -394,6 +406,7 @@ class StableAudioModel:
             batch_cfg=True,
             rescale_cfg=True,
             apg_scale=apg_scale,
+            generator=g,
             init_data=init_audio,
             init_noise_level=init_noise_level,
             decode=not return_latents,

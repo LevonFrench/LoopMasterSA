@@ -305,7 +305,7 @@ def sample_flow_dpmpp(model, x, sigmas, callback=None, disable_tqdm=False, **ext
         old_denoised = denoised
     return x
 
-def sample_flow_pingpong(model, x, sigmas, callback=None, disable_tqdm=False, **extra_args):
+def sample_flow_pingpong(model, x, sigmas, callback=None, disable_tqdm=False, generator=None, **extra_args):
     """Draws samples from a model given starting noise. Ping-pong sampling for distilled models
 
     Args:
@@ -346,7 +346,20 @@ def sample_flow_pingpong(model, x, sigmas, callback=None, disable_tqdm=False, **
         if callback is not None:
             callback({'x': x, 'i': i, 't': t_curr, 'sigma': t_curr, 'sigma_hat': t_curr, 'denoised': denoised})
 
-        x = (1 - t_next_broadcast) * denoised + t_next_broadcast * torch.randn_like(x)
+        # Draw re-noising from the caller's seeded generator(s): otherwise the
+        # seed only controls step 0 and identical seeds never reproduce. A list
+        # of per-item generators keeps each batch item on its own stream, so a
+        # variant is identical whether generated alone or batched.
+        if isinstance(generator, (list, tuple)):
+            step_noise = torch.stack([
+                torch.randn(x.shape[1:], device=x.device, dtype=x.dtype, generator=gen)
+                for gen in generator
+            ])
+        elif generator is not None:
+            step_noise = torch.randn(x.shape, device=x.device, dtype=x.dtype, generator=generator)
+        else:
+            step_noise = torch.randn_like(x)
+        x = (1 - t_next_broadcast) * denoised + t_next_broadcast * step_noise
 
     return x
 
@@ -384,6 +397,7 @@ def sample_diffusion(
     disable_tqdm: bool = False,
     decode: bool = True,
     chunked_decode: tp.Optional[bool] = None,
+    generator: tp.Optional[torch.Generator] = None,
     **sampler_kwargs
 ) -> torch.Tensor:
     """
@@ -498,7 +512,7 @@ def sample_diffusion(
         elif sampler_type == "dpmpp":
             sampled = sample_flow_dpmpp(model, noise, sigmas=sigmas, callback=callback, disable_tqdm=disable_tqdm, **common_kwargs)
         elif sampler_type == "pingpong":
-            sampled = sample_flow_pingpong(model, noise, sigmas=sigmas, callback=callback, disable_tqdm=disable_tqdm, **common_kwargs)
+            sampled = sample_flow_pingpong(model, noise, sigmas=sigmas, callback=callback, disable_tqdm=disable_tqdm, generator=generator, **common_kwargs)
         else:
             raise ValueError(f"Unknown sampler_type for {diffusion_objective}: {sampler_type}")
 
