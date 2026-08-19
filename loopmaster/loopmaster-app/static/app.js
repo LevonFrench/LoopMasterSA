@@ -150,7 +150,6 @@
         console.error('Failed to initialize background Web Worker timer:', err);
     }
     let isRecording = false;
-    let recordedStates = [];
 
     let recordedLoopCounter = 1;
     let isProjectLoading = false;
@@ -178,6 +177,29 @@
     let masterAnalyser = null;
     let masterMeterState = { rms: -60, peak: -60, peakHold: -60, peakHoldTime: 0 };
     let meterLoopRunning = false;
+    let _modBypassElCache = null;
+    function getModBypassEl() {
+        if (!_modBypassElCache) _modBypassElCache = document.getElementById('toggle-modulators-bypass');
+        return _modBypassElCache;
+    }
+    let _masterUiCache = null;
+    const _lfoVizEls = {};
+    function getLfoVizEls(num) {
+        let els = _lfoVizEls[num];
+        if (!els) {
+            els = _lfoVizEls[num] = {
+                led: document.getElementById(`lfo${num}-timing-light`),
+                canvas: document.getElementById(`lfo${num}-canvas`)
+            };
+        }
+        return els;
+    }
+    const ZERO_MOD_OFFSETS = Object.freeze({
+        level: 0, pan: 0, filter: 0, space: 0,
+        chorusRate: 0, chorusDepth: 0, chorusFeedback: 0,
+        phaserRate: 0, phaserDepth: 0, phaserFeedback: 0,
+        crusherBits: 0, crusherNormfreq: 0
+    });
     let meterRafId = null;
     let copiedFxSettings = null;
     let copiedTrackSettings = null;
@@ -339,6 +361,12 @@
             set depth(d) { lfoGain.gain.setTargetAtTime(d * 0.003, ctx.currentTime, 0.01); },
             get feedback() { return feedback.gain.value; },
             set feedback(f) { feedback.gain.setTargetAtTime(f, ctx.currentTime, 0.01); },
+            // Time-aware setters for OfflineAudioContext automation, where
+            // ctx.currentTime is 0 before startRendering() and plain setters
+            // collapse the whole automation lane to the last written value.
+            setRateAtTime: (r, t) => lfo.frequency.setTargetAtTime(r, t, 0.01),
+            setDepthAtTime: (d, t) => lfoGain.gain.setTargetAtTime(d * 0.003, t, 0.01),
+            setFeedbackAtTime: (f, t) => feedback.gain.setTargetAtTime(f, t, 0.01),
             disconnect: () => {
                 input.disconnect(); output.disconnect(); delay.disconnect(); feedback.disconnect();
                 lfo.disconnect(); lfoGain.disconnect();
@@ -392,6 +420,10 @@
             set depth(d) { lfoGain.gain.setTargetAtTime(d * 800, ctx.currentTime, 0.01); },
             get feedback() { return feedback.gain.value; },
             set feedback(f) { feedback.gain.setTargetAtTime(f, ctx.currentTime, 0.01); },
+            // Time-aware setters for OfflineAudioContext automation (see chorus).
+            setRateAtTime: (r, t) => lfo.frequency.setTargetAtTime(r, t, 0.01),
+            setDepthAtTime: (d, t) => lfoGain.gain.setTargetAtTime(d * 800, t, 0.01),
+            setFeedbackAtTime: (f, t) => feedback.gain.setTargetAtTime(f, t, 0.01),
             disconnect: () => {
                 input.disconnect(); output.disconnect(); feedback.disconnect();
                 for (let i=0; i<stages; i++) filters[i].disconnect();
@@ -418,12 +450,18 @@
         return {
             input, output, shaper, filter,
             get bits() { return currentBits; },
-            set bits(b) { 
-                currentBits = Math.max(1, Math.min(16, b));
-                shaper.curve = makeBitcrusherCurve(currentBits); 
+            set bits(b) {
+                const next = Math.max(1, Math.min(16, b));
+                // The scheduler assigns this 40x/s; rebuilding the 4096-float
+                // curve on unchanged values allocates and glitches the render thread.
+                if (next === currentBits) return;
+                currentBits = next;
+                shaper.curve = makeBitcrusherCurve(currentBits);
             },
             get normfreq() { return filter.frequency.value / 20000; },
             set normfreq(nf) { filter.frequency.setTargetAtTime(Math.max(20, nf * 20000), ctx.currentTime, 0.01); },
+            // Time-aware setter for OfflineAudioContext automation (see chorus).
+            setNormfreqAtTime: (nf, t) => filter.frequency.setTargetAtTime(Math.max(20, nf * 20000), t, 0.01),
             disconnect: () => {
                 input.disconnect(); output.disconnect(); shaper.disconnect(); filter.disconnect();
             }
@@ -841,6 +879,7 @@
     }
 
     // --- BPM ---
+    let _bpmRestartDebounce = null;
     bpmInput.addEventListener('input', () => {
         const activeDurationBefore = getActiveDuration();
         let currentTime = 0;
@@ -857,10 +896,17 @@
         playOffset = pct * activeDurationAfter;
         if (isPlaying) {
             playStartCtxTime = audioCtx.currentTime - playOffset;
-            tracks.forEach(t => {
-                stopTrackSource(t);
-                startTrackSource(t);
-            });
+            // BPM drags fire this per mousemove; restarting every source per
+            // pixel churns nodes and stutters. Coalesce until the drag settles.
+            if (_bpmRestartDebounce) clearTimeout(_bpmRestartDebounce);
+            _bpmRestartDebounce = setTimeout(() => {
+                _bpmRestartDebounce = null;
+                if (!isPlaying) return;
+                tracks.forEach(t => {
+                    stopTrackSource(t);
+                    startTrackSource(t);
+                });
+            }, 140);
         }
         updatePlayheads();
 
@@ -1466,8 +1512,17 @@
         const canvas = vizMetersCanvas;
         const ctx2d = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
-        const rect = canvas.getBoundingClientRect();
-        
+        const rect = canvas._cachedRect || canvas.getBoundingClientRect();
+
+        const expectedW = Math.round(rect.width * dpr);
+        const expectedH = Math.round(rect.height * dpr);
+        if (canvas.width !== expectedW || canvas.height !== expectedH) {
+            canvas.width = expectedW;
+            canvas.height = expectedH;
+            ctx2d.scale(dpr, dpr);
+        } else {
+            ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
         const w = rect.width, h = rect.height;
 
         ctx2d.clearRect(0, 0, w, h);
@@ -1614,7 +1669,7 @@
         const env1Val = getEnvValue(globalModulators.env1);
         const env2Val = getEnvValue(globalModulators.env2);
 
-        const modBypassEl = document.getElementById('toggle-modulators-bypass');
+        const modBypassEl = getModBypassEl();
         const isModBypassed = modBypassEl ? modBypassEl.checked : false;
 
         const modOffsets = {};
@@ -1657,67 +1712,75 @@
             });
         }
 
-        // Apply offsets to tracks
+        // Apply offsets to tracks. This runs every 25ms: cache DOM lookups on
+        // the track and skip node/DOM writes whose value did not change.
         tracks.forEach(track => {
-            const offsets = modOffsets[track.id] || {
-                level: 0,
-                pan: 0,
-                filter: 0,
-                space: 0,
-                chorusRate: 0,
-                chorusDepth: 0,
-                chorusFeedback: 0,
-                phaserRate: 0,
-                phaserDepth: 0,
-                phaserFeedback: 0,
-                crusherBits: 0,
-                crusherNormfreq: 0
-            };
+            const offsets = modOffsets[track.id] || ZERO_MOD_OFFSETS;
 
             const rampTime = audioCtx.currentTime + 0.015;
+            const last = track._lastApplied || (track._lastApplied = {});
 
             // Volume
             let level = track.level + offsets.level;
             level = Math.max(0, Math.min(1, level));
-            if (track.gainNode) {
-                track.gainNode.gain.setTargetAtTime(level * track._arrangerGate, rampTime, 0.02);
+            const gainTarget = level * track._arrangerGate;
+            if (track.gainNode && gainTarget !== last.gain) {
+                last.gain = gainTarget;
+                track.gainNode.gain.setTargetAtTime(gainTarget, rampTime, 0.02);
             }
             updateSliderModDot(track, '.level-knob', level);
 
             // Pan
             let pan = track.pan + offsets.pan * 2.0;
             pan = Math.max(-1, Math.min(1, pan));
-            if (track.panNode) {
-                track.panNode.pan.setTargetAtTime(pan, rampTime, 0.025);
-            }
-            const panKnob = track.wrapper.querySelector('.pan-knob');
-            if (panKnob) {
-                const deg = pan * 135;
-                const indicator = panKnob.querySelector('.pan-knob-indicator');
-                if (indicator) setPresentation(indicator, { transform: `rotate(${deg}deg)` });
-                const panText = track.wrapper.querySelector('.pan-value');
-                const displayVal = Math.round(pan * 100);
-                if (panText) {
-                    panText.textContent = displayVal === 0 ? 'C' : displayVal < 0 ? `L${Math.abs(displayVal)}` : `R${displayVal}`;
+            if (pan !== last.pan) {
+                last.pan = pan;
+                if (track.panNode) {
+                    track.panNode.pan.setTargetAtTime(pan, rampTime, 0.025);
+                }
+                let panUi = track._panUi;
+                if (panUi === undefined) {
+                    const panKnob = track.wrapper.querySelector('.pan-knob');
+                    panUi = track._panUi = panKnob ? {
+                        indicator: panKnob.querySelector('.pan-knob-indicator'),
+                        text: track.wrapper.querySelector('.pan-value')
+                    } : null;
+                }
+                if (panUi) {
+                    if (panUi.indicator) setPresentation(panUi.indicator, { transform: `rotate(${pan * 135}deg)` });
+                    const displayVal = Math.round(pan * 100);
+                    if (panUi.text && displayVal !== last.panDisplay) {
+                        last.panDisplay = displayVal;
+                        panUi.text.textContent = displayVal === 0 ? 'C' : displayVal < 0 ? `L${Math.abs(displayVal)}` : `R${displayVal}`;
+                    }
                 }
             }
 
             // Filter
             let filterCutoff = track.filtrCutoff + offsets.filter * 15000;
             filterCutoff = Math.max(20, Math.min(20000, filterCutoff));
-            if (track.filtrFilterNode) {
-                track.filtrFilterNode.frequency.setTargetAtTime(filterCutoff, rampTime, 0.025);
+            if (filterCutoff !== last.filterCutoff) {
+                last.filterCutoff = filterCutoff;
+                if (track.filtrFilterNode) {
+                    track.filtrFilterNode.frequency.setTargetAtTime(filterCutoff, rampTime, 0.025);
+                }
             }
             updateSliderModDot(track, '.filtr-cutoff', (filterCutoff - 20) / 19980);
             // Space
             let space = offsets.space;
             let dMix = Math.max(0, Math.min(1, track.aelapseDelayMix + space));
             let rMix = Math.max(0, Math.min(1, track.aelapseReverbMix + space));
-            if (track.aelapseDelayGainNode) {
-                track.aelapseDelayGainNode.gain.setTargetAtTime(dMix, rampTime, 0.02);
+            if (dMix !== last.dMix) {
+                last.dMix = dMix;
+                if (track.aelapseDelayGainNode) {
+                    track.aelapseDelayGainNode.gain.setTargetAtTime(dMix, rampTime, 0.02);
+                }
             }
-            if (track.aelapseReverbGainNode) {
-                track.aelapseReverbGainNode.gain.setTargetAtTime(rMix, rampTime, 0.02);
+            if (rMix !== last.rMix) {
+                last.rMix = rMix;
+                if (track.aelapseReverbGainNode) {
+                    track.aelapseReverbGainNode.gain.setTargetAtTime(rMix, rampTime, 0.02);
+                }
             }
             updateSliderModDot(track, '.aelapse-delay-mix', dMix);
             updateSliderModDot(track, '.aelapse-reverb-mix', rMix);
@@ -1725,81 +1788,113 @@
             // Chorus Rate
             let chorusRate = track.tunaChorusRate + offsets.chorusRate * 8.0;
             chorusRate = Math.max(0.01, Math.min(8.0, chorusRate));
-            if (track.tunaChorusRateSync === 'Free' && track.tunaChorusNode) {
-                track.tunaChorusNode.rate = chorusRate;
+            if (chorusRate !== last.chorusRate) {
+                last.chorusRate = chorusRate;
+                if (track.tunaChorusRateSync === 'Free' && track.tunaChorusNode) {
+                    track.tunaChorusNode.rate = chorusRate;
+                }
             }
             updateSliderModDot(track, '.chorus-rate', (chorusRate - 0.01) / 7.99);
 
             // Chorus Depth
             let chorusDepth = track.tunaChorusDepth + offsets.chorusDepth;
             chorusDepth = Math.max(0.0, Math.min(1.0, chorusDepth));
-            if (track.tunaChorusNode) {
-                track.tunaChorusNode.depth = chorusDepth;
+            if (chorusDepth !== last.chorusDepth) {
+                last.chorusDepth = chorusDepth;
+                if (track.tunaChorusNode) {
+                    track.tunaChorusNode.depth = chorusDepth;
+                }
             }
             updateSliderModDot(track, '.chorus-depth', chorusDepth);
 
             // Chorus Feedback
             let chorusFeedback = track.tunaChorusFeedback + offsets.chorusFeedback;
             chorusFeedback = Math.max(0.0, Math.min(0.95, chorusFeedback));
-            if (track.tunaChorusNode) {
-                track.tunaChorusNode.feedback = chorusFeedback;
+            if (chorusFeedback !== last.chorusFeedback) {
+                last.chorusFeedback = chorusFeedback;
+                if (track.tunaChorusNode) {
+                    track.tunaChorusNode.feedback = chorusFeedback;
+                }
             }
             updateSliderModDot(track, '.chorus-feedback', chorusFeedback / 0.95);
 
             // Phaser Rate
             let phaserRate = track.tunaPhaserRate + offsets.phaserRate * 8.0;
             phaserRate = Math.max(0.01, Math.min(8.0, phaserRate));
-            if (track.tunaPhaserRateSync === 'Free' && track.tunaPhaserNode) {
-                track.tunaPhaserNode.rate = phaserRate;
+            if (phaserRate !== last.phaserRate) {
+                last.phaserRate = phaserRate;
+                if (track.tunaPhaserRateSync === 'Free' && track.tunaPhaserNode) {
+                    track.tunaPhaserNode.rate = phaserRate;
+                }
             }
             updateSliderModDot(track, '.phaser-rate', (phaserRate - 0.01) / 7.99);
 
             // Phaser Depth
             let phaserDepth = track.tunaPhaserDepth + offsets.phaserDepth;
             phaserDepth = Math.max(0.0, Math.min(1.0, phaserDepth));
-            if (track.tunaPhaserNode) {
-                track.tunaPhaserNode.depth = phaserDepth;
+            if (phaserDepth !== last.phaserDepth) {
+                last.phaserDepth = phaserDepth;
+                if (track.tunaPhaserNode) {
+                    track.tunaPhaserNode.depth = phaserDepth;
+                }
             }
             updateSliderModDot(track, '.phaser-depth', phaserDepth);
 
             // Phaser Feedback
             let phaserFeedback = track.tunaPhaserFeedback + offsets.phaserFeedback;
             phaserFeedback = Math.max(0.0, Math.min(1.0, phaserFeedback));
-            if (track.tunaPhaserNode) {
-                track.tunaPhaserNode.feedback = phaserFeedback;
+            if (phaserFeedback !== last.phaserFeedback) {
+                last.phaserFeedback = phaserFeedback;
+                if (track.tunaPhaserNode) {
+                    track.tunaPhaserNode.feedback = phaserFeedback;
+                }
             }
             updateSliderModDot(track, '.phaser-feedback', phaserFeedback);
 
             // Crusher Bits
             let crusherBits = track.tunaBitcrusherBits + offsets.crusherBits * 16.0;
             crusherBits = Math.max(1, Math.min(16, Math.round(crusherBits)));
-            if (track.tunaBitcrusherNode) {
-                track.tunaBitcrusherNode.bits = crusherBits;
+            if (crusherBits !== last.crusherBits) {
+                last.crusherBits = crusherBits;
+                if (track.tunaBitcrusherNode) {
+                    track.tunaBitcrusherNode.bits = crusherBits;
+                }
             }
             updateSliderModDot(track, '.crusher-bits', (crusherBits - 1) / 15.0);
 
             // Crusher Freq Div
             let crusherNormfreq = track.tunaBitcrusherNormfreq + offsets.crusherNormfreq;
             crusherNormfreq = Math.max(0.001, Math.min(1.0, crusherNormfreq));
-            if (track.tunaBitcrusherNode) {
-                track.tunaBitcrusherNode.normfreq = crusherNormfreq;
+            if (crusherNormfreq !== last.crusherNormfreq) {
+                last.crusherNormfreq = crusherNormfreq;
+                if (track.tunaBitcrusherNode) {
+                    track.tunaBitcrusherNode.normfreq = crusherNormfreq;
+                }
             }
             updateSliderModDot(track, '.crusher-normfreq', (crusherNormfreq - 0.001) / 0.999);
         });
 
         // Master Volume
-        const masterValSlider = document.getElementById('master-volume-slider');
+        if (!_masterUiCache) {
+            _masterUiCache = {
+                slider: document.getElementById('master-volume-slider'),
+                readout: document.getElementById('master-volume-readout')
+            };
+        }
+        const masterValSlider = _masterUiCache.slider;
         if (masterVolumeNode && masterValSlider) {
             const baseVal = parseInt(masterValSlider.value) || 100;
             const modBaseVal = baseVal + masterOffsets.level * 100;
             const clampedVal = Math.max(0, Math.min(100, modBaseVal));
             const p = getMasterFaderParams(clampedVal);
-            masterVolumeNode.gain.value = p.volumeGain;
-            masterLimiter.threshold.value = p.threshold;
+            if (masterVolumeNode.gain.value !== p.volumeGain) masterVolumeNode.gain.value = p.volumeGain;
+            if (masterLimiter.threshold.value !== p.threshold) masterLimiter.threshold.value = p.threshold;
 
-            const masterReadout = document.getElementById('master-volume-readout');
-            if (masterReadout) masterReadout.textContent = `${p.displayDb === -Infinity ? '-inf' : p.displayDb.toFixed(1)} dB`;
-
+            const masterReadout = _masterUiCache.readout;
+            if (masterReadout) {
+                const readoutText = `${p.displayDb === -Infinity ? '-inf' : p.displayDb.toFixed(1)} dB`;
+                if (masterReadout.textContent !== readoutText) masterReadout.textContent = readoutText;
+            }
         }
     }
 
@@ -1834,7 +1929,7 @@
             if (!lfo) continue;
 
             // 1. Update timing LED
-            const led = document.getElementById(`lfo${num}-timing-light`);
+            const led = getLfoVizEls(num).led;
             let period = 1.0;
             if (lfo.mode === 'sync') {
                 const bars = parseFloat(lfo.syncRate) || 1.0;
@@ -1886,7 +1981,7 @@
             }
 
             // 2. Draw waveform canvas
-            const canvas = document.getElementById(`lfo${num}-canvas`);
+            const canvas = getLfoVizEls(num).canvas;
             if (canvas) {
                 const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1997,8 +2092,11 @@
         renderLFOVisualizers(currentTime);
 
         const pct = activeDuration > 0 ? currentTime / activeDuration : 0;
-        tPosition.textContent = formatTime(currentTime);
-        tDuration.textContent = formatTime(activeDuration);
+        // Runs per rAF frame: only touch the DOM when the text changed.
+        const posText = formatTime(currentTime);
+        if (tPosition.textContent !== posText) tPosition.textContent = posText;
+        const durText = formatTime(activeDuration);
+        if (tDuration.textContent !== durText) tDuration.textContent = durText;
 
         // Detect loop boundary
         if (isPlaying && pct < prevPlayPct - 0.5) {
@@ -2029,8 +2127,13 @@
                 }
                 if (v.seekBarEl) {
                     const dur = (v.loopMultiplier || 1) * globalDuration;
-                    const localProgress = (currentTime % dur) / dur;
-                    setPresentation(v.seekBarEl, { progress: localProgress.toString() });
+                    // Quantize to ~0.1% steps and skip unchanged writes so
+                    // idle frames don't invalidate style on every card.
+                    const localProgress = Math.round(((currentTime % dur) / dur) * 1000) / 1000;
+                    if (v._lastProgress !== localProgress) {
+                        v._lastProgress = localProgress;
+                        setPresentation(v.seekBarEl, { progress: localProgress.toString() });
+                    }
                 }
             });
         });
@@ -3798,46 +3901,10 @@ function updateTrackLockState(track) {
             });
         }
 
-        if (pasteTrackBtn) {
-            pasteTrackBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (track.locked) return;
-                if (!copiedTrackSettings) {
-                    alert('No track settings copied yet!');
-                    return;
-                }
-                const settings = copiedTrackSettings;
-
-                // Mute
-                if (track.muted !== settings.muted) {
-                    track.muted = settings.muted;
-                    muteBtn.classList.toggle('is-on', track.muted);
-                }
-
-                // Volume
-                track.level = settings.level;
-                const targetVal = Math.round(settings.level * 100);
-                if (levelKnob) {
-                    levelKnob.value = targetVal;
-                    levelKnob.title = `Vol: ${targetVal}`;
-                }
-                levelValue.textContent = targetVal;
-                updateMixerState();
-
-                // Pan
-                const panVal = Math.round(settings.pan * 100);
-                updatePanKnob(panVal);
-
-                // Front-facing macro knobs
-                for (const param in settings.macroValues) {
-                    if (macroKnobState[param]) {
-                        macroKnobState[param].value = settings.macroValues[param];
-                        applyMacroKnob(param, settings.macroValues[param]);
-                    }
-                }
-
-                // Detailed FX
-                const fx = settings.fxSettings;
+        // Shared FX-settings application used by both the track paste
+        // button and the FX drawer's Paste button (state-driven; the FX
+        // drawer buttons previously read stale selectors and threw).
+        function applyFxSettingsToTrack(fx) {
                 track.filtrEnabled = fx.filtrEnabled;
                 const filtrToggleBtn = fxDrawerEl.querySelector('.filtr-toggle');
                 if (filtrToggleBtn) {
@@ -4054,6 +4121,48 @@ function updateTrackLockState(track) {
                         }
                     }
                 }
+        }
+
+        if (pasteTrackBtn) {
+            pasteTrackBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (track.locked) return;
+                if (!copiedTrackSettings) {
+                    alert('No track settings copied yet!');
+                    return;
+                }
+                const settings = copiedTrackSettings;
+
+                // Mute
+                if (track.muted !== settings.muted) {
+                    track.muted = settings.muted;
+                    muteBtn.classList.toggle('is-on', track.muted);
+                }
+
+                // Volume
+                track.level = settings.level;
+                const targetVal = Math.round(settings.level * 100);
+                if (levelKnob) {
+                    levelKnob.value = targetVal;
+                    levelKnob.title = `Vol: ${targetVal}`;
+                }
+                levelValue.textContent = targetVal;
+                updateMixerState();
+
+                // Pan
+                const panVal = Math.round(settings.pan * 100);
+                updatePanKnob(panVal);
+
+                // Front-facing macro knobs
+                for (const param in settings.macroValues) {
+                    if (macroKnobState[param]) {
+                        macroKnobState[param].value = settings.macroValues[param];
+                        applyMacroKnob(param, settings.macroValues[param]);
+                    }
+                }
+
+                // Detailed FX
+                applyFxSettingsToTrack(settings.fxSettings);
 
                 pasteTrackBtn.classList.add('is-feedback-success');
                 setTimeout(() => pasteTrackBtn.classList.remove('is-feedback-success'), 1000);
@@ -4167,7 +4276,7 @@ function updateTrackLockState(track) {
             });
         }
 
-        initKnob(levelKnob, (val) => {
+        trackInitKnob(levelKnob, (val) => {
             track.level = val / 100;
             levelValue.textContent = Math.round(val);
             levelKnob.title = `Vol: ${Math.round(val)}`;
@@ -4439,7 +4548,7 @@ function updateTrackLockState(track) {
         const eqSliders = fxDrawerEl.querySelectorAll('.eq-slider');
         const eqVals = fxDrawerEl.querySelectorAll('.eq-val');
         eqSliders.forEach((slider, b) => {
-            initKnob(slider, (val) => {
+            trackInitKnob(slider, (val) => {
                 eqVals[b].textContent = (val >= 0 ? '+' : '') + val.toFixed(1) + 'dB';
                 track.eqGains[b] = val;
                 eqFilters[b].gain.value = val;
@@ -4457,7 +4566,7 @@ function updateTrackLockState(track) {
 
         const filtrLpCutoffSlider = fxDrawerEl.querySelector('.filtr-lp-cutoff');
         const filtrLpCutoffVal = fxDrawerEl.querySelector('.filtr-lp-cutoff-val');
-        initKnob(filtrLpCutoffSlider, (val) => {
+        trackInitKnob(filtrLpCutoffSlider, (val) => {
             filtrLpCutoffVal.textContent = val >= 1000 ? (val / 1000).toFixed(1) + 'kHz' : val + 'Hz';
             track.filtrLpCutoff = val;
             if (track.filtrLpFilterNode) {
@@ -4473,7 +4582,7 @@ function updateTrackLockState(track) {
 
         const filtrLpResoSlider = fxDrawerEl.querySelector('.filtr-lp-reso');
         const filtrLpResoVal = fxDrawerEl.querySelector('.filtr-lp-reso-val');
-        initKnob(filtrLpResoSlider, (val) => {
+        trackInitKnob(filtrLpResoSlider, (val) => {
             const q = val / 10;
             filtrLpResoVal.textContent = q.toFixed(1);
             track.filtrLpResonance = q;
@@ -4490,7 +4599,7 @@ function updateTrackLockState(track) {
 
         const filtrDriveSlider = fxDrawerEl.querySelector('.filtr-drive');
         const filtrDriveVal = fxDrawerEl.querySelector('.filtr-drive-val');
-        initKnob(filtrDriveSlider, (val) => {
+        trackInitKnob(filtrDriveSlider, (val) => {
             filtrDriveVal.textContent = val + '%';
             track.filtrDrive = val;
             if (track.filtrDriveShaperNode) {
@@ -4506,7 +4615,7 @@ function updateTrackLockState(track) {
 
         const filtrHpCutoffSlider = fxDrawerEl.querySelector('.filtr-hp-cutoff');
         const filtrHpCutoffVal = fxDrawerEl.querySelector('.filtr-hp-cutoff-val');
-        initKnob(filtrHpCutoffSlider, (val) => {
+        trackInitKnob(filtrHpCutoffSlider, (val) => {
             filtrHpCutoffVal.textContent = val >= 1000 ? (val / 1000).toFixed(1) + 'kHz' : val + 'Hz';
             track.filtrHpCutoff = val;
             if (track.filtrHpFilterNode) {
@@ -4522,7 +4631,7 @@ function updateTrackLockState(track) {
 
         const filtrHpResoSlider = fxDrawerEl.querySelector('.filtr-hp-reso');
         const filtrHpResoVal = fxDrawerEl.querySelector('.filtr-hp-reso-val');
-        initKnob(filtrHpResoSlider, (val) => {
+        trackInitKnob(filtrHpResoSlider, (val) => {
             const q = val / 10;
             filtrHpResoVal.textContent = q.toFixed(1);
             track.filtrHpResonance = q;
@@ -4539,7 +4648,7 @@ function updateTrackLockState(track) {
 
         const filtrMixSlider = fxDrawerEl.querySelector('.filtr-mix');
         const filtrMixVal = fxDrawerEl.querySelector('.filtr-mix-val');
-        initKnob(filtrMixSlider, (val) => {
+        trackInitKnob(filtrMixSlider, (val) => {
             const pct = val / 100;
             filtrMixVal.textContent = val + '%';
             track.filtrMix = pct;
@@ -4555,7 +4664,7 @@ function updateTrackLockState(track) {
         // Wire Scream controls
         const screamCutoffSlider = fxDrawerEl.querySelector('.scream-cutoff');
         const screamCutoffVal = fxDrawerEl.querySelector('.scream-cutoff-val');
-        initKnob(screamCutoffSlider, (val) => {
+        trackInitKnob(screamCutoffSlider, (val) => {
             screamCutoffVal.textContent = val >= 1000 ? (val / 1000).toFixed(1) + 'kHz' : val + 'Hz';
             track.screamCutoff = val;
             screamFilter.frequency.value = val;
@@ -4569,7 +4678,7 @@ function updateTrackLockState(track) {
 
         const screamAmountSlider = fxDrawerEl.querySelector('.scream-amount');
         const screamAmountVal = fxDrawerEl.querySelector('.scream-amount-val');
-        initKnob(screamAmountSlider, (val) => {
+        trackInitKnob(screamAmountSlider, (val) => {
             screamAmountVal.textContent = val + '%';
             const q = 0.707 + (24.293 * val / 100);
             const drive = 5 + (75 * val / 100);
@@ -4587,7 +4696,7 @@ function updateTrackLockState(track) {
 
         const screamMixSlider = fxDrawerEl.querySelector('.scream-mix');
         const screamMixVal = fxDrawerEl.querySelector('.scream-mix-val');
-        initKnob(screamMixSlider, (val) => {
+        trackInitKnob(screamMixSlider, (val) => {
             const pct = val / 100;
             screamMixVal.textContent = val + '%';
             track.screamMix = pct;
@@ -4603,7 +4712,7 @@ function updateTrackLockState(track) {
         // Wire Aelapse delay/reverb controls
         const aeMix = fxDrawerEl.querySelector('.aelapse-mix');
         const aeMixVal = fxDrawerEl.querySelector('.aelapse-mix-val');
-        initKnob(aeMix, (val) => {
+        trackInitKnob(aeMix, (val) => {
             const pct = (val / 100) * 0.7;
             const mix = pct;
             const feedback = pct * 0.95;
@@ -4625,7 +4734,7 @@ function updateTrackLockState(track) {
 
         const aeReverbMix = fxDrawerEl.querySelector('.aelapse-reverb-mix');
         const aeReverbVal = fxDrawerEl.querySelector('.aelapse-reverb-val');
-        initKnob(aeReverbMix, (val) => {
+        trackInitKnob(aeReverbMix, (val) => {
             const pct = (val / 100) * 0.7;
             const mix = pct;
             track.aelapseReverbMix = mix;
@@ -4643,7 +4752,7 @@ function updateTrackLockState(track) {
 
         const aeReverbSize = fxDrawerEl.querySelector('.aelapse-reverb-size');
         const aeReverbSizeVal = fxDrawerEl.querySelector('.aelapse-reverb-size-val');
-        initKnob(aeReverbSize, (val) => {
+        trackInitKnob(aeReverbSize, (val) => {
             track.aelapseReverbSize = val;
             aeReverbSizeVal.textContent = val.toFixed(1) + 's';
             try {
@@ -4663,7 +4772,7 @@ function updateTrackLockState(track) {
         const aeSyncVal = fxDrawerEl.querySelector('.aelapse-sync-val');
         const syncLabels = ['1/16', '1/8T', '1/8', 'd8th', '1/4', 'd1/4', '1/2', 'd1/2', '1/1'];
         const syncBeats = [0.25, 0.333, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0];
-        initKnob(aeSync, (val) => {
+        trackInitKnob(aeSync, (val) => {
             const idx = parseInt(val);
             track.delaySyncIndex = idx;
             aeSyncVal.textContent = syncLabels[idx];
@@ -4684,7 +4793,7 @@ function updateTrackLockState(track) {
         const chorusRateSyncVal = fxDrawerEl.querySelector('.chorus-rate-sync-val');
         const chorusRateSlider = fxDrawerEl.querySelector('.chorus-rate');
         const chorusPhaserSyncLabels = ['Free', '1/16', '1/8', '1/4', '1/2', '1/1', '4/1', '8/1', '16/1', '32/1'];
-        initKnob(chorusRateSyncKnob, (val) => {
+        trackInitKnob(chorusRateSyncKnob, (val) => {
             const idx = parseInt(val);
             track.tunaChorusRateSyncIndex = idx;
             track.tunaChorusRateSync = chorusPhaserSyncLabels[idx];
@@ -4707,7 +4816,7 @@ function updateTrackLockState(track) {
 
 
         const chorusRateVal = fxDrawerEl.querySelector('.chorus-rate-val');
-        initKnob(chorusRateSlider, (val) => {
+        trackInitKnob(chorusRateSlider, (val) => {
             chorusRateVal.textContent = val.toFixed(2) + 'Hz';
             track.tunaChorusRate = val;
             if (track.tunaChorusRateSync === 'Free' && track.tunaChorusNode) {
@@ -4723,7 +4832,7 @@ function updateTrackLockState(track) {
 
         const chorusDepthSlider = fxDrawerEl.querySelector('.chorus-depth');
         const chorusDepthVal = fxDrawerEl.querySelector('.chorus-depth-val');
-        initKnob(chorusDepthSlider, (val) => {
+        trackInitKnob(chorusDepthSlider, (val) => {
             chorusDepthVal.textContent = val + '%';
             const mappedVal = val / 100.0;
             track.tunaChorusDepth = mappedVal;
@@ -4740,7 +4849,7 @@ function updateTrackLockState(track) {
 
         const chorusFeedbackSlider = fxDrawerEl.querySelector('.chorus-feedback');
         const chorusFeedbackVal = fxDrawerEl.querySelector('.chorus-feedback-val');
-        initKnob(chorusFeedbackSlider, (val) => {
+        trackInitKnob(chorusFeedbackSlider, (val) => {
             chorusFeedbackVal.textContent = val + '%';
             const mappedVal = val / 100.0;
             track.tunaChorusFeedback = mappedVal;
@@ -4757,7 +4866,7 @@ function updateTrackLockState(track) {
 
         const chorusMixSlider = fxDrawerEl.querySelector('.chorus-mix');
         const chorusMixVal = fxDrawerEl.querySelector('.chorus-mix-val');
-        initKnob(chorusMixSlider, (val) => {
+        trackInitKnob(chorusMixSlider, (val) => {
             const pct = val / 100;
             chorusMixVal.textContent = val + '%';
             track.tunaChorusMix = pct;
@@ -4774,7 +4883,7 @@ function updateTrackLockState(track) {
         const phaserRateSyncKnob = fxDrawerEl.querySelector('.phaser-rate-sync-knob');
         const phaserRateSyncVal = fxDrawerEl.querySelector('.phaser-rate-sync-val');
         const phaserRateSlider = fxDrawerEl.querySelector('.phaser-rate');
-        initKnob(phaserRateSyncKnob, (val) => {
+        trackInitKnob(phaserRateSyncKnob, (val) => {
             const idx = parseInt(val);
             track.tunaPhaserRateSyncIndex = idx;
             track.tunaPhaserRateSync = chorusPhaserSyncLabels[idx];
@@ -4797,7 +4906,7 @@ function updateTrackLockState(track) {
 
 
         const phaserRateVal = fxDrawerEl.querySelector('.phaser-rate-val');
-        initKnob(phaserRateSlider, (val) => {
+        trackInitKnob(phaserRateSlider, (val) => {
             phaserRateVal.textContent = val.toFixed(2) + 'Hz';
             track.tunaPhaserRate = val;
             if (track.tunaPhaserRateSync === 'Free' && track.tunaPhaserNode) {
@@ -4813,7 +4922,7 @@ function updateTrackLockState(track) {
 
         const phaserDepthSlider = fxDrawerEl.querySelector('.phaser-depth');
         const phaserDepthVal = fxDrawerEl.querySelector('.phaser-depth-val');
-        initKnob(phaserDepthSlider, (val) => {
+        trackInitKnob(phaserDepthSlider, (val) => {
             phaserDepthVal.textContent = val + '%';
             const mappedVal = val / 100.0;
             track.tunaPhaserDepth = mappedVal;
@@ -4830,7 +4939,7 @@ function updateTrackLockState(track) {
 
         const phaserFeedbackSlider = fxDrawerEl.querySelector('.phaser-feedback');
         const phaserFeedbackVal = fxDrawerEl.querySelector('.phaser-feedback-val');
-        initKnob(phaserFeedbackSlider, (val) => {
+        trackInitKnob(phaserFeedbackSlider, (val) => {
             phaserFeedbackVal.textContent = val + '%';
             const mappedVal = val / 100.0;
             track.tunaPhaserFeedback = mappedVal;
@@ -4847,7 +4956,7 @@ function updateTrackLockState(track) {
 
         const phaserMixSlider = fxDrawerEl.querySelector('.phaser-mix');
         const phaserMixVal = fxDrawerEl.querySelector('.phaser-mix-val');
-        initKnob(phaserMixSlider, (val) => {
+        trackInitKnob(phaserMixSlider, (val) => {
             const pct = val / 100;
             phaserMixVal.textContent = val + '%';
             track.tunaPhaserMix = pct;
@@ -4863,7 +4972,7 @@ function updateTrackLockState(track) {
         // Wire Crusher controls
         const crusherBitsSlider = fxDrawerEl.querySelector('.crusher-bits');
         const crusherBitsVal = fxDrawerEl.querySelector('.crusher-bits-val');
-        initKnob(crusherBitsSlider, (val) => {
+        trackInitKnob(crusherBitsSlider, (val) => {
             crusherBitsVal.textContent = val + ' bits';
             track.tunaBitcrusherBits = val;
             if (track.tunaBitcrusherNode) {
@@ -4879,7 +4988,7 @@ function updateTrackLockState(track) {
 
         const crusherNormfreqSlider = fxDrawerEl.querySelector('.crusher-normfreq');
         const crusherNormfreqVal = fxDrawerEl.querySelector('.crusher-normfreq-val');
-        initKnob(crusherNormfreqSlider, (val) => {
+        trackInitKnob(crusherNormfreqSlider, (val) => {
             crusherNormfreqVal.textContent = val.toFixed(2);
             track.tunaBitcrusherNormfreq = val;
             if (track.tunaBitcrusherNode) {
@@ -4895,7 +5004,7 @@ function updateTrackLockState(track) {
 
         const crusherMixSlider = fxDrawerEl.querySelector('.crusher-mix');
         const crusherMixVal = fxDrawerEl.querySelector('.crusher-mix-val');
-        initKnob(crusherMixSlider, (val) => {
+        trackInitKnob(crusherMixSlider, (val) => {
             const pct = val / 100;
             crusherMixVal.textContent = val + '%';
             track.tunaBitcrusherMix = pct;
@@ -4911,7 +5020,7 @@ function updateTrackLockState(track) {
         // Wire Tape Delay wow/flutter additions
         const aeWowRateSlider = fxDrawerEl.querySelector('.aelapse-wow-rate');
         const aeWowRateVal = fxDrawerEl.querySelector('.aelapse-wow-rate-val');
-        initKnob(aeWowRateSlider, (val) => {
+        trackInitKnob(aeWowRateSlider, (val) => {
             aeWowRateVal.textContent = val.toFixed(1) + 'Hz';
             track.aelapseDelayWowRate = val;
             if (aelapseLFO) aelapseLFO.frequency.setValueAtTime(val, ctx.currentTime);
@@ -4925,7 +5034,7 @@ function updateTrackLockState(track) {
 
         const aeWowDepthSlider = fxDrawerEl.querySelector('.aelapse-wow-depth');
         const aeWowDepthVal = fxDrawerEl.querySelector('.aelapse-wow-depth-val');
-        initKnob(aeWowDepthSlider, (val) => {
+        trackInitKnob(aeWowDepthSlider, (val) => {
             aeWowDepthVal.textContent = val.toFixed(1) + '%';
             track.aelapseDelayWowDepth = val / 1000;
             if (aelapseLFOGain) aelapseLFOGain.gain.setValueAtTime(val / 1000, ctx.currentTime);
@@ -4939,7 +5048,7 @@ function updateTrackLockState(track) {
 
         const aeReverbPreDelaySlider = fxDrawerEl.querySelector('.aelapse-reverb-predelay');
         const aeReverbPreDelayVal = fxDrawerEl.querySelector('.aelapse-reverb-predelay-val');
-        initKnob(aeReverbPreDelaySlider, (val) => {
+        trackInitKnob(aeReverbPreDelaySlider, (val) => {
             aeReverbPreDelayVal.textContent = val + 'ms';
             track.aelapseReverbPreDelay = val;
             if (reverbPreDelay) reverbPreDelay.delayTime.setValueAtTime(val / 1000, ctx.currentTime);
@@ -4953,7 +5062,7 @@ function updateTrackLockState(track) {
 
         const aeReverbDampSlider = fxDrawerEl.querySelector('.aelapse-reverb-damp');
         const aeReverbDampVal = fxDrawerEl.querySelector('.aelapse-reverb-damp-val');
-        initKnob(aeReverbDampSlider, (val) => {
+        trackInitKnob(aeReverbDampSlider, (val) => {
             aeReverbDampVal.textContent = val >= 1000 ? (val / 1000).toFixed(1) + 'kHz' : val + 'Hz';
             track.aelapseReverbDamp = val;
             if (reverbDampFilter) reverbDampFilter.frequency.setValueAtTime(val, ctx.currentTime);
@@ -4983,7 +5092,7 @@ function updateTrackLockState(track) {
 
         const tremoloRateSlider = fxDrawerEl.querySelector('.tremolo-rate');
         const tremoloRateVal = fxDrawerEl.querySelector('.tremolo-rate-val');
-        initKnob(tremoloRateSlider, (val) => {
+        trackInitKnob(tremoloRateSlider, (val) => {
             tremoloRateVal.textContent = val.toFixed(1) + 'Hz';
             track.tremoloRate = val;
             if (tremoloLfoNode) tremoloLfoNode.frequency.setValueAtTime(val, ctx.currentTime);
@@ -4997,7 +5106,7 @@ function updateTrackLockState(track) {
 
         const tremoloDepthSlider = fxDrawerEl.querySelector('.tremolo-depth');
         const tremoloDepthVal = fxDrawerEl.querySelector('.tremolo-depth-val');
-        initKnob(tremoloDepthSlider, (val) => {
+        trackInitKnob(tremoloDepthSlider, (val) => {
             tremoloDepthVal.textContent = val + '%';
             const depth = val / 100;
             track.tremoloDepth = depth;
@@ -5037,7 +5146,7 @@ function updateTrackLockState(track) {
         const gateSyncKnob = fxDrawerEl.querySelector('.gate-sync-knob');
         const gateSyncVal = fxDrawerEl.querySelector('.gate-sync-val');
         const gateSyncLabels = ['1/16', '1/8T', '1/8', 'd8th', '1/4', 'd1/4', '1/2', 'd1/2', '1/1'];
-        initKnob(gateSyncKnob, (val) => {
+        trackInitKnob(gateSyncKnob, (val) => {
             const idx = parseInt(val);
             track.gateSyncIndex = idx;
             gateSyncVal.textContent = gateSyncLabels[idx];
@@ -5052,7 +5161,7 @@ function updateTrackLockState(track) {
 
         const gateWidthSlider = fxDrawerEl.querySelector('.gate-width');
         const gateWidthVal = fxDrawerEl.querySelector('.gate-width-val');
-        initKnob(gateWidthSlider, (val) => {
+        trackInitKnob(gateWidthSlider, (val) => {
             gateWidthVal.textContent = val + '%';
             track.gateWidth = val / 100;
             updateGateWidth(track);
@@ -5066,7 +5175,7 @@ function updateTrackLockState(track) {
 
         const gateMixSlider = fxDrawerEl.querySelector('.gate-mix');
         const gateMixVal = fxDrawerEl.querySelector('.gate-mix-val');
-        initKnob(gateMixSlider, (val) => {
+        trackInitKnob(gateMixSlider, (val) => {
             gateMixVal.textContent = val + '%';
             track.gateMix = val / 100;
             updateGateBypass(track);
@@ -5092,7 +5201,7 @@ function updateTrackLockState(track) {
             const macroName = knobEl.dataset.macro;
             const defaultVal = (macroName === 'tone' || macroName === 'filter') ? 50 : 0;
 
-            initKnob(knobEl, (val) => {
+            trackInitKnob(knobEl, (val) => {
                 applyFxMacro(macroName, val);
             }, {
                 min: 0,
@@ -5202,13 +5311,13 @@ function updateTrackLockState(track) {
                     const screamAmtSlider = fxDrawerEl.querySelector('.scream-amount');
                     const screamMxSlider = fxDrawerEl.querySelector('.scream-mix');
                     if (screamAmtSlider) { screamAmtSlider.value = screamVal; }
-                    if (screamMxSlider) { screamMxSlider.value = Math.max(screamVal, 100); }
+                    if (screamMxSlider) { screamMxSlider.value = 100; }
                     if (value > 0 && !track.screamEnabled) {
                         const screamToggle = fxDrawerEl.querySelector('.scream-toggle');
                         if (screamToggle) screamToggle.click();
                     }
                 } else if (macroName === 'reso') {
-                    const resoSlider = fxDrawerEl.querySelector('.filtr-reso');
+                    const resoSlider = fxDrawerEl.querySelector('.filtr-lp-reso');
                     if (resoSlider) { resoSlider.value = Math.round(1 + (249 * value / 100)); }
                 } else if (macroName === 'delay') {
                     const delayMixSlider = fxDrawerEl.querySelector('.aelapse-mix');
@@ -5301,15 +5410,17 @@ function updateTrackLockState(track) {
                             if (btn) btn.click();
                         }
                     }
-                    const chorusRateSyncSelect = fxDrawerEl.querySelector('.chorus-rate-sync');
-                    if (chorusRateSyncSelect && chorusRateSyncSelect.value !== 'Free') {
-                        chorusRateSyncSelect.value = 'Free';
+                    if (track.tunaChorusRateSync !== 'Free') {
                         track.tunaChorusRateSync = 'Free';
+                        track.tunaChorusRateSyncIndex = 0;
+                        const chorusSyncKnob = fxDrawerEl.querySelector('.chorus-rate-sync-knob');
+                        if (chorusSyncKnob) chorusSyncKnob.value = 0;
                     }
-                    const phaserRateSyncSelect = fxDrawerEl.querySelector('.phaser-rate-sync');
-                    if (phaserRateSyncSelect && phaserRateSyncSelect.value !== 'Free') {
-                        phaserRateSyncSelect.value = 'Free';
+                    if (track.tunaPhaserRateSync !== 'Free') {
                         track.tunaPhaserRateSync = 'Free';
+                        track.tunaPhaserRateSyncIndex = 0;
+                        const phaserSyncKnob = fxDrawerEl.querySelector('.phaser-rate-sync-knob');
+                        if (phaserSyncKnob) phaserSyncKnob.value = 0;
                     }
                     const rateVal = 0.01 + (value / 100) * 19.99;
                     const cRate = fxDrawerEl.querySelector('.chorus-rate');
@@ -5351,13 +5462,11 @@ function updateTrackLockState(track) {
                     const band5 = fxDrawerEl.querySelector('.eq-slider[data-band="5"]');
                     if (band5) band5.value = eqGain;
 
-                    const typeSelect = fxDrawerEl.querySelector('.filtr-type');
-                    if (typeSelect && typeSelect.value !== 'lowpass') {
-                        typeSelect.value = 'lowpass';
+                    if (track.filtrFilterNode && track.filtrFilterNode.type !== 'lowpass') {
                         track.filtrFilterNode.type = 'lowpass';
                     }
                     const filterCutoffVal = 1000 + (value / 100) * 19000;
-                    const fCutoff = fxDrawerEl.querySelector('.filtr-cutoff');
+                    const fCutoff = fxDrawerEl.querySelector('.filtr-lp-cutoff');
                     if (fCutoff) fCutoff.value = filterCutoffVal;
                 } else if (macroName === 'grit') {
                     if (value > 0) {
@@ -5561,44 +5670,59 @@ function updateTrackLockState(track) {
                     aelapseDelayEnabled: track.aelapseDelayEnabled,
                     aelapseReverbEnabled: track.aelapseReverbEnabled,
 
-                    filtrType: fxDrawerEl.querySelector('.filtr-type').value,
-                    filtrCutoff: fxDrawerEl.querySelector('.filtr-cutoff').value,
-                    filtrReso: fxDrawerEl.querySelector('.filtr-reso').value,
-                    filtrMix: fxDrawerEl.querySelector('.filtr-mix').value,
+                    filtrHpCutoff: track.filtrHpCutoff,
+                    filtrHpReso: track.filtrHpResonance,
+                    filtrLpCutoff: track.filtrLpCutoff,
+                    filtrLpReso: track.filtrLpResonance,
+                    filtrDrive: track.filtrDrive,
+                    filtrMix: track.filtrMix,
 
-                    screamCutoff: fxDrawerEl.querySelector('.scream-cutoff').value,
-                    screamAmount: fxDrawerEl.querySelector('.scream-amount').value,
-                    screamMix: fxDrawerEl.querySelector('.scream-mix').value,
+                    screamCutoff: track.screamCutoff,
+                    screamAmount: track.screamAmount,
+                    screamMix: track.screamMix,
 
-                    eqGains: Array.from(fxDrawerEl.querySelectorAll('.eq-slider')).map(s => s.value),
+                    eqGains: [...track.eqGains],
 
-                    aelapseSync: fxDrawerEl.querySelector('.aelapse-sync').value,
-                    aelapseMix: fxDrawerEl.querySelector('.aelapse-mix').value,
-                    aelapseReverbMix: fxDrawerEl.querySelector('.aelapse-reverb-mix').value,
-                    aelapseReverbSize: fxDrawerEl.querySelector('.aelapse-reverb-size').value,
-                    aelapseDelayWowRate: fxDrawerEl.querySelector('.aelapse-wow-rate')?.value || 2.0,
-                    aelapseDelayWowDepth: fxDrawerEl.querySelector('.aelapse-wow-depth')?.value || 0,
-                    aelapseReverbPreDelay: fxDrawerEl.querySelector('.aelapse-reverb-predelay')?.value || 0,
-                    aelapseReverbDamp: fxDrawerEl.querySelector('.aelapse-reverb-damp')?.value || 20000,
+                    aelapseSync: track.delaySyncIndex,
+                    aelapseMix: track.aelapseDelayMix,
+                    aelapseReverbMix: track.aelapseReverbMix,
+                    aelapseReverbSize: track.aelapseReverbSize,
+                    aelapseDelayWowRate: track.aelapseDelayWowRate,
+                    aelapseDelayWowDepth: track.aelapseDelayWowDepth,
+                    aelapseReverbPreDelay: track.aelapseReverbPreDelay,
+                    aelapseReverbDamp: track.aelapseReverbDamp,
 
                     tunaChorusEnabled: track.tunaChorusEnabled,
-                    tunaChorusRateSync: fxDrawerEl.querySelector('.chorus-rate-sync').value,
-                    tunaChorusRate: fxDrawerEl.querySelector('.chorus-rate').value,
-                    tunaChorusDepth: fxDrawerEl.querySelector('.chorus-depth').value,
-                    tunaChorusFeedback: fxDrawerEl.querySelector('.chorus-feedback').value,
-                    tunaChorusMix: fxDrawerEl.querySelector('.chorus-mix').value,
+                    tunaChorusRateSync: track.tunaChorusRateSync,
+                    tunaChorusRateSyncIndex: track.tunaChorusRateSyncIndex,
+                    tunaChorusRate: track.tunaChorusRate,
+                    tunaChorusDepth: track.tunaChorusDepth,
+                    tunaChorusFeedback: track.tunaChorusFeedback,
+                    tunaChorusMix: track.tunaChorusMix,
 
                     tunaPhaserEnabled: track.tunaPhaserEnabled,
-                    tunaPhaserRateSync: fxDrawerEl.querySelector('.phaser-rate-sync').value,
-                    tunaPhaserRate: fxDrawerEl.querySelector('.phaser-rate').value,
-                    tunaPhaserDepth: fxDrawerEl.querySelector('.phaser-depth').value,
-                    tunaPhaserFeedback: fxDrawerEl.querySelector('.phaser-feedback').value,
-                    tunaPhaserMix: fxDrawerEl.querySelector('.phaser-mix').value,
+                    tunaPhaserRateSync: track.tunaPhaserRateSync,
+                    tunaPhaserRateSyncIndex: track.tunaPhaserRateSyncIndex,
+                    tunaPhaserRate: track.tunaPhaserRate,
+                    tunaPhaserDepth: track.tunaPhaserDepth,
+                    tunaPhaserFeedback: track.tunaPhaserFeedback,
+                    tunaPhaserMix: track.tunaPhaserMix,
 
                     tunaBitcrusherEnabled: track.tunaBitcrusherEnabled,
-                    tunaBitcrusherBits: fxDrawerEl.querySelector('.crusher-bits').value,
-                    tunaBitcrusherNormfreq: fxDrawerEl.querySelector('.crusher-normfreq').value,
-                    tunaBitcrusherMix: fxDrawerEl.querySelector('.crusher-mix').value,
+                    tunaBitcrusherBits: track.tunaBitcrusherBits,
+                    tunaBitcrusherNormfreq: track.tunaBitcrusherNormfreq,
+                    tunaBitcrusherMix: track.tunaBitcrusherMix,
+
+                    tremoloEnabled: track.tremoloEnabled,
+                    tremoloRate: track.tremoloRate,
+                    tremoloDepth: track.tremoloDepth,
+                    tremoloShape: track.tremoloShape,
+
+                    gateEnabled: track.gateEnabled,
+                    gateSyncIndex: track.gateSyncIndex,
+                    gateWidth: track.gateWidth,
+                    gateShape: track.gateShape,
+                    gateMix: track.gateMix,
 
                     macros: {
                         space: fxMacroState.space ? fxMacroState.space.value : 0,
@@ -5633,147 +5757,7 @@ function updateTrackLockState(track) {
                     alert('No FX settings copied yet!');
                     return;
                 }
-                const settings = copiedFxSettings;
-
-                track.filtrEnabled = settings.filtrEnabled;
-                filtrToggleBtn.textContent = track.filtrEnabled ? 'On' : 'Off';
-                filtrToggleBtn.classList.toggle('is-off', !track.filtrEnabled);
-                filtrSection.classList.toggle('is-bypassed', !track.filtrEnabled);
-                updateFiltrBypass(track);
-
-                track.eqEnabled = settings.eqEnabled;
-                eqToggleBtn.textContent = track.eqEnabled ? 'On' : 'Bypass';
-                eqToggleBtn.classList.toggle('is-off', !track.eqEnabled);
-                eqSection.classList.toggle('is-bypassed', !track.eqEnabled);
-                updateEqBypass(track);
-
-                track.screamEnabled = settings.screamEnabled;
-                screamToggleBtn.textContent = track.screamEnabled ? 'On' : 'Off';
-                screamToggleBtn.classList.toggle('is-off', !track.screamEnabled);
-                screamSection.classList.toggle('is-bypassed', !track.screamEnabled);
-                updateScreamBypass(track);
-
-                // Split delay
-                track.aelapseDelayEnabled = settings.aelapseDelayEnabled;
-                const aeDelayToggleBtn = fxDrawerEl.querySelector('.aelapse-delay-toggle');
-                if (aeDelayToggleBtn) {
-                    aeDelayToggleBtn.textContent = track.aelapseDelayEnabled ? 'On' : 'Off';
-                    aeDelayToggleBtn.classList.toggle('is-off', !track.aelapseDelayEnabled);
-                }
-                const delaySection = fxDrawerEl.querySelector('.delay-section');
-                if (delaySection) {
-                    delaySection.classList.toggle('is-bypassed', !track.aelapseDelayEnabled);
-                }
-
-                // Split Reverb
-                track.aelapseReverbEnabled = settings.aelapseReverbEnabled;
-                const aeReverbToggleBtn = fxDrawerEl.querySelector('.aelapse-reverb-toggle');
-                if (aeReverbToggleBtn) {
-                    aeReverbToggleBtn.textContent = track.aelapseReverbEnabled ? 'On' : 'Off';
-                    aeReverbToggleBtn.classList.toggle('is-off', !track.aelapseReverbEnabled);
-                }
-                const reverbSection = fxDrawerEl.querySelector('.reverb-section');
-                if (reverbSection) {
-                    reverbSection.classList.toggle('is-bypassed', !track.aelapseReverbEnabled);
-                }
-                updateAelapseBypass(track);
-
-                track.tunaChorusEnabled = settings.tunaChorusEnabled;
-                const chorusToggleBtn = fxDrawerEl.querySelector('.chorus-toggle');
-                if (chorusToggleBtn) {
-                    chorusToggleBtn.textContent = track.tunaChorusEnabled ? 'On' : 'Off';
-                    chorusToggleBtn.classList.toggle('is-off', !track.tunaChorusEnabled);
-                }
-                const chorusSection = fxDrawerEl.querySelector('.chorus-section');
-                if (chorusSection) {
-                    chorusSection.classList.toggle('is-bypassed', !track.tunaChorusEnabled);
-                }
-                updateTunaChorusBypass(track);
-
-                track.tunaPhaserEnabled = settings.tunaPhaserEnabled;
-                const phaserToggleBtn = fxDrawerEl.querySelector('.phaser-toggle');
-                if (phaserToggleBtn) {
-                    phaserToggleBtn.textContent = track.tunaPhaserEnabled ? 'On' : 'Off';
-                    phaserToggleBtn.classList.toggle('is-off', !track.tunaPhaserEnabled);
-                }
-                const phaserSection = fxDrawerEl.querySelector('.phaser-section');
-                if (phaserSection) {
-                    phaserSection.classList.toggle('is-bypassed', !track.tunaPhaserEnabled);
-                }
-                updateTunaPhaserBypass(track);
-
-                track.tunaBitcrusherEnabled = settings.tunaBitcrusherEnabled;
-                const crusherToggleBtn = fxDrawerEl.querySelector('.crusher-toggle');
-                if (crusherToggleBtn) {
-                    crusherToggleBtn.textContent = track.tunaBitcrusherEnabled ? 'On' : 'Off';
-                    crusherToggleBtn.classList.toggle('is-off', !track.tunaBitcrusherEnabled);
-                }
-                const crusherSection = fxDrawerEl.querySelector('.crusher-section');
-                if (crusherSection) {
-                    crusherSection.classList.toggle('is-bypassed', !track.tunaBitcrusherEnabled);
-                }
-                updateTunaBitcrusherBypass(track);
-
-                const typeSelect = fxDrawerEl.querySelector('.filtr-type');
-                if (typeSelect) {
-                    typeSelect.value = settings.filtrType;
-                    typeSelect.dispatchEvent(new Event('change'));
-                }
-
-                const sliders = {
-                    '.filtr-cutoff': settings.filtrCutoff,
-                    '.filtr-reso': settings.filtrReso,
-                    '.filtr-mix': settings.filtrMix,
-                    '.scream-cutoff': settings.screamCutoff,
-                    '.scream-amount': settings.screamAmount,
-                    '.scream-mix': settings.screamMix,
-                    '.aelapse-sync': settings.aelapseSync,
-                    '.aelapse-mix': settings.aelapseMix,
-                    '.aelapse-reverb-mix': settings.aelapseReverbMix,
-                    '.aelapse-reverb-size': settings.aelapseReverbSize,
-                    '.aelapse-wow-rate': settings.aelapseDelayWowRate !== undefined ? settings.aelapseDelayWowRate : 2.0,
-                    '.aelapse-wow-depth': settings.aelapseDelayWowDepth !== undefined ? settings.aelapseDelayWowDepth : 0,
-                    '.aelapse-reverb-predelay': settings.aelapseReverbPreDelay !== undefined ? settings.aelapseReverbPreDelay : 0,
-                    '.aelapse-reverb-damp': settings.aelapseReverbDamp !== undefined ? settings.aelapseReverbDamp : 20000,
-                    '.chorus-rate-sync': settings.tunaChorusRateSync,
-                    '.chorus-rate': settings.tunaChorusRate,
-                    '.chorus-depth': settings.tunaChorusDepth,
-                    '.chorus-feedback': settings.tunaChorusFeedback,
-                    '.chorus-mix': settings.tunaChorusMix,
-                    '.phaser-rate-sync': settings.tunaPhaserRateSync,
-                    '.phaser-rate': settings.tunaPhaserRate,
-                    '.phaser-depth': settings.tunaPhaserDepth,
-                    '.phaser-feedback': settings.tunaPhaserFeedback,
-                    '.phaser-mix': settings.tunaPhaserMix,
-                    '.crusher-bits': settings.tunaBitcrusherBits,
-                    '.crusher-normfreq': settings.tunaBitcrusherNormfreq,
-                    '.crusher-mix': settings.tunaBitcrusherMix,
-                };
-
-                for (const selector in sliders) {
-                    const el = fxDrawerEl.querySelector(selector);
-                    if (el) {
-                        el.value = sliders[selector];
-                        el.dispatchEvent(new Event('input'));
-                    }
-                }
-
-                const eqSliders = fxDrawerEl.querySelectorAll('.eq-slider');
-                eqSliders.forEach((slider, b) => {
-                    if (settings.eqGains[b] !== undefined) {
-                        slider.value = settings.eqGains[b];
-                        slider.dispatchEvent(new Event('input'));
-                    }
-                });
-
-                if (settings.macros) {
-                    for (const key in settings.macros) {
-                        if (fxMacroState[key]) {
-                            fxMacroState[key].value = settings.macros[key];
-                            applyFxMacro(key, settings.macros[key]);
-                        }
-                    }
-                }
+                applyFxSettingsToTrack(copiedFxSettings);
 
                 const originalText = pasteBtn.textContent;
                 pasteBtn.textContent = 'Pasted!';
@@ -5873,7 +5857,6 @@ function updateTrackLockState(track) {
                     if (valEl) valEl.textContent = '0dB';
                 });
                 track.eqGains = [0, 0, 0, 0, 0, 0];
-                track.eqFiltersNode.forEach(f => f.gain.setTargetAtTime(0, ctx.currentTime, 0.02));
 
                 // 4. Reset detailed parameter knobs and sliders
                 const sliders = {
@@ -6177,6 +6160,7 @@ function updateTrackLockState(track) {
         track.updatePanKnobFn = updatePanKnob;
         track.applyMacroKnobFn = applyMacroKnob;
         track.applyFxMacroFn = applyFxMacro;
+        track.applyFxSettingsFn = applyFxSettingsToTrack;
         track.macroKnobState = macroKnobState;
         track.fxMacroState = fxMacroState;
 
@@ -6433,6 +6417,22 @@ function updateTrackLockState(track) {
         };
     }
 
+    function normalizeLegacyFxSettings(fx) {
+        // Older project files saved one filtr cutoff/reso plus a type select
+        // that no longer exists; map them onto the split HP/LP filter fields.
+        const out = { ...fx };
+        if (out.filtrLpCutoff === undefined && out.filtrCutoff !== undefined) {
+            if (out.filtrType === 'highpass') {
+                out.filtrHpCutoff = out.filtrCutoff;
+                out.filtrHpReso = out.filtrReso;
+            } else {
+                out.filtrLpCutoff = out.filtrCutoff;
+                out.filtrLpReso = out.filtrReso;
+            }
+        }
+        return out;
+    }
+
     function saveProject() {
         if (tracks.length === 0) {
             alert('No tracks to save!');
@@ -6449,9 +6449,8 @@ function updateTrackLockState(track) {
             modMatrixSlots,
             arrangerGrid,
             tracks: tracks.map(t => {
-                const fxDrawer = t.wrapper.querySelector('.fx-drawer');
-
-                // Collect detailed FX settings
+                // Collect detailed FX settings from track state (the DOM held
+                // stale selectors and silently saved defaults).
                 const fxSettings = {
                     filtrEnabled: t.filtrEnabled,
                     screamEnabled: t.screamEnabled,
@@ -6459,44 +6458,59 @@ function updateTrackLockState(track) {
                     aelapseDelayEnabled: t.aelapseDelayEnabled,
                     aelapseReverbEnabled: t.aelapseReverbEnabled,
 
-                    filtrType: fxDrawer.querySelector('.filtr-type')?.value || 'lowpass',
-                    filtrCutoff: parseFloat(fxDrawer.querySelector('.filtr-cutoff')?.value) || 20000,
-                    filtrReso: parseFloat(fxDrawer.querySelector('.filtr-reso')?.value) || 0.707,
-                    filtrMix: parseFloat(fxDrawer.querySelector('.filtr-mix')?.value) || 1.0,
+                    filtrHpCutoff: t.filtrHpCutoff,
+                    filtrHpReso: t.filtrHpResonance,
+                    filtrLpCutoff: t.filtrLpCutoff,
+                    filtrLpReso: t.filtrLpResonance,
+                    filtrDrive: t.filtrDrive,
+                    filtrMix: t.filtrMix,
 
-                    screamCutoff: parseFloat(fxDrawer.querySelector('.scream-cutoff')?.value) || 8000,
-                    screamAmount: parseFloat(fxDrawer.querySelector('.scream-amount')?.value) || 0.707,
-                    screamMix: parseFloat(fxDrawer.querySelector('.scream-mix')?.value) || 1.0,
+                    screamCutoff: t.screamCutoff,
+                    screamAmount: t.screamAmount,
+                    screamMix: t.screamMix,
 
-                    eqGains: Array.from(fxDrawer.querySelectorAll('.eq-slider')).map(s => parseFloat(s.value) || 0),
+                    eqGains: [...t.eqGains],
 
-                    aelapseSync: fxDrawer.querySelector('.aelapse-sync')?.value || '1/4',
-                    aelapseMix: parseFloat(fxDrawer.querySelector('.aelapse-mix')?.value) || 0,
-                    aelapseReverbMix: parseFloat(fxDrawer.querySelector('.aelapse-reverb-mix')?.value) || 0,
-                    aelapseReverbSize: parseFloat(fxDrawer.querySelector('.aelapse-reverb-size')?.value) || 2.0,
-                    aelapseDelayWowRate: fxDrawer.querySelector('.aelapse-wow-rate')?.value !== undefined ? parseFloat(fxDrawer.querySelector('.aelapse-wow-rate')?.value) : 2.0,
-                    aelapseDelayWowDepth: fxDrawer.querySelector('.aelapse-wow-depth')?.value !== undefined ? parseFloat(fxDrawer.querySelector('.aelapse-wow-depth')?.value) / 1000 : 0.0,
-                    aelapseReverbPreDelay: fxDrawer.querySelector('.aelapse-reverb-predelay')?.value !== undefined ? parseFloat(fxDrawer.querySelector('.aelapse-reverb-predelay')?.value) : 0.0,
-                    aelapseReverbDamp: fxDrawer.querySelector('.aelapse-reverb-damp')?.value !== undefined ? parseFloat(fxDrawer.querySelector('.aelapse-reverb-damp')?.value) : 20000,
+                    aelapseSync: t.delaySyncIndex,
+                    aelapseMix: t.aelapseDelayMix,
+                    aelapseReverbMix: t.aelapseReverbMix,
+                    aelapseReverbSize: t.aelapseReverbSize,
+                    aelapseDelayWowRate: t.aelapseDelayWowRate,
+                    aelapseDelayWowDepth: t.aelapseDelayWowDepth,
+                    aelapseReverbPreDelay: t.aelapseReverbPreDelay,
+                    aelapseReverbDamp: t.aelapseReverbDamp,
 
                     tunaChorusEnabled: t.tunaChorusEnabled,
-                    tunaChorusRateSync: fxDrawer.querySelector('.chorus-rate-sync')?.value || 'Free',
-                    tunaChorusRate: parseFloat(fxDrawer.querySelector('.chorus-rate')?.value) || 1.5,
-                    tunaChorusDepth: parseFloat(fxDrawer.querySelector('.chorus-depth')?.value) || 70,
-                    tunaChorusFeedback: parseFloat(fxDrawer.querySelector('.chorus-feedback')?.value) || 20,
-                    tunaChorusMix: parseFloat(fxDrawer.querySelector('.chorus-mix')?.value) || 50,
+                    tunaChorusRateSync: t.tunaChorusRateSync,
+                    tunaChorusRateSyncIndex: t.tunaChorusRateSyncIndex,
+                    tunaChorusRate: t.tunaChorusRate,
+                    tunaChorusDepth: t.tunaChorusDepth,
+                    tunaChorusFeedback: t.tunaChorusFeedback,
+                    tunaChorusMix: t.tunaChorusMix,
 
                     tunaPhaserEnabled: t.tunaPhaserEnabled,
-                    tunaPhaserRateSync: fxDrawer.querySelector('.phaser-rate-sync')?.value || 'Free',
-                    tunaPhaserRate: parseFloat(fxDrawer.querySelector('.phaser-rate')?.value) || 1.2,
-                    tunaPhaserDepth: parseFloat(fxDrawer.querySelector('.phaser-depth')?.value) || 60,
-                    tunaPhaserFeedback: parseFloat(fxDrawer.querySelector('.phaser-feedback')?.value) || 20,
-                    tunaPhaserMix: parseFloat(fxDrawer.querySelector('.phaser-mix')?.value) || 50,
+                    tunaPhaserRateSync: t.tunaPhaserRateSync,
+                    tunaPhaserRateSyncIndex: t.tunaPhaserRateSyncIndex,
+                    tunaPhaserRate: t.tunaPhaserRate,
+                    tunaPhaserDepth: t.tunaPhaserDepth,
+                    tunaPhaserFeedback: t.tunaPhaserFeedback,
+                    tunaPhaserMix: t.tunaPhaserMix,
 
                     tunaBitcrusherEnabled: t.tunaBitcrusherEnabled,
-                    tunaBitcrusherBits: parseInt(fxDrawer.querySelector('.crusher-bits')?.value) || 8,
-                    tunaBitcrusherNormfreq: parseFloat(fxDrawer.querySelector('.crusher-normfreq')?.value) || 0.1,
-                    tunaBitcrusherMix: parseFloat(fxDrawer.querySelector('.crusher-mix')?.value) || 50,
+                    tunaBitcrusherBits: t.tunaBitcrusherBits,
+                    tunaBitcrusherNormfreq: t.tunaBitcrusherNormfreq,
+                    tunaBitcrusherMix: t.tunaBitcrusherMix,
+
+                    tremoloEnabled: t.tremoloEnabled,
+                    tremoloRate: t.tremoloRate,
+                    tremoloDepth: t.tremoloDepth,
+                    tremoloShape: t.tremoloShape,
+
+                    gateEnabled: t.gateEnabled,
+                    gateSyncIndex: t.gateSyncIndex,
+                    gateWidth: t.gateWidth,
+                    gateShape: t.gateShape,
+                    gateMix: t.gateMix,
                 };
 
                 const macroValues = {};
@@ -6660,7 +6674,6 @@ function updateTrackLockState(track) {
                 }
             });
 
-            const fxDrawer = track.wrapper.querySelector('.fx-drawer');
             for (const param in tData.macroValues) {
                 if (track.macroKnobState[param]) {
                     track.macroKnobState[param].value = tData.macroValues[param];
@@ -6671,189 +6684,8 @@ function updateTrackLockState(track) {
             }
 
             const fx = tData.fxSettings;
-            if (fx) {
-                track.filtrEnabled = fx.filtrEnabled;
-                const filtrToggleBtn = fxDrawer.querySelector('.filtr-toggle');
-                if (filtrToggleBtn) {
-                    filtrToggleBtn.textContent = track.filtrEnabled ? 'On' : 'Off';
-                    filtrToggleBtn.classList.toggle('is-off', !track.filtrEnabled);
-                }
-                const filtrSection = fxDrawer.querySelector('.filtr-section');
-                if (filtrSection) {
-                    filtrSection.classList.toggle('is-bypassed', !track.filtrEnabled);
-                }
-
-                const filtrTypeEl = fxDrawer.querySelector('.filtr-type');
-                if (filtrTypeEl) filtrTypeEl.value = fx.filtrType;
-                const filtrCutoffEl = fxDrawer.querySelector('.filtr-cutoff');
-                if (filtrCutoffEl) filtrCutoffEl.value = fx.filtrCutoff;
-                const filtrResoEl = fxDrawer.querySelector('.filtr-reso');
-                if (filtrResoEl) filtrResoEl.value = fx.filtrReso;
-                const filtrMixEl = fxDrawer.querySelector('.filtr-mix');
-                if (filtrMixEl) filtrMixEl.value = fx.filtrMix;
-
-                updateFiltrBypass(track);
-
-                track.eqEnabled = fx.eqEnabled;
-                const eqToggleBtn = fxDrawer.querySelector('.eq-toggle');
-                if (eqToggleBtn) {
-                    eqToggleBtn.textContent = track.eqEnabled ? 'On' : 'Bypass';
-                    eqToggleBtn.classList.toggle('is-off', !track.eqEnabled);
-                }
-                const eqSection = fxDrawer.querySelector('.eq-section');
-                if (eqSection) {
-                    eqSection.classList.toggle('is-bypassed', !track.eqEnabled);
-                }
-
-                const eqSliders = fxDrawer.querySelectorAll('.eq-slider');
-                if (fx.eqGains) {
-                    eqSliders.forEach((slider, sIdx) => {
-                        if (fx.eqGains[sIdx] !== undefined) {
-                            slider.value = fx.eqGains[sIdx];
-                            const valEl = slider.parentNode.querySelector('.slider-val');
-                            if (valEl) valEl.textContent = (fx.eqGains[sIdx] > 0 ? '+' : '') + fx.eqGains[sIdx] + 'dB';
-                        }
-                    });
-                }
-
-                updateEqBypass(track);
-
-                // Split Delay
-                track.aelapseDelayEnabled = fx.aelapseDelayEnabled !== undefined ? fx.aelapseDelayEnabled : true;
-                const aeDelayToggleBtn = fxDrawer.querySelector('.aelapse-delay-toggle');
-                if (aeDelayToggleBtn) {
-                    aeDelayToggleBtn.textContent = track.aelapseDelayEnabled ? 'On' : 'Off';
-                    aeDelayToggleBtn.classList.toggle('is-off', !track.aelapseDelayEnabled);
-                }
-                const delaySection = fxDrawer.querySelector('.delay-section');
-                if (delaySection) {
-                    delaySection.classList.toggle('is-bypassed', !track.aelapseDelayEnabled);
-                }
-
-                // Split Reverb
-                track.aelapseReverbEnabled = fx.aelapseReverbEnabled !== undefined ? fx.aelapseReverbEnabled : true;
-                const aeReverbToggleBtn = fxDrawer.querySelector('.aelapse-reverb-toggle');
-                if (aeReverbToggleBtn) {
-                    aeReverbToggleBtn.textContent = track.aelapseReverbEnabled ? 'On' : 'Off';
-                    aeReverbToggleBtn.classList.toggle('is-off', !track.aelapseReverbEnabled);
-                }
-                const reverbSection = fxDrawer.querySelector('.reverb-section');
-                if (reverbSection) {
-                    reverbSection.classList.toggle('is-bypassed', !track.aelapseReverbEnabled);
-                }
-
-                const aelapseSyncEl = fxDrawer.querySelector('.aelapse-sync');
-                if (aelapseSyncEl) aelapseSyncEl.value = fx.aelapseSync;
-                const aelapseMixEl = fxDrawer.querySelector('.aelapse-mix');
-                if (aelapseMixEl) aelapseMixEl.value = fx.aelapseMix;
-                const aelapseReverbMixEl = fxDrawer.querySelector('.aelapse-reverb-mix');
-                if (aelapseReverbMixEl) aelapseReverbMixEl.value = fx.aelapseReverbMix;
-                const aelapseReverbSizeEl = fxDrawer.querySelector('.aelapse-reverb-size');
-                if (aelapseReverbSizeEl) aelapseReverbSizeEl.value = fx.aelapseReverbSize !== undefined ? fx.aelapseReverbSize : 2.0;
-
-                const aelapseWowRateEl = fxDrawer.querySelector('.aelapse-wow-rate');
-                if (aelapseWowRateEl) aelapseWowRateEl.value = fx.aelapseDelayWowRate !== undefined ? fx.aelapseDelayWowRate : 2.0;
-                const aelapseWowDepthEl = fxDrawer.querySelector('.aelapse-wow-depth');
-                if (aelapseWowDepthEl) aelapseWowDepthEl.value = fx.aelapseDelayWowDepth !== undefined ? Math.round(fx.aelapseDelayWowDepth * 1000) : 0;
-                const aelapseReverbPreDelayEl = fxDrawer.querySelector('.aelapse-reverb-predelay');
-                if (aelapseReverbPreDelayEl) aelapseReverbPreDelayEl.value = fx.aelapseReverbPreDelay !== undefined ? fx.aelapseReverbPreDelay : 0;
-                const aelapseReverbDampEl = fxDrawer.querySelector('.aelapse-reverb-damp');
-                if (aelapseReverbDampEl) aelapseReverbDampEl.value = fx.aelapseReverbDamp !== undefined ? fx.aelapseReverbDamp : 20000;
-
-                const chorusMixEl = fxDrawer.querySelector('.chorus-mix');
-                if (chorusMixEl) chorusMixEl.value = fx.tunaChorusMix !== undefined ? fx.tunaChorusMix : 50;
-
-                const phaserMixEl = fxDrawer.querySelector('.phaser-mix');
-                if (phaserMixEl) phaserMixEl.value = fx.tunaPhaserMix !== undefined ? fx.tunaPhaserMix : 50;
-
-                const crusherMixEl = fxDrawer.querySelector('.crusher-mix');
-                if (crusherMixEl) crusherMixEl.value = fx.tunaBitcrusherMix !== undefined ? fx.tunaBitcrusherMix : 50;
-
-                updateAelapseBypass(track);
-
-                track.tunaChorusEnabled = !!fx.tunaChorusEnabled;
-                const chorusToggleBtn = fxDrawer.querySelector('.chorus-toggle');
-                if (chorusToggleBtn) {
-                    chorusToggleBtn.textContent = track.tunaChorusEnabled ? 'On' : 'Off';
-                    chorusToggleBtn.classList.toggle('is-off', !track.tunaChorusEnabled);
-                }
-                const chorusSection = fxDrawer.querySelector('.chorus-section');
-                if (chorusSection) {
-                    chorusSection.classList.toggle('is-bypassed', !track.tunaChorusEnabled);
-                }
-                updateTunaChorusBypass(track);
-
-                track.tunaPhaserEnabled = !!fx.tunaPhaserEnabled;
-                const phaserToggleBtn = fxDrawer.querySelector('.phaser-toggle');
-                if (phaserToggleBtn) {
-                    phaserToggleBtn.textContent = track.tunaPhaserEnabled ? 'On' : 'Off';
-                    phaserToggleBtn.classList.toggle('is-off', !track.tunaPhaserEnabled);
-                }
-                const phaserSection = fxDrawer.querySelector('.phaser-section');
-                if (phaserSection) {
-                    phaserSection.classList.toggle('is-bypassed', !track.tunaPhaserEnabled);
-                }
-                updateTunaPhaserBypass(track);
-
-                track.tunaBitcrusherEnabled = !!fx.tunaBitcrusherEnabled;
-                const crusherToggleBtn = fxDrawer.querySelector('.crusher-toggle');
-                if (crusherToggleBtn) {
-                    crusherToggleBtn.textContent = track.tunaBitcrusherEnabled ? 'On' : 'Off';
-                    crusherToggleBtn.classList.toggle('is-off', !track.tunaBitcrusherEnabled);
-                }
-                const crusherSection = fxDrawer.querySelector('.crusher-section');
-                if (crusherSection) {
-                    crusherSection.classList.toggle('is-bypassed', !track.tunaBitcrusherEnabled);
-                }
-                updateTunaBitcrusherBypass(track);
-
-                const chorusRateSyncEl = fxDrawer.querySelector('.chorus-rate-sync');
-                if (chorusRateSyncEl) chorusRateSyncEl.value = fx.tunaChorusRateSync || 'Free';
-                const chorusRateEl = fxDrawer.querySelector('.chorus-rate');
-                if (chorusRateEl) chorusRateEl.value = fx.tunaChorusRate !== undefined ? fx.tunaChorusRate : 1.5;
-                const chorusDepthEl = fxDrawer.querySelector('.chorus-depth');
-                if (chorusDepthEl) chorusDepthEl.value = fx.tunaChorusDepth !== undefined ? fx.tunaChorusDepth : 70;
-                const chorusFeedbackEl = fxDrawer.querySelector('.chorus-feedback');
-                if (chorusFeedbackEl) chorusFeedbackEl.value = fx.tunaChorusFeedback !== undefined ? fx.tunaChorusFeedback : 20;
-
-                const phaserRateSyncEl = fxDrawer.querySelector('.phaser-rate-sync');
-                if (phaserRateSyncEl) phaserRateSyncEl.value = fx.tunaPhaserRateSync || 'Free';
-                const phaserRateEl = fxDrawer.querySelector('.phaser-rate');
-                if (phaserRateEl) phaserRateEl.value = fx.tunaPhaserRate !== undefined ? fx.tunaPhaserRate : 1.2;
-                const phaserDepthEl = fxDrawer.querySelector('.phaser-depth');
-                if (phaserDepthEl) phaserDepthEl.value = fx.tunaPhaserDepth !== undefined ? fx.tunaPhaserDepth : 60;
-                const phaserFeedbackEl = fxDrawer.querySelector('.phaser-feedback');
-                if (phaserFeedbackEl) phaserFeedbackEl.value = fx.tunaPhaserFeedback !== undefined ? fx.tunaPhaserFeedback : 20;
-
-                const crusherBitsEl = fxDrawer.querySelector('.crusher-bits');
-                if (crusherBitsEl) crusherBitsEl.value = fx.tunaBitcrusherBits !== undefined ? fx.tunaBitcrusherBits : 8;
-                const crusherNormfreqEl = fxDrawer.querySelector('.crusher-normfreq');
-                if (crusherNormfreqEl) crusherNormfreqEl.value = fx.tunaBitcrusherNormfreq !== undefined ? fx.tunaBitcrusherNormfreq : 0.1;
-
-                if (chorusRateSyncEl) chorusRateSyncEl.dispatchEvent(new Event('change'));
-                if (chorusRateEl) chorusRateEl.dispatchEvent(new Event('input'));
-                if (chorusDepthEl) chorusDepthEl.dispatchEvent(new Event('input'));
-                if (chorusFeedbackEl) chorusFeedbackEl.dispatchEvent(new Event('input'));
-
-                if (phaserRateSyncEl) phaserRateSyncEl.dispatchEvent(new Event('change'));
-                if (phaserRateEl) phaserRateEl.dispatchEvent(new Event('input'));
-                if (phaserDepthEl) phaserDepthEl.dispatchEvent(new Event('input'));
-                if (phaserFeedbackEl) phaserFeedbackEl.dispatchEvent(new Event('input'));
-
-                if (crusherBitsEl) crusherBitsEl.dispatchEvent(new Event('input'));
-                if (crusherNormfreqEl) crusherNormfreqEl.dispatchEvent(new Event('input'));
-
-                if (aelapseSyncEl) aelapseSyncEl.dispatchEvent(new Event('input'));
-                if (aelapseMixEl) aelapseMixEl.dispatchEvent(new Event('input'));
-                if (aelapseReverbMixEl) aelapseReverbMixEl.dispatchEvent(new Event('input'));
-                if (aelapseReverbSizeEl) aelapseReverbSizeEl.dispatchEvent(new Event('input'));
-                if (aelapseWowRateEl) aelapseWowRateEl.dispatchEvent(new Event('input'));
-                if (aelapseWowDepthEl) aelapseWowDepthEl.dispatchEvent(new Event('input'));
-                if (aelapseReverbPreDelayEl) aelapseReverbPreDelayEl.dispatchEvent(new Event('input'));
-                if (aelapseReverbDampEl) aelapseReverbDampEl.dispatchEvent(new Event('input'));
-                if (crusherMixEl) crusherMixEl.dispatchEvent(new Event('input'));
-                if (chorusMixEl) chorusMixEl.dispatchEvent(new Event('input'));
-                if (phaserMixEl) phaserMixEl.dispatchEvent(new Event('input'));
+            if (fx && track.applyFxSettingsFn) {
+                track.applyFxSettingsFn(normalizeLegacyFxSettings(fx));
             }
 
             for (const key in tData.fxMacros) {
@@ -7981,7 +7813,13 @@ function updateTrackLockState(track) {
     }
 
     async function pollJob(jobId) {
-        for (let i = 0; i < 300; i++) {
+        // A fixed 5-minute cap abandoned jobs still queued behind long
+        // generations while the server later finished them. Give up only
+        // after prolonged inactivity (no status/progress/queue movement).
+        const INACTIVITY_LIMIT_MS = 10 * 60 * 1000;
+        let lastActivity = Date.now();
+        let lastSignature = '';
+        while (true) {
             if (activeGenerationJob?.id === jobId && activeGenerationJob.state === 'cancelled') {
                 const cancelled = new Error('Generation cancelled before it started.');
                 cancelled.name = 'GenerationCancelledError';
@@ -8003,8 +7841,15 @@ function updateTrackLockState(track) {
             }
             if (data.status === 'done' || data.status === 'error') return data;
             if (data.progress) showStatus(data.progress);
+
+            const signature = `${data.status}|${data.progress || ''}|${data.queue_position ?? ''}`;
+            if (signature !== lastSignature) {
+                lastSignature = signature;
+                lastActivity = Date.now();
+            } else if (Date.now() - lastActivity > INACTIVITY_LIMIT_MS) {
+                throw new Error('Timed out: no progress from the generation server for 10 minutes.');
+            }
         }
-        throw new Error('Timed out');
     }
 
     function addTrackRow(files, prompt, trackNum, autoPlay = false, parentTrackId = null, originalParams = null) {
@@ -8122,6 +7967,7 @@ function updateTrackLockState(track) {
     ro.observe(tracksContainer);
     if (vizSpectrumCanvas) ro.observe(vizSpectrumCanvas);
     if (vizOscCanvas) ro.observe(vizOscCanvas);
+    if (vizMetersCanvas) ro.observe(vizMetersCanvas);
 
     // --- Keyboard ---
     document.addEventListener('keydown', (e) => {
@@ -8207,10 +8053,22 @@ function updateTrackLockState(track) {
         if (canvas.width !== expectedW || canvas.height !== expectedH) {
             canvas.width = expectedW;
             canvas.height = expectedH;
+            canvas._meterGrad = null;
+            canvas._lastPeak = undefined;
         }
 
         const w = canvas.width;
         const h = canvas.height;
+
+        // Idle meters decay to the floor and then hold constant — skip the
+        // clear/redraw entirely when nothing changed since the last frame.
+        if (canvas._lastPeak === state.peak && canvas._lastRms === state.rms && canvas._lastPeakHold === state.peakHold) {
+            return;
+        }
+        canvas._lastPeak = state.peak;
+        canvas._lastRms = state.rms;
+        canvas._lastPeakHold = state.peakHold;
+
         ctx.clearRect(0, 0, w, h);
 
         if (w === 0 || h === 0) return;
@@ -8218,14 +8076,18 @@ function updateTrackLockState(track) {
         const isVertical = h > w;
 
         if (isVertical) {
-            // Vertical gradient (bottom is green, top is red)
-            const gradient = ctx.createLinearGradient(0, h, 0, 0);
-            gradient.addColorStop(0, '#10b981');   // green
-            gradient.addColorStop(0.7, '#10b981'); // -18dB
-            gradient.addColorStop(0.71, '#fbbf24'); // yellow
-            gradient.addColorStop(0.9, '#fbbf24');  // -6dB
-            gradient.addColorStop(0.91, '#ef4444');  // red
-            gradient.addColorStop(1, '#ef4444');
+            // Vertical gradient (bottom is green, top is red), cached per size
+            let gradient = canvas._meterGrad;
+            if (!gradient) {
+                gradient = ctx.createLinearGradient(0, h, 0, 0);
+                gradient.addColorStop(0, '#10b981');   // green
+                gradient.addColorStop(0.7, '#10b981'); // -18dB
+                gradient.addColorStop(0.71, '#fbbf24'); // yellow
+                gradient.addColorStop(0.9, '#fbbf24');  // -6dB
+                gradient.addColorStop(0.91, '#ef4444');  // red
+                gradient.addColorStop(1, '#ef4444');
+                canvas._meterGrad = gradient;
+            }
 
             // 1. RMS (grows up from bottom)
             const rmsHeight = dbToPct(state.rms) * h;
@@ -8253,14 +8115,18 @@ function updateTrackLockState(track) {
                 ctx.fillRect(0, Math.min(h - tickH, Math.max(0, peakHoldY - tickH / 2)), w, tickH);
             }
         } else {
-            // Horizontal gradient
-            const gradient = ctx.createLinearGradient(0, 0, w, 0);
-            gradient.addColorStop(0, '#10b981');   // green
-            gradient.addColorStop(0.7, '#10b981'); // -18dB
-            gradient.addColorStop(0.71, '#fbbf24'); // yellow
-            gradient.addColorStop(0.9, '#fbbf24');  // -6dB
-            gradient.addColorStop(0.91, '#ef4444');  // red
-            gradient.addColorStop(1, '#ef4444');
+            // Horizontal gradient, cached per size
+            let gradient = canvas._meterGrad;
+            if (!gradient) {
+                gradient = ctx.createLinearGradient(0, 0, w, 0);
+                gradient.addColorStop(0, '#10b981');   // green
+                gradient.addColorStop(0.7, '#10b981'); // -18dB
+                gradient.addColorStop(0.71, '#fbbf24'); // yellow
+                gradient.addColorStop(0.9, '#fbbf24');  // -6dB
+                gradient.addColorStop(0.91, '#ef4444');  // red
+                gradient.addColorStop(1, '#ef4444');
+                canvas._meterGrad = gradient;
+            }
 
             // 1. RMS
             const rmsWidth = dbToPct(state.rms) * w;
@@ -8307,9 +8173,11 @@ function updateTrackLockState(track) {
             // Update master meter
             if (masterAnalyser) {
                 updateMeterState(masterAnalyser, masterMeterState, dT);
-                const masterCanvas = document.getElementById('master-meter-canvas');
-                if (masterCanvas) {
-                    drawMeter(masterCanvas, masterMeterState);
+                if (!startMeterLoop._masterCanvas) {
+                    startMeterLoop._masterCanvas = document.getElementById('master-meter-canvas');
+                }
+                if (startMeterLoop._masterCanvas) {
+                    drawMeter(startMeterLoop._masterCanvas, masterMeterState);
                 }
             }
 
@@ -9119,15 +8987,15 @@ function updateTrackLockState(track) {
                             else if (syncValue === '1/16') divisor = 15;
                             chorusRate = bpm / divisor;
                         }
-                        offlineT.tunaChorusNode.rate = chorusRate;
+                        offlineT.tunaChorusNode.setRateAtTime(chorusRate, timeVal);
 
                         let chorusDepth = track.tunaChorusDepth + offsets.chorusDepth;
                         chorusDepth = Math.max(0.0, Math.min(1.0, chorusDepth));
-                        offlineT.tunaChorusNode.depth = chorusDepth;
+                        offlineT.tunaChorusNode.setDepthAtTime(chorusDepth, timeVal);
 
                         let chorusFeedback = track.tunaChorusFeedback + offsets.chorusFeedback;
                         chorusFeedback = Math.max(0.0, Math.min(0.95, chorusFeedback));
-                        offlineT.tunaChorusNode.feedback = chorusFeedback;
+                        offlineT.tunaChorusNode.setFeedbackAtTime(chorusFeedback, timeVal);
                     }
 
                     // Phaser Rate, Depth, Feedback
@@ -9148,15 +9016,15 @@ function updateTrackLockState(track) {
                             else if (syncValue === '1/16') divisor = 15;
                             phaserRate = bpm / divisor;
                         }
-                        offlineT.tunaPhaserNode.rate = phaserRate;
+                        offlineT.tunaPhaserNode.setRateAtTime(phaserRate, timeVal);
 
                         let phaserDepth = track.tunaPhaserDepth + offsets.phaserDepth;
                         phaserDepth = Math.max(0.0, Math.min(1.0, phaserDepth));
-                        offlineT.tunaPhaserNode.depth = phaserDepth;
+                        offlineT.tunaPhaserNode.setDepthAtTime(phaserDepth, timeVal);
 
                         let phaserFeedback = track.tunaPhaserFeedback + offsets.phaserFeedback;
                         phaserFeedback = Math.max(0.0, Math.min(1.0, phaserFeedback));
-                        offlineT.tunaPhaserNode.feedback = phaserFeedback;
+                        offlineT.tunaPhaserNode.setFeedbackAtTime(phaserFeedback, timeVal);
                     }
 
                     // Bitcrusher Bits, Normfreq
@@ -9167,7 +9035,7 @@ function updateTrackLockState(track) {
 
                         let crusherNormfreq = track.tunaBitcrusherNormfreq + offsets.crusherNormfreq;
                         crusherNormfreq = Math.max(0.001, Math.min(1.0, crusherNormfreq));
-                        offlineT.tunaBitcrusherNode.normfreq = crusherNormfreq;
+                        offlineT.tunaBitcrusherNode.setNormfreqAtTime(crusherNormfreq, timeVal);
                     }
                 });
 
@@ -10087,7 +9955,13 @@ function updateTrackLockState(track) {
     function updateSliderModDot(track, sliderSelector, normalizedVal) {
         const wrapper = track.wrapper;
         if (!wrapper) return;
-        const slider = wrapper.querySelector(sliderSelector);
+        // Called from the 25ms scheduler for every param of every track:
+        // cache the per-selector element lookup (including misses) on the track.
+        const cache = track._modDotEls || (track._modDotEls = {});
+        let slider = cache[sliderSelector];
+        if (slider === undefined) {
+            slider = cache[sliderSelector] = wrapper.querySelector(sliderSelector);
+        }
         if (!slider) return;
 
         let dot = slider.parentNode.querySelector('.lfo-dot');
@@ -10153,7 +10027,7 @@ function updateTrackLockState(track) {
     }
 
     function isSliderModulated(trackId, paramName) {
-        const modBypassEl = document.getElementById('toggle-modulators-bypass');
+        const modBypassEl = getModBypassEl();
         const isModBypassed = modBypassEl ? modBypassEl.checked : false;
         if (isModBypassed) return false;
 
