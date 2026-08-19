@@ -144,34 +144,41 @@ def acidize_wav_file(file_path, bpm, duration, loop=True, prompt=""):
             print("[WAV Metadata] Could not locate 'data' chunk")
             return
 
+        # Beat count comes from the clip's own length, not a fixed 16.
+        # 8s at 120 BPM happens to be 16 beats, which is why the hardcoded
+        # value looked correct at the defaults and was wrong everywhere else.
+        beat_count = 0
+        if bpm > 0 and duration and duration > 0:
+            beat_count = int(round(float(duration) * float(bpm) / 60.0))
+
         # 1. Build 'acid' chunk
         acid_id = b"acid"
         acid_size = 24
         acid_type = 1 if loop else 0  # 1 = Loop, 0 = One-shot
         root_note = parse_root_note(prompt)
         reserved = 0
-        num_beats = 16 if loop else 0
+        num_beats = beat_count if loop else 0
         meter_num = 4.0
         meter_den = 4.0
         tempo = float(bpm)
-        
+
         acid_payload = struct.pack("<IHHifff", acid_type, root_note, reserved, num_beats, meter_num, meter_den, tempo)
         acid_chunk = acid_id + struct.pack("<I", acid_size) + acid_payload
 
         # 2. Build 'cue ' and 'LIST' (adtl) chunks for the beat grid
         cue_points = []
         labels = []
-        
-        if loop and bpm > 0:
+
+        if loop and bpm > 0 and beat_count > 0:
             samples_per_beat = (60.0 / bpm) * sample_rate
-            # 16 beats + 1 end marker
-            for i in range(17):
+            # one marker per beat, plus an end marker
+            for i in range(beat_count + 1):
                 pos = int(round(i * samples_per_beat))
                 cue_id = i + 1
-                label_name = f"Beat {cue_id}" if i < 16 else "End"
+                label_name = f"Beat {cue_id}" if i < beat_count else "End"
                 cue_points.append((cue_id, pos, b'data', 0, 0, pos))
                 labels.append((cue_id, label_name))
-                
+
             cue_chunk = pack_cue_chunk(cue_points)
             list_chunk = create_adtl_list(labels)
             metadata_block = acid_chunk + cue_chunk + list_chunk
