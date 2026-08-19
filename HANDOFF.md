@@ -13,6 +13,18 @@ Another Claude session (running on the roblox project) accidentally worked here.
 - Perf/stability fixes (40f5f78, eaa0786, 2d047ff): first generation was 60s+ and looked hung — torch.compile'd flex_attention recompiled per chunk shape to dynamo's 256 limit. Tier disabled from model.py; first gen now ~4s wall. Launcher runs medium fp16 (fp32 spilled past 12GB VRAM and crashed decode). Checkpoint loader streams with plain reads (safetensors mmap of the 9.2GB file segfaults on this machine). HF token lives in-project at `models/huggingface/token`.
 - Sample-library metadata (user request): every generation now also carries a LIST/INFO chunk — ICMT = generation prompt, ISFT = "LoopMaster SA3 (N BPM)", ICRD = date — so WAVs self-describe after leaving the session folders. Verified: chunks parse back, files still decode.
 
+### Batch-invariance test result (2026-08-19, gating question for progressive emit)
+Ran same-seed solo vs batched-item-0 on GPU. Found and fixed a deeper bug first:
+**seeds never reproduced at all** — sample_flow_pingpong re-noised every step from
+the global RNG (seed only controlled step 0). Fixed (4de840e): seeded generator now
+feeds every step, plus per-variant streams (seed + variant index; regenerate passes
+real indices). Results after fix: same seed twice -> corr 0.99998; solo vs batch[0]
+-> corr 0.97 (residual is GPU kernel selection per batch size, ~0.7%/forward
+measured, bit-identical rows within one batch — irreducible without losing speed).
+**Progressive emit verdict: SAFE** — diffusion stays batched (unchanged audio) and
+the VAE already decodes per-variant sequentially; emitting each variant after its
+decode is pure plumbing. Design notes in output/research-progressive-emit-vae-2026-08-19.md.
+
 ## [2026-08-19] Performance Audit Pass 2 + Kit Builder (Claude)
 
 ### Accomplished
