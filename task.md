@@ -612,4 +612,10 @@
   - [x] Backend: routes /api/generate_kit, /api/kit_options, /api/sliceable; `sliceable` flag on /api/generate; executor dispatch by task type
   - [x] Mode B: hit sheets per piece (8s, "N isolated hits, soft to hard"), tagged sliceable
   - [x] Frontend: Kit Builder panel (piece pills from /api/kit_options, velocity toggles, variations, hit-sheet toggle, Build Kit, grouped results with audition + ZIP via jszip), slicer-feed presets (Drum Break / Perc Loop / Texture -> runGeneration({sliceable:true}))
-  - [ ] Verify end-to-end on GPU: build a 2-piece kit, check trims/levels/kit.json/sliceable.json, then commit
+  - [x] Verify end-to-end on GPU (2026-08-19): 2 pieces x 2 velocities + hit sheets, 43s total — trims tight, peaks exactly on velocity targets (0.45/0.98), kit.json + sliceable.json correct. Committed ef8955c.
+
+- [x] P0 Server could not boot: HF login + model-load memory (assignee: Claude, 2026-08-19):
+  - [x] HF token restored INSIDE the project (models/huggingface/token; user rule: all downloads stay in the project folder)
+  - [x] load_diffusion_cond crashed with os error 1455 / segfault: safetensors mmap of the 9.2GB medium checkpoint fails on this machine while plain reads work. New iter_safetensors() streams tensors with buffered reads; model halved + moved to GPU before the checkpoint is read. Committed 40f5f78. Boot: 30.3s load, warmup OK.
+
+- [ ] P2 stable-audio-3/.venv exe shims broken ("uv trampoline failed to canonicalize script path" — venv was moved). Fix: run `uv sync` in stable-audio-3/. Python.exe works, so not urgent.
