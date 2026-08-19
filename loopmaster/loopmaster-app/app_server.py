@@ -42,7 +42,7 @@ if os.path.exists(torch_dll_path):
 
 import torch
 import torchaudio
-from flask import Flask, request, jsonify, send_from_directory, send_file, after_this_request
+from flask import Flask, request, jsonify, send_from_directory, send_file
 
 from stable_audio_3 import StableAudioModel
 from stable_audio_3.verbose import set_verbose
@@ -67,6 +67,22 @@ SESSION_TIMESTAMP = time.strftime("%Y%m%d_%H%M%S")
 SESSION_DIR_NAME = f"session_{SESSION_TIMESTAMP}"
 SESSION_DIR = os.path.join(OUTPUT_DIR, SESSION_DIR_NAME)
 os.makedirs(SESSION_DIR, exist_ok=True)
+
+
+def _sweep_stale_temp_files():
+    """Remove conversion temp files left behind by crashes or open-handle deletes."""
+    for name in os.listdir(OUTPUT_DIR):
+        if not (name.startswith(("conv_", "temp_")) or name.endswith(".tmp.wav")):
+            continue
+        path = os.path.join(OUTPUT_DIR, name)
+        if os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+_sweep_stale_temp_files()
 
 # ---------------------------------------------------------------------------
 # Global state
@@ -178,6 +194,25 @@ def _normalize_blend_indices(generated_length, seed_length, *indices):
     return shared_length, tuple(max(0, min(shared_length, index)) for index in indices)
 
 
+def _remove_file_quietly(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _send_file_then_delete(path, download_name):
+    """Send a temp file and delete it only after the response body is closed.
+
+    ``after_this_request`` runs before the body streams; on Windows the open
+    handle makes the delete fail silently, leaking the temp file. call_on_close
+    fires after werkzeug closes the wrapped file, so the delete succeeds.
+    """
+    response = send_file(path, as_attachment=True, download_name=download_name)
+    response.call_on_close(lambda: _remove_file_quietly(path))
+    return response
+
+
 def _save_variant_atomically(file_path, waveform, sample_rate, bpm, duration, is_loop, prompt, old_file_path=None):
     """Fully write and tag a same-directory temp WAV before publishing it."""
     temp_path = os.path.join(
@@ -187,7 +222,16 @@ def _save_variant_atomically(file_path, waveform, sample_rate, bpm, duration, is
     try:
         torchaudio.save(temp_path, waveform, sample_rate)
         acidize_wav_file(temp_path, bpm, duration, is_loop, prompt)
-        os.replace(temp_path, file_path)
+        for attempt in range(5):
+            try:
+                os.replace(temp_path, file_path)
+                break
+            except PermissionError:
+                # Windows: the destination may be held open by a reader
+                # (e.g. the browser mid-download). Retry briefly.
+                if attempt == 4:
+                    raise
+                time.sleep(0.3)
     finally:
         if os.path.exists(temp_path):
             try:
@@ -244,9 +288,12 @@ def _make_generation_runtime():
 
 def _register_job(job_id, job, allocate_track=False):
     """Create a job and durably publish its queued state through one seam."""
+    # Scan the session directory before taking the lock; the collision loop
+    # below re-checks against in-flight jobs while the lock is held.
+    next_track = get_next_track_index() if allocate_track else None
     with jobs_lock:
         if allocate_track:
-            track_num = get_next_track_index()
+            track_num = next_track
             active_tracks = [
                 existing.get("track_num")
                 for existing in jobs.values()
@@ -341,7 +388,7 @@ def warmup_model():
     """Run a single dummy generation to trigger torch.compile graph compilation
     and CUDA kernel autotuning before any user request hits the server."""
     global model, first_generation_completed
-    if model is None or str(model.device) != "cuda":
+    if model is None or not str(model.device).startswith("cuda"):
         print("Skipping warmup (no CUDA device).")
         return
     print("Running warmup generation to compile DiT graph…")
@@ -663,10 +710,13 @@ def api_screenshot():
         
         if "," in image_data:
             image_data = image_data.split(",", 1)[1]
-            
+
+        if len(image_data) > 32 * 1024 * 1024:
+            return jsonify({"error": "Screenshot payload too large"}), 413
+
         decoded_image = base64.b64decode(image_data)
-        
-        # Project root screenshots folder: j:/projects/sa3/screenshots
+
+        # Project root screenshots folder: <repo>/screenshots
         project_root = os.path.dirname(os.path.dirname(SCRIPT_DIR))
         screenshots_dir = os.path.join(project_root, "screenshots")
         os.makedirs(screenshots_dir, exist_ok=True)
@@ -708,28 +758,21 @@ def api_convert():
                 
             out_filename = os.path.splitext(os.path.basename(input_path))[0] + f".{target_format}"
             output_path = os.path.join(OUTPUT_DIR, f"conv_{uuid.uuid4().hex}.{target_format}")
-            
+
             # Run ffmpeg
             import subprocess
             quality_arg = "4" if target_format == "ogg" else "2"
 
-            @after_this_request
-            def remove_file(response):
-                try:
-                    os.remove(output_path)
-                except Exception as e:
-                    print(f"Error removing temp file {output_path}: {e}")
-                return response
-
             try:
                 subprocess.run(["ffmpeg", "-y", "-i", input_path, "-q:a", quality_arg, output_path], check=True, timeout=120)
             except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError) as e:
+                _remove_file_quietly(output_path)
                 err_msg = str(e)
                 if isinstance(e, FileNotFoundError):
                     err_msg = "ffmpeg not found on PATH"
                 return jsonify({"error": f"FFmpeg conversion failed: {err_msg}"}), 500
-                
-            return send_file(output_path, as_attachment=True, download_name=out_filename)
+
+            return _send_file_then_delete(output_path, out_filename)
 
         # Case B: Uploaded file
         if "file" not in request.files:
@@ -744,14 +787,7 @@ def api_convert():
         uploaded_file.save(temp_in)
 
         if target_format == "wav":
-            @after_this_request
-            def clean_temp_in(response):
-                try:
-                    os.remove(temp_in)
-                except Exception as e:
-                    print(f"Error removing temp file {temp_in}: {e}")
-                return response
-            return send_file(temp_in, as_attachment=True, download_name=uploaded_file.filename)
+            return _send_file_then_delete(temp_in, uploaded_file.filename)
 
         out_name = os.path.splitext(uploaded_file.filename)[0] + f".{target_format}"
         temp_out = os.path.join(OUTPUT_DIR, f"temp_{uuid.uuid4().hex}.{target_format}")
@@ -760,24 +796,18 @@ def api_convert():
         # Use -q:a 2 for lame mp3, or -q:a 4 for vorbis ogg to ensure high quality
         quality_arg = "4" if target_format == "ogg" else "2"
 
-        @after_this_request
-        def clean_all(response):
-            try:
-                if os.path.exists(temp_in): os.remove(temp_in)
-                if os.path.exists(temp_out): os.remove(temp_out)
-            except Exception as e:
-                print(f"Error cleaning temp files: {e}")
-            return response
-
         try:
             subprocess.run(["ffmpeg", "-y", "-i", temp_in, "-q:a", quality_arg, temp_out], check=True, timeout=120)
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError) as e:
+            _remove_file_quietly(temp_in)
+            _remove_file_quietly(temp_out)
             err_msg = str(e)
             if isinstance(e, FileNotFoundError):
                 err_msg = "ffmpeg not found on PATH"
             return jsonify({"error": f"FFmpeg conversion failed: {err_msg}"}), 500
 
-        return send_file(temp_out, as_attachment=True, download_name=out_name)
+        _remove_file_quietly(temp_in)
+        return _send_file_then_delete(temp_out, out_name)
 
     except Exception as e:
         import traceback

@@ -371,14 +371,17 @@ def _publish_variants(task, runtime, audio, target_indices, is_drum):
     prompt_slug = runtime.slugify_prompt(task.prompt, 16)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
 
+    # Anchor on the filename tail: prompt slugs may themselves contain
+    # "_var_N_", so a loose substring match can bind the wrong variant.
+    variant_pattern = re.compile(r"_var_(\d+)_\d{8}_\d{6}\.wav$")
     existing_files = {}
     for filename in os.listdir(output_dir):
-        if not filename.endswith(".wav"):
+        match = variant_pattern.search(filename)
+        if match is None:
             continue
-        for variant_index in range(1, task.num_variants + 1):
-            if f"_var_{variant_index}_" in filename:
-                existing_files[variant_index - 1] = filename
-                break
+        variant_index = int(match.group(1))
+        if 1 <= variant_index <= task.num_variants:
+            existing_files[variant_index - 1] = filename
 
     sample_rate = runtime.model.model.sample_rate
     for generated_index, target_index in enumerate(target_indices):
