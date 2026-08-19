@@ -88,6 +88,11 @@
                     <button class="btn-generate" id="btn-generate" type="button">Generate</button>
                     <button class="btn-cancel-generation is-hidden" id="btn-cancel-generation" type="button" hidden>Cancel generation</button>
                 </div>
+
+                <div class="control-group">
+                    <div class="control-group-header"></div>
+                    <button class="btn-kit-toggle" id="btn-kit-toggle" type="button" title="Open the Kit Builder: one-shot drum kits, hit sheets, and slicer feed" aria-expanded="false" aria-controls="kit-builder-panel">Kit Builder</button>
+                </div>
             </div>
 
             <div class="status-bar" id="status-bar" role="status" aria-live="polite" aria-atomic="true">
@@ -145,6 +150,52 @@
                         <span class="remix-param-value" id="continue-start-val">4.0s</span>
                     </div>
                 </div>
+            </div>
+
+            <!-- Kit Builder -->
+            <div class="kit-builder-panel is-initially-hidden" id="kit-builder-panel" aria-label="Kit Builder">
+                <div class="kit-builder-header">
+                    <span class="kit-builder-title">Kit Builder <span class="kit-builder-subtitle">one-shot drum kits, hit sheets &amp; slicer feed</span></span>
+                    <button class="btn-clear-init" id="btn-kit-close" type="button" title="Close Kit Builder" aria-label="Close Kit Builder">×</button>
+                </div>
+                <div class="kit-row">
+                    <div class="control-group kit-grow">
+                        <label class="control-label" for="kit-style-input">Kit Style</label>
+                        <input class="control-input" id="kit-style-input" type="text"
+                               placeholder="acoustic drum kit, vintage, punchy…"
+                               value="acoustic drum kit" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label" for="kit-name-input">Kit Name</label>
+                        <input class="control-input" id="kit-name-input" type="text"
+                               placeholder="my kit" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="control-group">
+                        <label class="control-label" for="kit-variations-input" title="One-shots per velocity layer">Variations</label>
+                        <input class="control-input control-input-sm" id="kit-variations-input" type="number"
+                               min="1" max="3" value="1" step="1" inputmode="numeric">
+                    </div>
+                </div>
+                <div class="kit-row kit-pieces" id="kit-pieces" role="group" aria-label="Kit Pieces"></div>
+                <div class="kit-row kit-actions">
+                    <div class="kit-velocities" id="kit-velocities" role="group" aria-label="Velocity Layers">
+                        <span class="control-label">Velocities:</span>
+                        <label class="kit-check"><input type="checkbox" value="soft" checked>Soft</label>
+                        <label class="kit-check"><input type="checkbox" value="medium" checked>Medium</label>
+                        <label class="kit-check"><input type="checkbox" value="hard" checked>Hard</label>
+                    </div>
+                    <label class="kit-check" title="Also make one clip per piece with several hits separated by silence, tagged for the slicer">
+                        <input type="checkbox" id="kit-include-sheets">Hit sheets (slicer)
+                    </label>
+                    <button class="btn-generate" id="btn-build-kit" type="button">Build Kit</button>
+                </div>
+                <div class="kit-row kit-slicer-feed">
+                    <span class="control-label">Slicer feed:</span>
+                    <button class="prompt-pill-btn" id="btn-slice-break" type="button" title="Generate a drum break tagged for the slicer">Drum Break</button>
+                    <button class="prompt-pill-btn" id="btn-slice-perc" type="button" title="Generate a percussion loop tagged for the slicer">Perc Loop</button>
+                    <button class="prompt-pill-btn" id="btn-slice-texture" type="button" title="Generate a texture loop tagged for the slicer">Texture</button>
+                </div>
+                <div class="kit-results" id="kit-results"></div>
             </div>
         </section>
 

@@ -7628,11 +7628,239 @@ function updateTrackLockState(track) {
         runGeneration(prompt);
     });
 
+    // --- Kit Builder ---
+    const kitPanel = document.getElementById('kit-builder-panel');
+    const btnKitToggle = document.getElementById('btn-kit-toggle');
+    const btnKitClose = document.getElementById('btn-kit-close');
+    const kitPiecesEl = document.getElementById('kit-pieces');
+    const kitResultsEl = document.getElementById('kit-results');
+    const btnBuildKit = document.getElementById('btn-build-kit');
+
+    const KIT_FALLBACK_PIECES = [
+        { key: 'kick', label: 'kick drum' }, { key: 'snare', label: 'snare drum' },
+        { key: 'rimshot', label: 'snare rimshot' }, { key: 'clap', label: 'hand clap' },
+        { key: 'closed_hat', label: 'closed hi-hat' }, { key: 'open_hat', label: 'open hi-hat' },
+        { key: 'tom_low', label: 'low floor tom' }, { key: 'tom_mid', label: 'mid tom' },
+        { key: 'tom_high', label: 'high rack tom' }, { key: 'ride', label: 'ride cymbal' },
+        { key: 'crash', label: 'crash cymbal' }, { key: 'shaker', label: 'shaker' },
+        { key: 'cowbell', label: 'cowbell' }, { key: 'perc', label: 'percussion hit' }
+    ];
+    const KIT_DEFAULT_ON = new Set(['kick', 'snare', 'clap', 'closed_hat', 'open_hat', 'ride', 'crash', 'perc']);
+    let kitPiecesLoaded = false;
+
+    function renderKitPieces(pieces) {
+        if (!kitPiecesEl) return;
+        kitPiecesEl.textContent = '';
+        pieces.forEach(piece => {
+            const label = document.createElement('label');
+            label.className = 'kit-check';
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.value = piece.key;
+            input.checked = KIT_DEFAULT_ON.has(piece.key);
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(piece.label));
+            kitPiecesEl.appendChild(label);
+        });
+    }
+
+    async function ensureKitPieces() {
+        if (kitPiecesLoaded) return;
+        kitPiecesLoaded = true;
+        renderKitPieces(KIT_FALLBACK_PIECES);
+        try {
+            const res = await fetch('/api/kit_options');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (Array.isArray(data.pieces) && data.pieces.length) renderKitPieces(data.pieces);
+        } catch (e) {
+            // The fallback list is already rendered.
+        }
+    }
+
+    function setKitPanelOpen(open) {
+        if (!kitPanel || !btnKitToggle) return;
+        kitPanel.classList.toggle('is-open', open);
+        btnKitToggle.classList.toggle('is-open', open);
+        btnKitToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) ensureKitPieces();
+    }
+
+    if (btnKitToggle) btnKitToggle.addEventListener('click', () => setKitPanelOpen(!kitPanel.classList.contains('is-open')));
+    if (btnKitClose) btnKitClose.addEventListener('click', () => setKitPanelOpen(false));
+
+    let kitAuditionAudio = null;
+    function auditionKitHit(btn, filePath) {
+        if (kitAuditionAudio) {
+            kitAuditionAudio.pause();
+            kitAuditionAudio = null;
+        }
+        document.querySelectorAll('.kit-hit-btn.is-playing').forEach(b => b.classList.remove('is-playing'));
+        const audio = new Audio(`/outputs/${filePath}`);
+        kitAuditionAudio = audio;
+        btn.classList.add('is-playing');
+        audio.addEventListener('ended', () => btn.classList.remove('is-playing'));
+        audio.play().catch(() => btn.classList.remove('is-playing'));
+    }
+
+    function renderKitResults(kit) {
+        if (!kitResultsEl || !kit || !kit.manifest) return;
+        kitResultsEl.textContent = '';
+        kitResultsEl.classList.add('has-results');
+
+        const header = document.createElement('div');
+        header.className = 'kit-results-header';
+        const title = document.createElement('span');
+        title.className = 'kit-results-title';
+        title.textContent = `${kit.manifest.name} — ${kit.manifest.entries.length} files`;
+        const zipBtn = document.createElement('button');
+        zipBtn.className = 'prompt-pill-btn';
+        zipBtn.type = 'button';
+        zipBtn.textContent = 'Download ZIP';
+        zipBtn.addEventListener('click', () => downloadKitZip(kit, zipBtn));
+        header.appendChild(title);
+        header.appendChild(zipBtn);
+        kitResultsEl.appendChild(header);
+
+        const byPiece = new Map();
+        kit.manifest.entries.forEach(entry => {
+            if (!byPiece.has(entry.piece)) byPiece.set(entry.piece, []);
+            byPiece.get(entry.piece).push(entry);
+        });
+
+        byPiece.forEach((entries, piece) => {
+            const group = document.createElement('div');
+            group.className = 'kit-piece-group';
+            const name = document.createElement('span');
+            name.className = 'kit-piece-name';
+            name.textContent = piece.replace(/_/g, ' ');
+            group.appendChild(name);
+            entries.forEach(entry => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                const isSheet = (entry.tags || []).includes('hit_sheet');
+                btn.className = 'kit-hit-btn' + (isSheet ? ' is-sheet' : '');
+                btn.textContent = isSheet ? 'sheet' : `${entry.velocity} ${String(entry.variation).padStart(2, '0')}`;
+                btn.title = entry.file;
+                btn.addEventListener('click', () => auditionKitHit(btn, `${kit.dir}/${entry.file}`));
+                group.appendChild(btn);
+            });
+            kitResultsEl.appendChild(group);
+        });
+    }
+
+    async function downloadKitZip(kit, zipBtn) {
+        const originalText = zipBtn.textContent;
+        zipBtn.disabled = true;
+        zipBtn.textContent = 'Zipping…';
+        try {
+            if (typeof JSZip === 'undefined') {
+                await new Promise((resolve, reject) => {
+                    const s = document.createElement('script');
+                    s.src = '/static/vendor/jszip-3.10.1.min.js';
+                    s.onload = resolve;
+                    s.onerror = reject;
+                    document.head.appendChild(s);
+                });
+            }
+            const zip = new JSZip();
+            zip.file('kit.json', JSON.stringify(kit.manifest, null, 2));
+            for (const entry of kit.manifest.entries) {
+                const res = await fetch(`/outputs/${kit.dir}/${entry.file}`);
+                if (!res.ok) continue;
+                zip.file(entry.file, await res.blob());
+            }
+            const blob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${(kit.manifest.name || 'kit').replace(/[^a-z0-9_-]+/gi, '_')}.zip`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+        } catch (err) {
+            showStatus(`Kit ZIP failed: ${err.message}`, 'error');
+        } finally {
+            zipBtn.disabled = false;
+            zipBtn.textContent = originalText;
+        }
+    }
+
+    async function runKitBuild() {
+        const style = (document.getElementById('kit-style-input')?.value || '').trim();
+        const kitName = (document.getElementById('kit-name-input')?.value || '').trim();
+        const variations = parseInt(document.getElementById('kit-variations-input')?.value) || 1;
+        const includeSheets = !!document.getElementById('kit-include-sheets')?.checked;
+        const pieces = Array.from(kitPiecesEl?.querySelectorAll('input:checked') || []).map(i => i.value);
+        const velocities = Array.from(document.getElementById('kit-velocities')?.querySelectorAll('input:checked') || []).map(i => i.value);
+        if (!pieces.length) { showStatus('Pick at least one kit piece', 'error'); return; }
+        if (!velocities.length) { showStatus('Pick at least one velocity layer', 'error'); return; }
+
+        const stepsInput = document.getElementById('steps-input');
+        const seedInput = document.getElementById('seed-input');
+
+        btnBuildKit.disabled = true;
+        btnBuildKit.classList.add('is-generating');
+        btnBuildKit.textContent = 'Building…';
+        showStatus('Submitting kit build…');
+        try {
+            const res = await fetch('/api/generate_kit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    style,
+                    kit_name: kitName,
+                    pieces,
+                    velocities,
+                    variations,
+                    include_sheets: includeSheets,
+                    steps: stepsInput ? parseInt(stepsInput.value) || 8 : 8,
+                    seed: seedInput ? parseInt(seedInput.value) : -1
+                })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || `HTTP ${res.status}`);
+            }
+            const { job_id } = await res.json();
+            const result = await pollJob(job_id);
+            if (result.status !== 'done' || !result.kit) throw new Error(result.error || 'Kit build failed');
+            showStatus(`Kit done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
+            renderKitResults(result.kit);
+        } catch (err) {
+            if (err?.name !== 'GenerationCancelledError') {
+                showStatus(`Kit build failed: ${err.message}`, 'error');
+            }
+        } finally {
+            btnBuildKit.disabled = false;
+            btnBuildKit.classList.remove('is-generating');
+            btnBuildKit.textContent = 'Build Kit';
+        }
+    }
+
+    if (btnBuildKit) btnBuildKit.addEventListener('click', runKitBuild);
+
+    // Slicer-feed presets: normal loop generations tagged `sliceable` so the
+    // upcoming slicer finds them in outputs/sliceable.json.
+    const SLICER_FEED_PRESETS = {
+        'btn-slice-break': 'raw drum break, live acoustic drums, funky breakbeat, punchy, dry',
+        'btn-slice-perc': 'layered percussion loop, congas, shakers, bongos, tight groove, dry',
+        'btn-slice-texture': 'evolving ambient texture, granular, tape-saturated, wide stereo field'
+    };
+    Object.entries(SLICER_FEED_PRESETS).forEach(([id, presetPrompt]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+            promptInput.value = presetPrompt;
+            addToHistory(presetPrompt);
+            runGeneration(presetPrompt, { sliceable: true });
+        });
+    });
+
     promptInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); btnGenerate.click(); }
     });
 
-    async function runGeneration(prompt) {
+    async function runGeneration(prompt, options = {}) {
         const bpm = parseInt(bpmInput.value) || 120;
         const numVariants = 4;
         const loop = true;
@@ -7657,7 +7885,8 @@ function updateTrackLockState(track) {
                 duration_padding_sec: loop ? 2.0 : 0.0,
                 seed,
                 cfg_scale: cfgScale,
-                steps
+                steps,
+                sliceable: !!options.sliceable
             };
             let parentTrackId = null;
             if (selectedInitAudio) {

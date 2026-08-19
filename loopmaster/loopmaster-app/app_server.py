@@ -11,6 +11,22 @@ import ntpath
 os.environ["HF_HOME"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "huggingface"))
 os.environ["TORCH_HOME"] = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "torch"))
 
+# Overriding HF_HOME hides the user's login token (kept under
+# ~/.cache/huggingface/token), which makes gated-repo lookups fail with 401
+# even when the files are already in the project cache. Surface it explicitly.
+if "HF_TOKEN" not in os.environ:
+    _default_token_path = os.path.join(
+        os.path.expanduser("~"), ".cache", "huggingface", "token"
+    )
+    if os.path.isfile(_default_token_path):
+        try:
+            with open(_default_token_path, encoding="utf-8") as _token_file:
+                _token = _token_file.read().strip()
+            if _token:
+                os.environ["HF_TOKEN"] = _token
+        except OSError:
+            pass
+
 # Add stable-audio-3 directory to system path to import stable_audio_3 module
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sa3_dir = None
@@ -53,6 +69,8 @@ from generation_queue import (
     GenerationQueueFull,
 )
 from job_history import JobHistory
+from kit_executor import KIT_PIECES, VELOCITIES, KitTask
+from sliceable_registry import SliceableRegistry
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -94,6 +112,8 @@ model_lock = threading.Lock()
 job_history = JobHistory(OUTPUT_DIR, max_terminal=50)
 jobs = job_history.recover()
 jobs_lock = threading.Lock()
+
+sliceable_registry = SliceableRegistry(OUTPUT_DIR)
 
 first_generation_completed = False
 
@@ -283,6 +303,7 @@ def _make_generation_runtime():
         mark_warm=_mark_generation_warm,
         update_job=_mutate_job,
         prune_terminal_jobs=_prune_terminal_jobs,
+        sliceable_registry=sliceable_registry,
     )
 
 
@@ -461,6 +482,7 @@ def api_generate():
         inpaint_end = bounded_number(data, "inpaint_end", duration, float, 0.0, duration)
         continue_start = bounded_number(data, "continue_start", 0.0, float, 0.0, duration)
         invert_timing = parse_loop(data.get("invert_timing", False))
+        sliceable = parse_loop(data.get("sliceable", False))
         if remix_mode == "inpaint" and init_audio_path and inpaint_start >= inpaint_end:
             raise ValueError("inpaint_start must be before inpaint_end")
     except ValueError as error:
@@ -497,6 +519,7 @@ def api_generate():
         inpaint_end=inpaint_end,
         continue_start=continue_start,
         invert_timing=invert_timing,
+        sliceable=sliceable,
     )
     try:
         generation_queue.submit(job_id, task)
@@ -512,6 +535,106 @@ def api_generate():
         "status": "queued",
         "queue_position": generation_queue.position(job_id),
     }), 202
+
+@app.get("/api/kit_options")
+def api_kit_options():
+    """Piece and velocity vocabularies for the Kit Builder menu."""
+    return jsonify({
+        "pieces": [
+            {"key": key, "label": noun, "duration": duration}
+            for key, (noun, duration) in KIT_PIECES.items()
+        ],
+        "velocities": [
+            {"key": key, "label": key.capitalize()}
+            for key in VELOCITIES
+        ],
+    })
+
+
+@app.get("/api/sliceable")
+def api_sliceable():
+    """Everything the future slicer can consume, one registry."""
+    return jsonify(sliceable_registry.snapshot())
+
+
+@app.post("/api/generate_kit")
+def api_generate_kit():
+    data = request.json or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+
+    style = data.get("style", "acoustic drum kit")
+    kit_name = data.get("kit_name", "")
+    if not isinstance(style, str) or not isinstance(kit_name, str):
+        return jsonify({"error": "style and kit_name must be text"}), 400
+    style = style.strip()[:200]
+    kit_name = kit_name.strip()[:60]
+
+    pieces_value = data.get("pieces", list(KIT_PIECES.keys()))
+    if not isinstance(pieces_value, list):
+        return jsonify({"error": "pieces must be a list"}), 400
+    pieces = [p for p in pieces_value if isinstance(p, str) and p in KIT_PIECES]
+    if not pieces:
+        return jsonify({"error": "No valid kit pieces selected"}), 400
+
+    velocities_value = data.get("velocities", list(VELOCITIES.keys()))
+    if not isinstance(velocities_value, list):
+        return jsonify({"error": "velocities must be a list"}), 400
+    velocities = [v for v in velocities_value if isinstance(v, str) and v in VELOCITIES]
+    if not velocities:
+        return jsonify({"error": "No valid velocity layers selected"}), 400
+
+    try:
+        variations = bounded_number(data, "variations", 1, int, 1, 3)
+        steps = bounded_number(data, "steps", 8, int, 1, MAX_STEPS)
+        cfg_scale = bounded_number(data, "cfg_scale", 1.0, float, 0.0, MAX_CFG_SCALE)
+        seed = bounded_number(data, "seed", -1, int, -1, 2_147_483_647)
+        sheet_hits = bounded_number(data, "sheet_hits", 6, int, 3, 12)
+        include_sheets = parse_loop(data.get("include_sheets", False))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    job_id = uuid.uuid4().hex[:12]
+    _register_job(job_id, {
+        "status": "queued",
+        "progress": "Waiting for the generation worker…",
+        "error": None,
+        "elapsed": None,
+        "files": None,
+        "kit": None,
+        "prompt": f"[kit] {kit_name or style}",
+        "track_num": None,
+        "queue_position": None,
+    })
+
+    task = KitTask(
+        job_id=job_id,
+        kit_name=kit_name,
+        style=style,
+        pieces=tuple(pieces),
+        velocities=tuple(velocities),
+        variations=variations,
+        steps=steps,
+        cfg_scale=cfg_scale,
+        seed=seed,
+        include_sheets=include_sheets,
+        sheet_hits=sheet_hits,
+    )
+    try:
+        generation_queue.submit(job_id, task)
+    except GenerationQueueFull:
+        _remove_job(job_id)
+        return jsonify({
+            "error": "Generation queue is full. Try again after a job finishes.",
+            "queue_capacity": generation_queue.capacity,
+        }), 429
+
+    return jsonify({
+        "job_id": job_id,
+        "status": "queued",
+        "queue_position": generation_queue.position(job_id),
+    }), 202
+
 
 @app.post("/api/regenerate")
 def api_regenerate():

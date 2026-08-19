@@ -9,6 +9,8 @@ import traceback
 import torch
 import torchaudio
 
+from kit_executor import KitTask, execute_kit_task
+
 
 @dataclass(frozen=True)
 class GenerationTask:
@@ -31,6 +33,7 @@ class GenerationTask:
     inpaint_end: float = 0.0
     continue_start: float = 0.0
     invert_timing: bool = False
+    sliceable: bool = False
 
 
 @dataclass(frozen=True)
@@ -51,6 +54,7 @@ class GenerationRuntime:
     mark_warm: object
     update_job: object
     prune_terminal_jobs: object
+    sliceable_registry: object = None
 
 
 class GenerationExecutor:
@@ -60,7 +64,10 @@ class GenerationExecutor:
         self._runtime_factory = runtime_factory
 
     def execute(self, task):
-        execute_generation_task(task, self._runtime_factory())
+        if isinstance(task, KitTask):
+            execute_kit_task(task, self._runtime_factory())
+        else:
+            execute_generation_task(task, self._runtime_factory())
 
 
 def _update_job(runtime, job_id, **changes):
@@ -466,6 +473,18 @@ def execute_generation_task(task, runtime):
         files = _publish_variants(
             task, runtime, audio, target_indices, is_drum
         )
+        if task.sliceable and runtime.sliceable_registry is not None:
+            for file_path in files:
+                if not file_path:
+                    continue
+                runtime.sliceable_registry.record(
+                    file=file_path,
+                    kind="loop",
+                    prompt=task.prompt,
+                    bpm=task.bpm,
+                    duration=task.duration,
+                    session=runtime.session_dir_name,
+                )
         _update_job(
             runtime,
             task.job_id,
