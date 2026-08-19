@@ -70,8 +70,13 @@ def generate_cond(
     ):
 
     if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    gc.collect()
+        # Only flush the allocator when memory is actually tight; an
+        # unconditional empty_cache + full GC forces re-cudaMalloc churn and a
+        # GC pause at the start of every generation.
+        free_mem, _total_mem = torch.cuda.mem_get_info()
+        if free_mem < 2 * 1024 ** 3:
+            torch.cuda.empty_cache()
+            gc.collect()
 
     print(f"Prompt: {prompt}")
 
@@ -102,8 +107,14 @@ def generate_cond(
 
     def progress_callback(callback_info):
         global preview_images
-        denoised = callback_info["denoised"]
         current_step = callback_info["i"]
+
+        # Bail before touching tensors: extracting t/sigma scalars forces a
+        # GPU sync every step even on non-preview steps.
+        if preview_every is None or (current_step - 1) % preview_every != 0:
+            return
+
+        denoised = callback_info["denoised"]
         t = callback_info["t"]
         sigma = callback_info["sigma"]
 
@@ -115,13 +126,12 @@ def generate_cond(
 
         log_snr = math.log(((1 - sigma) / sigma) + 1e-6)
 
-        if (current_step - 1) % preview_every == 0:
-            if stable_audio_3_model.model.pretransform is not None:
-                denoised = stable_audio_3_model.model.pretransform.decode(denoised)
-            denoised = rearrange(denoised, "b d n -> d (b n)")
-            denoised = denoised.clamp(-1, 1).mul(32767).to(torch.int16).cpu()
-            audio_spectrogram = audio_spectrogram_image(denoised, sample_rate=sample_rate)
-            preview_images.append((audio_spectrogram, f"Step {current_step} sigma={sigma:.3f} logSNR={log_snr:.3f}"))
+        if stable_audio_3_model.model.pretransform is not None:
+            denoised = stable_audio_3_model.model.pretransform.decode(denoised)
+        denoised = rearrange(denoised, "b d n -> d (b n)")
+        denoised = denoised.clamp(-1, 1).mul(32767).to(torch.int16).cpu()
+        audio_spectrogram = audio_spectrogram_image(denoised, sample_rate=sample_rate)
+        preview_images.append((audio_spectrogram, f"Step {current_step} sigma={sigma:.3f} logSNR={log_snr:.3f}"))
 
     if init_audio_type == "RF-Inversion":
         inversion_params = {

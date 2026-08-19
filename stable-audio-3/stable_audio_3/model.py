@@ -393,8 +393,8 @@ class StableAudioModel:
         )
 
         if not return_latents:
-            if torch.isnan(result).any():
-                print("Warning: NaN detected in generation output. Replacing with 0.0...")
+            # nan_to_num already guards unconditionally; a separate isnan()
+            # check would force a GPU sync over the whole output just to print.
             result = torch.nan_to_num(result, nan=0.0, posinf=1.0, neginf=-1.0)
             result = result.to(torch.float32).clamp(-1, 1)
 

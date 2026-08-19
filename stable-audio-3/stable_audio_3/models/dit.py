@@ -158,11 +158,16 @@ class DiffusionTransformer(nn.Module):
                          extra_args=None, **kwargs):
         """Helper method to call transformer and handle early exit logic."""
 
+        transformer_kwargs = dict(**(extra_args or {}), **kwargs)
+        # Gradient checkpointing only pays off when gradients flow; at
+        # inference it adds per-layer wrapper overhead for nothing.
+        transformer_kwargs.setdefault("use_checkpointing", torch.is_grad_enabled())
+
         output = self.transformer(x, prepend_embeds=prepend_inputs, context=cross_attn_cond,
                                     return_info=return_info, exit_layer_ix=exit_layer_ix,
                                     local_add_cond=local_add_cond, modular_local_cond=modular_local_cond,
                                     padding_mask=padding_mask,
-                                    **(extra_args or {}), **kwargs)
+                                    **transformer_kwargs)
 
         if return_info:
             output, info = output
@@ -455,7 +460,12 @@ class DiffusionTransformer(nn.Module):
         elif self.diffusion_objective in ["rectified_flow", "rf_denoiser"]:
             sigma = t
 
-        sigma_val = float(sigma.max().item())
+        # Reading sigma forces a GPU->CPU sync every diffusion step. Only pay
+        # for it when a consumer actually needs the value: LoRA intervals or a
+        # non-default CFG interval (the default (0, 1) gate is always true).
+        cfg_interval_is_default = tuple(cfg_interval) == (0, 1)
+        needs_sigma_val = has_lora(self) or (cfg_scale != 1.0 and not cfg_interval_is_default)
+        sigma_val = float(sigma.max().item()) if needs_sigma_val else None
 
         # LoRA interval
         if has_lora(self):
@@ -478,7 +488,7 @@ class DiffusionTransformer(nn.Module):
                 else:
                     disable_lora(self)
 
-        if cfg_scale != 1.0 and (cross_attn_cond is not None or prepend_cond is not None) and (cfg_interval[0] <= sigma_val <= cfg_interval[1]):
+        if cfg_scale != 1.0 and (cross_attn_cond is not None or prepend_cond is not None) and (cfg_interval_is_default or cfg_interval[0] <= sigma_val <= cfg_interval[1]):
 
             # Classifier-free guidance
             # Concatenate conditioned and unconditioned inputs on the batch dimension            

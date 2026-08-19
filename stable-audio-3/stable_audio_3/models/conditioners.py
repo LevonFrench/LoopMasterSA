@@ -232,6 +232,14 @@ class T5GemmaConditioner(Conditioner):
 
         # Only move to device once (avoid overhead on every forward call)
         if not self._device_initialized:
+            # The encoder is stashed in __dict__ (hidden from module .to()),
+            # so a half-precision serving wrapper leaves it pinned in fp32 on
+            # the GPU (~1 GB). Match the projection dtype; outputs are cast to
+            # proj_out's dtype below either way.
+            if not self.enable_grad and not isinstance(self.proj_out, nn.Identity):
+                proj_dtype = next(self.proj_out.parameters()).dtype
+                if proj_dtype == torch.float16:
+                    self.model.half()
             self.model.to(device)
             self.proj_out.to(device)
             self.model.eval()

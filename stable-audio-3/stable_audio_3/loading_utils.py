@@ -66,10 +66,12 @@ def load_diffusion_cond(
 ):
     model = create_diffusion_cond_from_config(model_config)
     copy_state_dict(model, load_file(ckpt_path))
-    model.to(device).eval().requires_grad_(False)
+    model.eval().requires_grad_(False)
     if model_half:
+        # Halve on the CPU first: uploading fp16 halves the PCIe transfer and
+        # avoids a transient full-fp32 copy of the model on the GPU at startup.
         model.to(torch.float16)
-    return model
+    return model.to(device)
 
 
 def remap_state_dict_keys(state_dict, model_state_dict):
