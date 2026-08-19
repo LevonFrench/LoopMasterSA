@@ -1,5 +1,25 @@
 # Session Handoffs
 
+## [2026-08-19] Performance Audit Pass 2 + Kit Builder (Claude)
+
+### Accomplished
+- Rebuilt the codebase-memory index (project `J-projects-apps-sa3`, 2,729 nodes).
+- Ran three parallel audit agents (frontend `app.js`, Flask backend + Electron launcher, stable-audio-3 inference). All confirmed findings fixed and committed in four scoped commits:
+  - `d12232d` backend: /api/convert temp-file leak (after_this_request ran before the body streamed on Windows — every mp3/ogg export leaked; now `call_on_close` + startup sweep), lock-scope, anchored `_var_N_` matcher, `os.replace` retry, `cuda:N` warmup, screenshot cap.
+  - `94d0366` launcher: 10s force-stop fallback (STOPPING could wedge forever), `/status` probe with timeout.
+  - `3f1093a` frontend: **initKnob→trackInitKnob** (38 knobs/track leaked 2 document listeners each), FX Copy/Paste/Reset were hard-broken on stale selectors — now share `applyFxSettingsToTrack` (also used by project load), save/load serializes FX from track state (was silently saving defaults), 25ms tick caching + last-value guards, bitcrusher curve guard, meter idle-skip + gradient cache, viz-meters dpr store, BPM-drag restart debounce, offline mixdown time-aware chorus/phaser/crusher setters, pollJob inactivity timeout, macro selector fixes.
+  - `d9cdddf` inference: lazy `sigma_val` (zero per-step GPU syncs on default path), `use_checkpointing=False` at inference, fp16 T5Gemma (~1GB VRAM back), halve-before-upload model load, gated empty_cache, preview-callback sync fix, removed `torch._dynamo.suppress_errors=True` (it silently hijacked the VAE SDPA fallback with slow eager flex).
+- **Kit Builder feature (uncommitted, needs GPU verification)**: `kit_executor.py` (one KitTask = whole kit: piece × velocity × variation one-shots, silence trim + velocity peak targets 0.45/0.70/0.98, `kit.json` manifest, optional 8s hit sheets), `sliceable_registry.py` (`outputs/sliceable.json` — the future slicer reads this one file), routes `/api/generate_kit`, `/api/kit_options`, `/api/sliceable`, `sliceable` flag on `/api/generate`, full Kit Builder panel in index.html/app.js/app.css with audition buttons + ZIP export, slicer-feed presets. Design: `output/plan-kit-builder-2026-08-19.md`.
+- Boot fix: app_server now surfaces the HF token from `~/.cache/huggingface/token` (overriding HF_HOME hid it → gated-repo 401 at boot).
+
+### File ownership this session
+Claude did NOT touch `stable-audio-3/stable_audio_3/model_configs.py` or `models/transformer.py` — Codex has uncommitted WIP there (local-file resolution refactor + logging).
+
+### Next steps
+1. Verify Kit Builder end-to-end on GPU (build a 2-piece kit, check trims/levels/kit.json/sliceable.json), then commit it.
+2. Codex (when transformer.py is free): flex_attention negative-cache in apply_attn, hoist constant `to_local_embed` out of the step loop, replace padding-mask V-zeroing with a real SDPA key mask, cache RoPE cos/sin per seq_len. Listed in task.md.
+3. P2: mod-matrix/LFO/MIDI mapping still targets removed `.filtr-cutoff`/`.aelapse-delay-mix` classes — needs a design call (see task.md).
+
 ## [2026-07-07] Hardening Verification and BPM Filename Feature (AG)
 
 ### Accomplished

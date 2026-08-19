@@ -589,3 +589,27 @@
   - [x] Part B: run ALL original per-part DoD checklists (boot w/o warmup failure, generation e2e, cache hit, seed repro, listener counts, FX copy/paste, render A/B, perf profile, launcher, VRAM soak)
   - [x] Part C: commit in logical chunks after green
   - [x] Added `{bpm}bpm` to generated `.wav` output filenames in `app_server.py`.
+
+- [x] P0 Performance & quality audit pass 2 (assignee: Claude, 2026-08-19):
+  > Three parallel audit agents (frontend, backend+launcher, inference). All confirmed findings fixed and committed (d12232d backend, 94d0366 launcher, 3f1093a frontend, d9cdddf inference).
+  - [x] Frontend: initKnob->trackInitKnob listener leak, FX copy/paste/reset repair via shared applyFxSettingsToTrack, save/load state-based FX serialization, 25ms tick caching + last-value guards, bitcrusher curve guard, meter idle skip + gradient cache, viz-meters dpr store, BPM drag debounce, offline time-aware FX setters, pollJob inactivity timeout, macro selector fixes
+  - [x] Backend: /api/convert call_on_close cleanup + startup sweep, lock-scope, anchored variant matcher, os.replace retry, warmup cuda:N, screenshot cap
+  - [x] Launcher: force-stop fallback timer, /status probe with timeout
+  - [x] Inference (Claude-owned files): lazy sigma_val sync, use_checkpointing=False at inference, fp16 T5Gemma, halve-before-upload load path, gated empty_cache, preview-callback sync fix, isnan sync removed, dynamo suppress_errors removed
+
+- [ ] P1 Deferred perf items needing transformer.py (assignee: Codex — file is Codex's WIP):
+  - [ ] flex_attention negative-cache in apply_attn tier cascade (skip tier 2 permanently after first failure; Windows/no-Triton)
+  - [ ] Hoist constant inpaint local-cond projection (to_local_embed) out of the per-step loop (~5% DiT step compute)
+  - [ ] Replace padding-mask V-zeroing with a real SDPA key mask (quality drift vs training)
+  - [ ] Cache RoPE cos/sin per seq_len
+  - [ ] VAE chunked-decode overlap tuning (overlap=24/chunk=88 candidate; needs listening test)
+
+- [ ] P2 Frontend deep repair: mod-matrix/LFO/MIDI mapping still targets removed .filtr-cutoff/.aelapse-delay-mix classes (~10 sites incl. paramName mapping + macro hover) — needs a design call: map 'filter' to the LP cutoff knob and 'space' to .aelapse-mix, keeping legacy track.filtrCutoff state for offline render parity.
+
+- [~] P1 Kit Builder menu (assignee: Claude, requested 2026-08-19):
+  > Design: output/plan-kit-builder-2026-08-19.md. Backend + frontend implemented; end-to-end GPU verification pending.
+  - [x] Backend: kit_executor.py (KitTask, piece x velocity batching, silence trim + velocity peak targets, kit.json manifest), sliceable_registry.py (outputs/sliceable.json)
+  - [x] Backend: routes /api/generate_kit, /api/kit_options, /api/sliceable; `sliceable` flag on /api/generate; executor dispatch by task type
+  - [x] Mode B: hit sheets per piece (8s, "N isolated hits, soft to hard"), tagged sliceable
+  - [x] Frontend: Kit Builder panel (piece pills from /api/kit_options, velocity toggles, variations, hit-sheet toggle, Build Kit, grouped results with audition + ZIP via jszip), slicer-feed presets (Drum Break / Perc Loop / Texture -> runGeneration({sliceable:true}))
+  - [ ] Verify end-to-end on GPU: build a 2-piece kit, check trims/levels/kit.json/sliceable.json, then commit
