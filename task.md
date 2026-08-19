@@ -598,7 +598,7 @@
   - [x] Inference (Claude-owned files): lazy sigma_val sync, use_checkpointing=False at inference, fp16 T5Gemma, halve-before-upload load path, gated empty_cache, preview-callback sync fix, isnan sync removed, dynamo suppress_errors removed
 
 - [ ] P1 Deferred perf items needing transformer.py (assignee: Codex — file is Codex's WIP):
-  - [ ] flex_attention negative-cache in apply_attn tier cascade (skip tier 2 permanently after first failure; Windows/no-Triton)
+  - [ ] Move the flex_attention tier disable into transformer.py properly (currently monkey-patched from model.py). Root cause found 2026-08-19: compiled with dynamic=False it recompiles per (seq_q, seq_k) chunk shape — first generation burned 60s+ to dynamo's 256-recompile limit. Either compile with dynamic=True and benchmark, or drop the tier for inference.
   - [ ] Hoist constant inpaint local-cond projection (to_local_embed) out of the per-step loop (~5% DiT step compute)
   - [ ] Replace padding-mask V-zeroing with a real SDPA key mask (quality drift vs training)
   - [ ] Cache RoPE cos/sin per seq_len
