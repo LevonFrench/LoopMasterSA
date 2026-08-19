@@ -176,7 +176,10 @@ function startBackend(modelName) {
     const attempt = ++backendAttempt;
     backendState = BACKEND_STATE.STARTING;
     stopMessage = null;
-    const extraArgs = modelName === 'medium' ? ['--no-half'] : [];
+    // No --no-half: fp32 medium is ~11.5GB of weights on a 12GB card, which
+    // spills into system memory and crashed the backend mid-VAE-decode.
+    // fp16 medium is verified end-to-end (NaN guard is in the decode path).
+    const extraArgs = [];
     const pythonExecutable = path.join(__dirname, '..', 'stable-audio-3', '.venv', 'Scripts', 'python.exe');
     const scriptPath = path.join(__dirname, '..', 'loopmaster', 'loopmaster-app', 'app_server.py');
     const args = ['-u', scriptPath, '--model', modelName, ...extraArgs];
