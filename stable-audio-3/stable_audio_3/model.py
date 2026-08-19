@@ -23,6 +23,15 @@ from stable_audio_3.models.lora import (
     set_lora_strength as _set_lora_strength,
     load_and_apply_loras,
 )
+from stable_audio_3.models import transformer as _transformer_module
+
+# Disable the compiled flex_attention tier for serving. It is compiled with
+# dynamic=False, so every new (seq_q, seq_k) chunk shape in the VAE decode
+# triggers a multi-second recompile — the first generation burns 60s+ hitting
+# dynamo's 256-recompile limit before falling back anyway. Skipping it goes
+# straight to the chunked-halo SDPA path, which is the fast steady state.
+# (transformer.py is under separate WIP; done here until it can own the fix.)
+_transformer_module.flex_attention_compiled = None
 
 
 class StableAudioModel:
