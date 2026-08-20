@@ -30,3 +30,8 @@ provenance: "compiled from wiki:research 2026-08-19 (stable-audio models/LoRAs s
 See also: [[stable-audio-3-model-family|Model Family]] ([Model Family](../references/stable-audio-3-model-family.md)), [[stable-audio-3-lora-ecosystem|LoRA Ecosystem]] ([LoRA Ecosystem](../references/stable-audio-3-lora-ecosystem.md)), [[alternative-audio-engines|Alternative Audio Engines]] ([Alternative Audio Engines](../concepts/alternative-audio-engines.md)).
 
 Sources: raw/articles/2026-08-19-stable-audio-3-press-critiques.md, raw/articles/2026-08-19-alternative-audio-models.md, raw/articles/2026-08-19-stable-audio-3-announcement.md
+
+## Round 2 verification (2026-08-19, gap-closing)
+- **DAW plugin CONFIRMED** (primary source, 2026-08-18): macOS-only AU/VST3 beta (Logic/Ableton), cloud inference, pricing undisclosed. First-party tooling does not cover Windows or local inference — LoopMaster's niche is uncontested. Source: raw/articles/2026-08-19-stability-daw-plugin.md.
+- **theDAW** (ex-StableDAW) verified active prior art — see raw/repos/2026-08-19-thedaw-prior-art.md for borrowable patterns (module isolation, sigma-gated LoRA stacking, sample lineage DAG).
+- **TensorRT/optimized repo** verified: engines only for H100/H200 + RTX 50, Linux-only; skip on the local 3080 Ti; ideal on rented H100 (Verda ~$2.29/hr) for bulk library builds and LoRA training. Source: raw/repos/2026-08-19-stable-audio-3-optimized.md.

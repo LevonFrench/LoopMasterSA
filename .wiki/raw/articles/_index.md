@@ -22,3 +22,5 @@ This folder holds immutable raw source articles (research notes, external write-
 - [Stable Audio 3 announcement](2026-08-19-stable-audio-3-announcement.md) — 2026-05-20 release, licensing
 - [SA3 press + critiques](2026-08-19-stable-audio-3-press-critiques.md) — TechCrunch, Dubspot, AIToolTier
 - [Alternative local audio models](2026-08-19-alternative-audio-models.md) — AudioLDM 2, TANGO, AudioGen
+- [Stability DAW plugin announcement](2026-08-19-stability-daw-plugin.md) — CONFIRMED, macOS-only cloud beta
+- [SA3 drum-LoRA training recipe](2026-08-19-sa3-lora-training-recipe.md) — sourced synthesis + UNKNOWNs

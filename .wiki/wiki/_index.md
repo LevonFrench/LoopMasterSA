@@ -30,3 +30,4 @@ This section contains synthesized living documentation compiled from raw sources
 ## Recent Changes
 - **2026-06-21**: Initial creation and synthesis of modern LoopMaster SA3 wiki documents.
 - **2026-08-19**: +4 articles: stable-audio-3-model-family, stable-audio-3-lora-ecosystem (references); same-autoencoder (concepts); stable-audio-ecosystem-2026 (topics).
+- **2026-08-19 (round 2)**: updated 3 articles with verified gap-closing findings + local fork drift status.

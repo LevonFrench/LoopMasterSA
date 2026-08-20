@@ -20,3 +20,5 @@ Welcome to the structured knowledge base for LoopMaster SA3.
 - **2026-06-21**: Migrated knowledge base from legacy `loopmaster/wiki/` folder to the standard `.wiki/` structure.
 - **2026-06-21**: Expanded documentation for Tuna.js integration, LFO modulation mappings, outpainting options, and performance/precision upgrades.
 - **2026-08-19**: wiki:research sweep — 11 sources ingested, 4 articles compiled (Stable Audio 3 models/LoRAs/autoencoder/ecosystem).
+- **2026-08-19 (round 2)**: gap-closing research — 4 sources, 3 articles updated, upstream drift audited, 1 upstream fix cherry-picked.
+- **2026-08-19**: upstream docs mirror ingested; drift report at output/report-sa3-upstream-drift-2026-08-19.md.

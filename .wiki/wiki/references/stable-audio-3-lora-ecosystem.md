@@ -28,3 +28,6 @@ The stable-audio-3 repo ships LoRA training (`uv sync --extra lora`): 8 adapter 
 See also: [[stable-audio-3-model-family|Model Family]] ([Model Family](stable-audio-3-model-family.md)), [[generation_pipeline|Generation Pipeline]] ([Generation Pipeline](../concepts/generation_pipeline.md)).
 
 Sources: raw/repos/2026-08-19-stable-audio-3-lora-workflow.md, raw/repos/2026-08-19-underfit-lora-trainer.md, raw/repos/2026-08-19-loraw-legacy-trainer.md
+
+## Training recipe (round 2, sourced)
+See [[sa3-lora-training-recipe|the recipe raw note]] ([recipe](../../raw/articles/2026-08-19-sa3-lora-training-recipe.md)): dora-rows rank 16, bf16 base, train on Base checkpoints (works on ARC at inference per Underfit), .txt sidecar captions in key-value prompt style, 10+ min audio, steps contested (1k official / 10k Underfit / 0.5-2k fal.ai). One-shot specifics (padding, min clip length, clip-count floor) are UNKNOWN and need local experiments. No 12GB wall-clock reports exist; H100 rental (batch 8) is the fast path.

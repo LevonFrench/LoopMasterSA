@@ -36,3 +36,9 @@ Released **2026-05-20** by Stability AI. LoopMaster's local `stable-audio-3/` st
 See also: [[stable-audio-3-lora-ecosystem|Stable Audio 3 LoRA Ecosystem]] ([Stable Audio 3 LoRA Ecosystem](stable-audio-3-lora-ecosystem.md)), [[same-autoencoder|SAME Autoencoder]] ([SAME Autoencoder](../concepts/same-autoencoder.md)), [[stable-audio-ecosystem-2026|Stable Audio Ecosystem 2026]] ([Stable Audio Ecosystem 2026](../topics/stable-audio-ecosystem-2026.md)), [[generation_pipeline|Generation Pipeline]] ([Generation Pipeline](../concepts/generation_pipeline.md)).
 
 Sources: raw/articles/2026-08-19-stable-audio-3-announcement.md, raw/repos/2026-08-19-stable-audio-3-github-repo.md, raw/repos/2026-08-19-stable-audio-3-medium-model-card.md, raw/papers/2026-08-19-stable-audio-3-paper.md, raw/repos/2026-08-19-stable-audio-3-small-sfx.md
+
+## Optimized/TensorRT route (round 2, verified)
+`stabilityai/stable-audio-3-optimized` is real: onnx/tensorRT/tflite/cpu-amx/MLX export trees; prebuilt TensorRT engines for SM90 (H100/H200) and SM120 (RTX 50) only, Linux-only route, H100 medium 45-150ms at 14GB. Not applicable to the local RTX 3080 Ti (SM86). fp8 engines are not seed-reproducible — use fp16 when seed identity matters.
+
+## Local fork status (2026-08-19 drift audit)
+The vendored `stable-audio-3/` = upstream main@fa5ee84 (2026-05-21) + local Windows/perf hardening (streamed loader, seed fixes, fp16 T5, suppress_errors removal — deliberately ahead of upstream). Upstream delta since: ~90% is optimized/{tensorRT,tflite,mlx} backends (unused locally). Cherry-picked: ad40e07 LoRA-removal iteration fix (applied 2026-08-19). Not taken: fee84bc cli.py sample_size (server path bypasses cli.py), 929f231 multi-region inpaint UI (gradio-only; consider if LoopMaster wants multi-region inpaint). Full report: ../../output/report-sa3-upstream-drift-2026-08-19.md (project output/ folder).
