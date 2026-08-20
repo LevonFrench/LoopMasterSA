@@ -12,3 +12,4 @@ This folder contains immutable source materials. Once written, these documents a
 
 ## Recent Changes
 - **2026-06-21**: Imported legacy documentation from `loopmaster/wiki/` to `raw/`.
+- **2026-08-19**: +11 research sources (papers/, repos/ created): Stable Audio 3 family, SAME autoencoder, LoRA ecosystem, alternatives, press.

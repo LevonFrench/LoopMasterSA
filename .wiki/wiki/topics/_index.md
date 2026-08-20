@@ -12,3 +12,6 @@ This folder compiles workflows, usage guidelines, and features guides.
 
 ## Recent Changes
 - **2026-06-21**: Synthesized user guides and remixing workflows.
+
+## Added 2026-08-19 (stable-audio models/LoRAs research)
+- [Stable Audio Ecosystem 2026](stable-audio-ecosystem-2026.md) — news, critiques, alternatives (medium/hot)

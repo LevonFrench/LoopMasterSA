@@ -14,3 +14,6 @@ This folder compiles core technical concepts and system design definitions for L
 
 ## Recent Changes
 - **2026-06-21**: Synthesized detailed concepts for architecture, pipeline, and effects.
+
+## Added 2026-08-19 (stable-audio models/LoRAs research)
+- [SAME Autoencoder](same-autoencoder.md) — supersedes Oobleck decode-speed concerns (high/warm)
