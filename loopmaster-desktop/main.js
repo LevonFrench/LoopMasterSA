@@ -3,6 +3,12 @@ const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
 
+// Pin the Chromium profile before app-ready. Without an explicit userData
+// path, Electron's spellchecker resolved a garbled (mis-encoded) default
+// profile prefix and littered mojibake `<garbage>\Microsoft\Spelling\neutral`
+// directories at the repo root on every launch.
+app.setPath('userData', path.join(__dirname, '..', '.electron-profile'));
+
 let mainWindow;
 let pythonProcess = null;
 let readinessCheck = null;

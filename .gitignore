@@ -17,6 +17,7 @@ venv/
 
 # Caches
 .pytest_cache/
+.pytest_tmp/
 .mypy_cache/
 
 # IDE files

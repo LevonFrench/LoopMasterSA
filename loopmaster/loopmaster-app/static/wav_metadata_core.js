@@ -13,6 +13,11 @@
         const av = new DataView(acid);
         av.setUint32(0, 0x64696361, true);             // acid
         av.setUint32(4, 24, true);
+        // INTENTIONAL divergence from wav_metadata.py: the browser writer's
+        // only call site exports a one-shot composite mix with no key context,
+        // so flags bit 2 (key valid) is never set and root stays 0xFFFF
+        // ("don't transpose"). Do not "fix" this to match the Python writer;
+        // the parity test in tests_js covers the shared ACID fields only.
         av.setUint32(8, loop ? 1 : 0, true);
         av.setUint16(12, 0xFFFF, true);
         av.setUint16(14, 0, true);
