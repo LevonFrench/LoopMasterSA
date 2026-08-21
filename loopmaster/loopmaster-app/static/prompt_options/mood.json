@@ -1,0 +1,41 @@
+{
+  "version": "2026.08.21.1",
+  "optionGroups": [
+    { "label": "Joyful and bright", "options": [
+      "joyful", "cheerful", "buoyant", "playful", "carefree", "celebratory", "sunny", "optimistic", "exuberant", "gleeful", "lighthearted", "feel-good"
+    ] },
+    { "label": "Energized and euphoric", "options": [
+      "euphoric", "exhilarating", "electrifying", "invigorating", "high-energy", "pumped-up", "adrenalized", "restlessly excited", "frantically joyful", "dancefloor elation", "festival euphoria", "peak-hour intensity"
+    ] },
+    { "label": "Powerful and defiant", "options": [
+      "triumphant", "heroic", "victorious", "commanding", "majestic", "empowering", "unstoppable", "bold", "defiant", "rebellious", "indignant", "battle-ready"
+    ] },
+    { "label": "Wonder and transcendence", "options": [
+      "awe-inspiring", "wondrous", "mesmerizing", "spellbinding", "fascinated", "mystical", "transcendent", "spiritual", "sublime", "otherworldly", "celestial", "reverent"
+    ] },
+    { "label": "Peaceful and restorative", "options": [
+      "peaceful", "serene", "calm", "soothing", "tranquil", "meditative", "restorative", "gentle", "unhurried", "weightless", "still", "contented"
+    ] },
+    { "label": "Tender and intimate", "options": [
+      "tender", "affectionate", "loving", "romantic", "intimate", "sensual", "erotic", "warmhearted", "compassionate", "nurturing", "vulnerable", "yearning"
+    ] },
+    { "label": "Nostalgic and reflective", "options": [
+      "nostalgic", "sentimental", "wistful", "bittersweet", "dreamy", "reminiscent", "homesick", "reflective", "pensive", "memory-soaked", "faded-romance", "late-night longing"
+    ] },
+    { "label": "Sad and grieving", "options": [
+      "melancholic", "sorrowful", "heartbroken", "mournful", "lonely", "desolate", "somber", "tearful", "grieving", "hopeless", "resigned", "aching"
+    ] },
+    { "label": "Tense and fearful", "options": [
+      "tense", "anxious", "nervous", "uneasy", "ominous", "foreboding", "suspenseful", "fearful", "terrifying", "paranoid", "claustrophobic", "dread-filled"
+    ] },
+    { "label": "Angry and unsettling", "options": [
+      "angry", "aggressive", "menacing", "hostile", "vengeful", "volatile", "abrasive", "chaotic", "disturbing", "haunted", "sinister", "apocalyptic"
+    ] },
+    { "label": "Curious and offbeat", "options": [
+      "curious", "intrigued", "adventurous", "mischievous", "whimsical", "amusing", "comical", "quirky", "surreal", "peculiar", "eccentric", "confident"
+    ] },
+    { "label": "Subdued and ambiguous", "options": [
+      "detached", "indifferent", "weary", "bored", "numb", "stoic", "restrained", "uncertain", "ambivalent", "brooding", "moody", "hypnotic"
+    ] }
+  ]
+}

@@ -49,6 +49,7 @@ import uuid
 import time
 import threading
 import argparse
+import secrets
 
 # Fix DLL path for PyTorch on Windows
 venv_site_packages = os.path.join(os.path.dirname(sys.executable), "Lib", "site-packages")
@@ -62,7 +63,12 @@ from flask import Flask, request, jsonify, send_from_directory, send_file
 
 from stable_audio_3 import StableAudioModel
 from stable_audio_3.verbose import set_verbose
-from generation_executor import GenerationExecutor, GenerationRuntime, GenerationTask
+from generation_executor import (
+    GenerationExecutor,
+    GenerationRuntime,
+    GenerationTask,
+    ProgressionProvenance,
+)
 from generation_queue import (
     GenerationCancelResult,
     GenerationQueue,
@@ -71,6 +77,25 @@ from generation_queue import (
 from job_history import JobHistory
 from kit_executor import KIT_PIECES, VELOCITIES, KitTask
 from sliceable_registry import SliceableRegistry
+from rate_limit import SlidingWindowRateLimiter
+from asset_contract import (
+    DEFAULT_DESCRIPTOR,
+    DEFAULT_PACK,
+    build_sidecar_document,
+    derive_descriptor,
+    finalize_sidecar_for_wav,
+    normalize_key,
+    parse_chord_track,
+    sidecar_path_for,
+    slug_token,
+    validate_sidecar,
+    write_sidecar,
+)
+from chord_progressions import (
+    canonical_chord_events,
+    condition_prompt,
+    resolve_progression,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -107,6 +132,7 @@ _sweep_stale_temp_files()
 # ---------------------------------------------------------------------------
 
 model = None
+loaded_model_name = "unknown"
 model_lock = threading.Lock()
 
 job_history = JobHistory(OUTPUT_DIR, max_terminal=50)
@@ -122,16 +148,129 @@ MAX_STEPS = 100
 MAX_CFG_SCALE = 15.0
 MAX_PADDING_SECONDS = 10.0
 VALID_REMIX_MODES = {"variation", "inpaint", "response", "continuation"}
+PROMPT_SECTION_KEYS = {
+    "freePrompt", "acoustic", "electric", "drums", "genre", "harmony",
+    "style", "mood", "negativePrompt", "modifiers", "sourceChoice",
+    "characterChoice", "progressionKey", "progressionId", "progression",
+    "chordTrack", "instrument", "production",
+}
+PROMPT_SOURCE_KEYS = ("acoustic", "electric", "drums")
+PROMPT_LEGACY_SOURCE_KEYS = ("instrument",)
+CHORD_PROGRESSOR_VALUE = "Use Chord Progressor"
 try:
     GENERATION_QUEUE_CAPACITY = max(
         1, int(os.environ.get("GENERATION_QUEUE_CAPACITY", "4"))
     )
 except ValueError:
     GENERATION_QUEUE_CAPACITY = 4
+try:
+    GENERATION_RATE_LIMIT = max(
+        1, int(os.environ.get("GENERATION_RATE_LIMIT", "30"))
+    )
+except ValueError:
+    GENERATION_RATE_LIMIT = 30
+generation_rate_limiter = SlidingWindowRateLimiter(
+    GENERATION_RATE_LIMIT,
+    window_seconds=60,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def validate_prompt_sections(value):
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("prompt_sections must be an object")
+    unknown = set(value) - PROMPT_SECTION_KEYS
+    if unknown:
+        raise ValueError(f"Unknown prompt section: {sorted(unknown)[0]}")
+    normalized = {}
+    for key, section_value in value.items():
+        if not isinstance(section_value, str):
+            raise ValueError(f"prompt_sections.{key} must be text")
+        max_length = 2000 if key == "freePrompt" else (
+            4000 if key == "chordTrack" else 500
+        )
+        if len(section_value) > max_length:
+            raise ValueError(
+                f"prompt_sections.{key} must be {max_length} characters or fewer"
+            )
+        normalized[key] = section_value.strip()
+    return normalized
+
+
+def compose_prompt_sections(sections):
+    """Server-side mirror of PromptCore.composePrompt for payload validation."""
+    values = validate_prompt_sections(sections)
+
+    def clean(key):
+        return " ".join(values.get(key, "").split())
+
+    source_choice = clean("sourceChoice")
+    source = clean(source_choice) if source_choice in PROMPT_SOURCE_KEYS else ""
+    if not source and source_choice not in PROMPT_SOURCE_KEYS:
+        populated_sources = [
+            clean(key) for key in PROMPT_SOURCE_KEYS if clean(key)
+        ]
+        if len(populated_sources) == 1:
+            source = populated_sources[0]
+    if not source:
+        source = next(
+            (clean(key) for key in PROMPT_LEGACY_SOURCE_KEYS if clean(key)),
+            "",
+        )
+    character_choice = clean("characterChoice")
+    mood = clean("mood") if (
+        character_choice == "mood" or not character_choice
+    ) else ""
+    modifiers = clean("modifiers") if (
+        character_choice == "modifiers" or not character_choice
+    ) else ""
+    head = " ".join(filter(None, (
+        mood, clean("genre"), source, clean("style")
+    )))
+    harmony_value = clean("harmony")
+    progressor_active = (
+        harmony_value.lower() == CHORD_PROGRESSOR_VALUE.lower()
+    )
+    key_value = clean("progressionKey") if progressor_active else harmony_value
+    harmony = f"in {key_value}" if key_value else ""
+    lead = " ".join(filter(None, (head, harmony)))
+    progression = ""
+    if progressor_active:
+        selection = clean("progression")
+        if selection:
+            separator = selection.rfind(":")
+            if separator < 0:
+                progression = f"four-chord {selection} progression"
+            else:
+                formula = " ".join(selection[:separator].split())
+                mood_text = " ".join(selection[separator + 1:].split())
+                progression = " ".join(filter(None, (
+                    mood_text.lower(), "four-chord", formula, "progression"
+                )))
+    return ", ".join(filter(None, (
+        clean("freePrompt"),
+        lead,
+        progression,
+        clean("production"),
+        modifiers,
+    )))
+
+
+def rate_limit_generation_request():
+    allowed, retry_after = generation_rate_limiter.allow(request.remote_addr or "local")
+    if allowed:
+        return None
+    response = jsonify({
+        "error": "Generation rate limit reached. Try again shortly.",
+        "retry_after": retry_after,
+    })
+    response.status_code = 429
+    response.headers["Retry-After"] = str(retry_after)
+    return response
 
 def slugify_prompt(prompt, limit=16):
     """Sanitizes prompt and truncates it to limit characters for safe filenames."""
@@ -167,6 +306,125 @@ def bounded_number(data, key, default, converter, minimum, maximum):
     return max(minimum, min(maximum, value))
 
 
+def _resolved_seed(requested_seed):
+    """Resolve random requests here so every sidecar records a reproducible seed."""
+    return secrets.randbelow(100_000) if requested_seed == -1 else requested_seed
+
+
+def _parse_asset_request(data, prompt_sections, prompt, bpm, duration, loop):
+    """Resolve filename metadata and any catalog-owned chord progression."""
+    raw_pack = data.get("pack_name", DEFAULT_PACK)
+    raw_descriptor = data.get("descriptor", "")
+    raw_chords = data.get("chord_track", "")
+    for field, value, maximum in (
+        ("pack_name", raw_pack, 120),
+        ("descriptor", raw_descriptor, 240),
+        ("chord_track", raw_chords, 4000),
+    ):
+        if not isinstance(value, (str, list, tuple)) or (
+            field != "chord_track" and not isinstance(value, str)
+        ):
+            raise ValueError(f"{field} has an invalid type")
+        if isinstance(value, str) and len(value) > maximum:
+            raise ValueError(f"{field} must be {maximum} characters or fewer")
+
+    pack_name = slug_token(raw_pack, DEFAULT_PACK)
+    descriptor = derive_descriptor(raw_descriptor, prompt_sections, prompt)
+    bars = None
+    if loop:
+        exact_beats = float(duration) * float(bpm) / 60.0
+        beats = int(round(exact_beats))
+        if abs(exact_beats - beats) > 0.03:
+            raise ValueError("duration must land within 0.03 beats of the BPM grid")
+        if beats <= 0 or beats % 4:
+            raise ValueError("loop duration must be a whole number of 4/4 bars")
+        bars = beats // 4
+
+    harmony = " ".join(str(prompt_sections.get("harmony", "")).split())
+    progression_active = harmony.lower() == CHORD_PROGRESSOR_VALUE.lower()
+    progression = None
+    conditioned_prompt = None
+    chord_source = None
+    if progression_active:
+        progression_id = prompt_sections.get("progressionId", "").strip()
+        progression_key = prompt_sections.get("progressionKey", "").strip()
+        if not progression_id:
+            raise ValueError("Choose a chord progression preset")
+        if not progression_key:
+            raise ValueError("Choose a major or minor key for the chord progressor")
+        if not loop:
+            raise ValueError("Chord progressions require loop generation")
+
+        progression = resolve_progression(progression_id, progression_key, bars)
+        key_info = normalize_key(progression["key"])
+        supplied_key = data.get("key")
+        if supplied_key is not None and supplied_key != "":
+            supplied_key_info = normalize_key(supplied_key)
+            if supplied_key_info is None:
+                raise ValueError("key must be a major or minor key")
+            if supplied_key_info["token"] != key_info["token"]:
+                raise ValueError("key conflicts with progressionKey")
+
+        supplied_selection = " ".join(
+            prompt_sections.get("progression", "").split()
+        )
+        if supplied_selection and supplied_selection != progression["selection"]:
+            raise ValueError("progression conflicts with progressionId")
+
+        full_chords = list(canonical_chord_events(progression))
+        full_chord_echo = [
+            {
+                "bar": event["bar"],
+                "beat": event["beat"],
+                "chord": event["chord"],
+            }
+            for event in full_chords
+        ]
+        cycle_chords = [
+            {"bar": index + 1, "beat": 1, "chord": event["chord"]}
+            for index, event in enumerate(progression["cycle"])
+        ]
+        for field_name, chord_echo in (
+            ("prompt_sections.chordTrack", prompt_sections.get("chordTrack", "")),
+            ("chord_track", raw_chords),
+        ):
+            if (
+                chord_echo is None
+                or chord_echo == ""
+                or chord_echo == []
+                or chord_echo == ()
+            ):
+                continue
+            echo = parse_chord_track(chord_echo, max(4, bars))
+            if echo not in (cycle_chords, full_chord_echo):
+                raise ValueError(f"{field_name} conflicts with progressionId")
+
+        chords = full_chords
+        chord_source = "prompt"
+        conditioned_prompt = condition_prompt(prompt, progression)
+    else:
+        key_source = data.get("key")
+        if key_source is None and isinstance(prompt_sections, dict):
+            key_source = prompt_sections.get("harmony")
+        key_info = normalize_key(key_source)
+        chords = parse_chord_track(raw_chords, bars)
+
+    if not loop and any(
+        (entry["bar"], entry["beat"]) != (1, 1) for entry in chords
+    ):
+        raise ValueError("one-shot chord metadata can only start at bar 1 beat 1")
+    return {
+        "pack_name": pack_name,
+        "descriptor": descriptor,
+        "key": key_info["display"] if key_info else None,
+        "chords": tuple(chords),
+        "chord_source": chord_source,
+        "conditioned_prompt": conditioned_prompt,
+        "progression": progression,
+        "bars": bars,
+    }
+
+
 def parse_loop(value):
     """Accept JSON booleans and common form encodings without truthy-string bugs."""
     if isinstance(value, bool):
@@ -174,6 +432,18 @@ def parse_loop(value):
     if isinstance(value, str) and value.lower() in {"true", "false"}:
         return value.lower() == "true"
     raise ValueError("loop must be a boolean")
+
+
+def route_local_inference_steps(requested_steps, quality_tier="final", bulk=False):
+    """Use compute tiers in this single-local-model app.
+
+    There is no paid provider/model fan-out to route between. Draft and bulk
+    work use the cheaper eight-step path; final work preserves the explicit
+    user setting.
+    """
+    if quality_tier == "draft" or bulk:
+        return min(requested_steps, 8)
+    return requested_steps
 
 
 def resolve_output_path(value, field_name="file path"):
@@ -233,18 +503,70 @@ def _send_file_then_delete(path, download_name):
     return response
 
 
-def _save_variant_atomically(file_path, waveform, sample_rate, bpm, duration, is_loop, prompt, old_file_path=None):
-    """Fully write and tag a same-directory temp WAV before publishing it."""
+def _save_variant_atomically(
+    file_path,
+    waveform,
+    sample_rate,
+    bpm,
+    duration,
+    is_loop,
+    prompt,
+    old_file_path=None,
+    asset_metadata=None,
+):
+    """Publish one PCM16 WAV and its validated adjacent metadata sidecar."""
     temp_path = os.path.join(
         os.path.dirname(file_path),
         f".{os.path.basename(file_path)}.{uuid.uuid4().hex}.tmp.wav",
     )
+    sidecar_path = sidecar_path_for(file_path)
+    temp_sidecar_path = os.path.join(
+        os.path.dirname(file_path),
+        f".{os.path.basename(sidecar_path)}.{uuid.uuid4().hex}.tmp",
+    )
+    published_wav = False
+    published_sidecar = False
     try:
-        torchaudio.save(temp_path, waveform, sample_rate)
-        acidize_wav_file(temp_path, bpm, duration, is_loop, prompt)
+        torchaudio.save(
+            temp_path,
+            waveform,
+            sample_rate,
+            encoding="PCM_S",
+            bits_per_sample=16,
+        )
+        metadata = dict(asset_metadata or {})
+        kind = "loop" if is_loop else "oneshot"
+        document = build_sidecar_document(
+            file_name=os.path.basename(file_path),
+            waveform=waveform,
+            sample_rate=sample_rate,
+            bpm=bpm,
+            kind=kind,
+            pack=metadata.get("pack", DEFAULT_PACK),
+            descriptor=metadata.get("descriptor", DEFAULT_DESCRIPTOR),
+            variation=metadata.get("variation", "a1"),
+            key=metadata.get("key"),
+            chords=metadata.get("chords"),
+            chord_source=metadata.get("chord_source"),
+            generation=metadata.get("generation"),
+            provenance=metadata.get("provenance"),
+            created_at=metadata.get("created_at"),
+        )
+        acidize_wav_file(
+            temp_path,
+            bpm,
+            duration,
+            is_loop,
+            prompt,
+            metadata_document=document,
+        )
+        document = finalize_sidecar_for_wav(document, temp_path)
+        write_sidecar(temp_sidecar_path, document)
+        validate_sidecar(document)
         for attempt in range(5):
             try:
                 os.replace(temp_path, file_path)
+                published_wav = True
                 break
             except PermissionError:
                 # Windows: the destination may be held open by a reader
@@ -252,20 +574,36 @@ def _save_variant_atomically(file_path, waveform, sample_rate, bpm, duration, is
                 if attempt == 4:
                     raise
                 time.sleep(0.3)
+        os.replace(temp_sidecar_path, sidecar_path)
+        published_sidecar = True
     finally:
         if os.path.exists(temp_path):
             try:
                 os.remove(temp_path)
             except OSError:
                 pass
+        if os.path.exists(temp_sidecar_path):
+            try:
+                os.remove(temp_sidecar_path)
+            except OSError:
+                pass
+        if published_wav and not published_sidecar:
+            # A half-published asset is worse than no asset: consumers treat
+            # the sidecar as the complete source of truth.
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
 
     if old_file_path and os.path.normcase(os.path.abspath(old_file_path)) != os.path.normcase(os.path.abspath(file_path)):
-        try:
-            os.remove(old_file_path)
-        except FileNotFoundError:
-            pass
-        except OSError as error:
-            print(f"[Generation] Error deleting replaced file {old_file_path}: {error}")
+        for old_path in (old_file_path, sidecar_path_for(old_file_path)):
+            try:
+                os.remove(old_path)
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                print(f"[Generation] Error deleting replaced file {old_path}: {error}")
+    return document
 
 # ---------------------------------------------------------------------------
 # WAV Loop Metadata & Beat Grid Generation
@@ -330,7 +668,8 @@ def _register_job(job_id, job, allocate_track=False):
 
 
 def _mutate_job(job_id, **changes):
-    """Mutate in-memory state and persist only meaningful status transitions."""
+    """Mutate a job, checkpointing transitions and explicit coarse stages."""
+    force_persist = bool(changes.pop("_persist", False))
     with jobs_lock:
         job = jobs.get(job_id)
         if job is None:
@@ -339,7 +678,7 @@ def _mutate_job(job_id, **changes):
         job.update(changes)
         current_status = job.get("status")
         snapshot = dict(job)
-    if previous_status != current_status:
+    if previous_status != current_status or force_persist:
         job_history.record(job_id, snapshot)
     return snapshot
 
@@ -397,22 +736,22 @@ generation_queue.start()
 # ---------------------------------------------------------------------------
 
 def load_model(model_name, device=None, no_half=False):
-    global model
+    global model, loaded_model_name
     print(f"Loading model '{model_name}'…")
     start = time.time()
     model = StableAudioModel.from_pretrained(
         model_name, device=device, model_half=not no_half
     )
+    loaded_model_name = model_name
     print(f"Model loaded in {time.time() - start:.2f}s")
 
 def warmup_model():
-    """Run a single dummy generation to trigger torch.compile graph compilation
-    and CUDA kernel autotuning before any user request hits the server."""
+    """Optionally prime CUDA kernels before serving the first user request."""
     global model, first_generation_completed
     if model is None or not str(model.device).startswith("cuda"):
         print("Skipping warmup (no CUDA device).")
         return
-    print("Running warmup generation to compile DiT graph…")
+    print("Running optional CUDA warmup generation…")
     start = time.time()
     try:
         with torch.inference_mode():
@@ -427,7 +766,7 @@ def warmup_model():
                 truncate_output_to_duration=True,
             )
         first_generation_completed = True
-        print(f"Warmup completed in {time.time() - start:.1f}s. DiT graph compiled.")
+        print(f"Warmup completed in {time.time() - start:.1f}s.")
     except Exception as e:
         print(f"Warmup failed (non-fatal): {e}")
 
@@ -463,14 +802,33 @@ def api_generate():
     prompt = prompt_value.strip()
     if not prompt:
         return jsonify({"error": "Prompt is required"}), 400
+    if len(prompt) > 2000:
+        return jsonify({"error": "Prompt must be 2000 characters or fewer"}), 400
 
     try:
+        prompt_sections = validate_prompt_sections(data.get("prompt_sections"))
+        if prompt_sections:
+            expected_prompt = compose_prompt_sections(prompt_sections)
+            if " ".join(prompt.split()) != expected_prompt:
+                raise ValueError(
+                    "prompt does not match the supplied structured sections"
+                )
+        negative_prompt = data.get("negative_prompt", "")
+        if not isinstance(negative_prompt, str):
+            raise ValueError("negative_prompt must be text")
+        if len(negative_prompt) > 1000:
+            raise ValueError("negative_prompt must be 1000 characters or fewer")
+        negative_prompt = negative_prompt.strip()
+        quality_tier = data.get("quality_tier", "final")
+        if quality_tier not in {"draft", "final"}:
+            raise ValueError("quality_tier must be draft or final")
         bpm = bounded_number(data, "bpm", 120, int, 40, 300)
         num_variants = bounded_number(data, "num_variants", 4, int, 1, 8)
         loop = parse_loop(data.get("loop", True))
         steps = bounded_number(data, "steps", 8, int, 1, MAX_STEPS)
         cfg_scale = bounded_number(data, "cfg_scale", 1.0, float, 0.0, MAX_CFG_SCALE)
-        seed = bounded_number(data, "seed", -1, int, -1, 2_147_483_647)
+        requested_seed = bounded_number(data, "seed", -1, int, -1, 2_147_483_647)
+        seed = _resolved_seed(requested_seed)
         duration_padding_sec = bounded_number(data, "duration_padding_sec", 2.0 if loop else 0.0, float, 0.0, MAX_PADDING_SECONDS)
         duration = bounded_number(data, "duration", 960.0 / bpm, float, 1.0, MAX_DURATION_SECONDS)
         init_audio_path = validate_init_audio_path(data.get("init_audio_path"))
@@ -483,10 +841,20 @@ def api_generate():
         continue_start = bounded_number(data, "continue_start", 0.0, float, 0.0, duration)
         invert_timing = parse_loop(data.get("invert_timing", False))
         sliceable = parse_loop(data.get("sliceable", False))
+        if prompt_sections.get("negativePrompt") and not negative_prompt:
+            negative_prompt = prompt_sections["negativePrompt"]
+        steps = route_local_inference_steps(steps, quality_tier)
+        asset = _parse_asset_request(
+            data, prompt_sections, prompt, bpm, duration, loop
+        )
         if remix_mode == "inpaint" and init_audio_path and inpaint_start >= inpaint_end:
             raise ValueError("inpaint_start must be before inpaint_end")
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
+
+    limited_response = rate_limit_generation_request()
+    if limited_response is not None:
+        return limited_response
 
     job_id = uuid.uuid4().hex[:12]
     track_num = _register_job(job_id, {
@@ -496,6 +864,12 @@ def api_generate():
         "elapsed": None,
         "files": None,
         "prompt": prompt,
+        "prompt_sections": prompt_sections,
+        "quality_tier": quality_tier,
+        "steps": steps,
+        "seed": seed,
+        "requested_seed": requested_seed,
+        "asset": asset,
         "track_num": None,
         "queue_position": None,
     }, allocate_track=True)
@@ -520,6 +894,22 @@ def api_generate():
         continue_start=continue_start,
         invert_timing=invert_timing,
         sliceable=sliceable,
+        negative_prompt=negative_prompt,
+        prompt_sections=dict(prompt_sections),
+        pack_name=asset["pack_name"],
+        descriptor=asset["descriptor"],
+        key=asset["key"],
+        chords=asset["chords"],
+        chord_source=asset["chord_source"],
+        conditioned_prompt=asset["conditioned_prompt"],
+        progression=(
+            ProgressionProvenance.from_resolution(asset["progression"])
+            if asset["progression"] is not None
+            else None
+        ),
+        quality_tier=quality_tier,
+        requested_seed=requested_seed,
+        model_name=loaded_model_name,
     )
     try:
         generation_queue.submit(job_id, task)
@@ -586,13 +976,21 @@ def api_generate_kit():
 
     try:
         variations = bounded_number(data, "variations", 1, int, 1, 3)
-        steps = bounded_number(data, "steps", 8, int, 1, MAX_STEPS)
+        steps = route_local_inference_steps(
+            bounded_number(data, "steps", 8, int, 1, MAX_STEPS),
+            bulk=True,
+        )
         cfg_scale = bounded_number(data, "cfg_scale", 1.0, float, 0.0, MAX_CFG_SCALE)
-        seed = bounded_number(data, "seed", -1, int, -1, 2_147_483_647)
+        requested_seed = bounded_number(data, "seed", -1, int, -1, 2_147_483_647)
+        seed = _resolved_seed(requested_seed)
         sheet_hits = bounded_number(data, "sheet_hits", 6, int, 3, 12)
         include_sheets = parse_loop(data.get("include_sheets", False))
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
+
+    limited_response = rate_limit_generation_request()
+    if limited_response is not None:
+        return limited_response
 
     job_id = uuid.uuid4().hex[:12]
     _register_job(job_id, {
@@ -619,6 +1017,8 @@ def api_generate_kit():
         seed=seed,
         include_sheets=include_sheets,
         sheet_hits=sheet_hits,
+        requested_seed=requested_seed,
+        model_name=loaded_model_name,
     )
     try:
         generation_queue.submit(job_id, task)
@@ -649,14 +1049,32 @@ def api_regenerate():
         return jsonify({"error": "Prompt is required"}), 400
 
     try:
+        prompt_sections = validate_prompt_sections(data.get("prompt_sections"))
+        if prompt_sections:
+            expected_prompt = compose_prompt_sections(prompt_sections)
+            if " ".join(prompt.split()) != expected_prompt:
+                raise ValueError(
+                    "prompt does not match the supplied structured sections"
+                )
         track_num = bounded_number(data, "track_num", None, int, 1, 1_000_000)
         bpm = bounded_number(data, "bpm", 120, int, 40, 300)
         loop = parse_loop(data.get("loop", True))
         steps = bounded_number(data, "steps", 8, int, 1, MAX_STEPS)
         cfg_scale = bounded_number(data, "cfg_scale", 1.0, float, 0.0, MAX_CFG_SCALE)
-        seed = bounded_number(data, "seed", -1, int, -1, 2_147_483_647)
+        requested_seed = bounded_number(data, "seed", -1, int, -1, 2_147_483_647)
+        seed = _resolved_seed(requested_seed)
         duration_padding_sec = bounded_number(data, "duration_padding_sec", 2.0 if loop else 0.0, float, 0.0, MAX_PADDING_SECONDS)
         duration = bounded_number(data, "duration", 960.0 / bpm, float, 1.0, MAX_DURATION_SECONDS)
+        negative_prompt = data.get("negative_prompt", "")
+        if not isinstance(negative_prompt, str) or len(negative_prompt) > 1000:
+            raise ValueError("negative_prompt must be text up to 1000 characters")
+        quality_tier = data.get("quality_tier", "final")
+        if quality_tier not in {"draft", "final"}:
+            raise ValueError("quality_tier must be draft or final")
+        steps = route_local_inference_steps(steps, quality_tier)
+        asset = _parse_asset_request(
+            data, prompt_sections, prompt, bpm, duration, loop
+        )
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
 
@@ -671,6 +1089,10 @@ def api_regenerate():
     if any(index < 0 or index >= 4 for index in unlocked_indices):
         return jsonify({"error": "unlocked_indices must be between 0 and 3"}), 400
 
+    limited_response = rate_limit_generation_request()
+    if limited_response is not None:
+        return limited_response
+
     job_id = uuid.uuid4().hex[:12]
     _register_job(job_id, {
         "status": "queued",
@@ -679,6 +1101,12 @@ def api_regenerate():
         "elapsed": None,
         "files": None,
         "prompt": prompt,
+        "prompt_sections": prompt_sections,
+        "quality_tier": quality_tier,
+        "steps": steps,
+        "seed": seed,
+        "requested_seed": requested_seed,
+        "asset": asset,
         "track_num": track_num,
         "queue_position": None,
     })
@@ -695,6 +1123,22 @@ def api_regenerate():
         unlocked_indices=tuple(unlocked_indices),
         duration_padding_sec=duration_padding_sec,
         seed=seed,
+        negative_prompt=negative_prompt.strip(),
+        prompt_sections=dict(prompt_sections),
+        pack_name=asset["pack_name"],
+        descriptor=asset["descriptor"],
+        key=asset["key"],
+        chords=asset["chords"],
+        chord_source=asset["chord_source"],
+        conditioned_prompt=asset["conditioned_prompt"],
+        progression=(
+            ProgressionProvenance.from_resolution(asset["progression"])
+            if asset["progression"] is not None
+            else None
+        ),
+        quality_tier=quality_tier,
+        requested_seed=requested_seed,
+        model_name=loaded_model_name,
     )
     try:
         generation_queue.submit(job_id, task)
@@ -793,6 +1237,7 @@ def api_delete_track(track_num):
         try:
             import shutil
             shutil.rmtree(track_dir)
+            sliceable_registry.remove_prefix(f"{SESSION_DIR_NAME}/track_{track_num}")
             print(f"Deleted track directory: {track_dir}")
             return jsonify({"status": "success"})
         except Exception as e:
@@ -816,6 +1261,12 @@ def api_delete_variant():
     if os.path.exists(full_path) and os.path.isfile(full_path):
         try:
             os.remove(full_path)
+            metadata_path = sidecar_path_for(full_path)
+            try:
+                os.remove(metadata_path)
+            except FileNotFoundError:
+                pass
+            sliceable_registry.remove(file_path.replace("\\", "/"))
             print(f"Deleted variant file: {full_path}")
             return jsonify({"status": "success"})
         except Exception as e:
@@ -952,12 +1403,18 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=7861)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--warmup",
+        action="store_true",
+        help="Run a dummy generation before opening the HTTP server",
+    )
 
     args = parser.parse_args()
     set_verbose(args.verbose)
 
     load_model(args.model, args.device, args.no_half)
-    warmup_model()
+    if args.warmup:
+        warmup_model()
 
     try:
         print(f"\n  [OK] Grid Generator running at http://127.0.0.1:{args.port}\n")

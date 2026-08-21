@@ -25,32 +25,60 @@
             <div class="controls-row">
                 <div class="control-group prompt-group">
                     <div class="control-group-header">
-                        <label class="control-label" for="prompt-input">Prompt</label>
+                        <span class="control-label">Prompt Builder</span>
                         <div class="prompt-inline-btns">
-                            <button class="prompt-pill-btn" id="btn-random-in-key" type="button" title="Generate Random Prompt in Current Key/Chord"><svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L14 9"/></svg>In Key</button>
-                            <button class="prompt-pill-btn" id="btn-random-prompt" type="button" title="Generate Random Instrument Prompt"><svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M7.5 7.5h.01M16.5 7.5h.01M7.5 16.5h.01M16.5 16.5h.01M12 12h.01"/></svg>Random</button>
-                            <button class="prompt-pill-btn" id="btn-change-chord" type="button" title="Change Key/Chord only in current prompt"><svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Chord</button>
-                            <button class="prompt-pill-btn" id="btn-change-mood" type="button" title="Change Mood only in current prompt"><svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>Mood</button>
-                            <button class="prompt-pill-btn" id="btn-change-accent" type="button" title="Change Accent/Production Style only in current prompt"><svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2m0 14v-2M8 9h2m10 0h-2m-2.2-4.8l-1.4 1.4m-5.6 5.6l-1.4 1.4m0-8.4l1.4 1.4m5.6 5.6l1.4 1.4M3 21l9-9m4-5l1-1"/></svg>Accent</button>
-                            <button class="prompt-pill-btn" id="btn-change-instrument" type="button" title="Change Instrument only in current prompt"><svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5v14M22 9v6M7 8v8M2 10v4"/></svg>Inst</button>
-                            <button class="prompt-pill-btn" id="btn-change-style" type="button" title="Change Style/Genre only in current prompt"><svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Style</button>
-                            <button class="prompt-pill-btn" id="btn-random-drums" type="button" title="Generate Random Drum Loop Prompt"><svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v10c0 1.66 4 3 9 3s9-1.34 9-3V5M7 17v4M17 17v4"/></svg>Drums</button>
-                            <button class="prompt-pill-btn" id="btn-random-bass" type="button" title="Generate Random Bass Prompt"><svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10h3l2.5-6 3 16 2.5-14 3 10 1.5-6h4.5"/></svg>Bass</button>
-                            <button class="prompt-pill-btn" id="btn-random-lead" type="button" title="Generate Random Lead Prompt"><svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M6 3v12M10 3v12M14 3v12M18 3v12M2 15h20"/></svg>Lead</button>
+                            <button class="prompt-pill-btn" id="btn-randomize-all" type="button" title="Roll one instrument, every music field, and one character field">
+                                <svg class="btn-icon prompt-pill-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7.5 7.5h.01M16.5 7.5h.01M7.5 16.5h.01M16.5 16.5h.01M12 12h.01"/></svg>
+                                Randomize All
+                            </button>
+                            <button class="prompt-pill-btn" id="btn-generation-history" type="button" aria-controls="generation-history-panel" aria-expanded="false">History <span id="history-count">0</span></button>
+                            <button class="prompt-pill-btn" id="btn-file-naming" type="button" aria-controls="file-naming-modal" aria-expanded="false">File Naming</button>
                         </div>
                     </div>
-                    <div class="prompt-input-wrapper">
-                        <input class="control-input" id="prompt-input" type="text"
-                               placeholder="bass synth loop, funky, hyperpop…"
-                               name="prompt" autocomplete="off" spellcheck="false">
-                        <button class="btn-prompt-history" id="btn-prompt-history" type="button" title="Cycle through last 10 prompts" aria-label="Cycle Through Prompt History">
-                            <svg class="btn-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                                <path d="M3 3v5h5"/>
-                                <path d="M12 7v5l4 2"/>
-                            </svg>
-                        </button>
+                    <div class="prompt-freeform-row">
+                        <label class="chip-label" for="prompt-freeform">Prompt</label>
+                        <div class="prompt-composer-bar">
+                            <textarea id="prompt-freeform" class="prompt-freeform" rows="2" maxlength="2000" spellcheck="true" placeholder="Type anything. Your words stay editable while the dropdown choices are assembled here."></textarea>
+                            <output id="prompt-preview" class="prompt-preview" aria-live="polite">Choose options or randomize all.</output>
+                        </div>
                     </div>
+                    <div class="prompt-builder-grid" id="prompt-builder-sections" aria-live="polite">
+                        <span class="prompt-builder-loading">Loading prompt options…</span>
+                    </div>
+                    <section class="chord-progressor" id="chord-progressor" aria-labelledby="chord-progressor-title">
+                        <div class="chord-progressor-header">
+                            <div>
+                                <span class="chip-label" id="chord-progressor-title">4-Chord Progressor</span>
+                                <span class="chord-progressor-hint">Choose “Use Chord Progressor” in Key / Chord to apply these chords.</span>
+                            </div>
+                            <div class="chord-progressor-actions">
+                                <button class="chip-mute chord-progressor-mute" id="btn-progression-mute" type="button" aria-pressed="false" title="Mute the chord progressor from Randomize All">🔓</button>
+                                <button class="chip-dice chord-progressor-dice" id="btn-progression-random" type="button" title="Randomize the four-chord progression">⚄</button>
+                            </div>
+                        </div>
+                        <div class="chord-progressor-controls">
+                            <label class="chord-progressor-field" for="progression-key-select">
+                                <span class="chip-label">Progression key</span>
+                                <select class="prompt-section-select" id="progression-key-select"></select>
+                            </label>
+                            <label class="chord-progressor-field" for="progression-preset-select">
+                                <span class="chip-label">Progression / emotion</span>
+                                <select class="prompt-section-select" id="progression-preset-select"></select>
+                            </label>
+                        </div>
+                        <div class="chord-progressor-cards" id="progression-chord-cards" aria-live="polite"></div>
+                        <p class="chord-progressor-status" id="progression-status">Choose a key and progression.</p>
+                    </section>
+                    <div class="prompt-builder-error" id="prompt-builder-error" role="alert" hidden></div>
+                    <section class="generation-history-panel" id="generation-history-panel" aria-label="Generation history" hidden>
+                        <div class="generation-history-header">
+                            <span>Drafts and generations</span>
+                            <button class="prompt-pill-btn" id="btn-clear-generation-history" type="button">Clear all</button>
+                        </div>
+                        <div class="generation-history-viewport" id="generation-history-viewport" tabindex="0">
+                            <div class="generation-history-items" id="generation-history-items"></div>
+                        </div>
+                    </section>
                 </div>
 
                 <div class="control-group">
@@ -81,6 +109,16 @@
                            min="1" max="100" value="8" step="1"
                            name="steps" inputmode="numeric"
                            title="Click to type, drag ↕ to change. More = better but slower">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-group-header">
+                        <label class="control-label" for="generation-tier" title="Draft caps inference work for inexpensive iteration; Final uses the requested settings.">Tier</label>
+                    </div>
+                    <select class="control-input control-input-sm" id="generation-tier" name="generation_tier">
+                        <option value="draft" selected>Draft (max 8 steps)</option>
+                        <option value="final">Final (uses Steps)</option>
+                    </select>
                 </div>
 
                 <div class="control-group">
@@ -343,7 +381,7 @@
                         <div class="quick-start-steps">
                             <div class="qs-step">
                                 <span class="qs-num">1</span>
-                                <p>Use the random buttons to cook up variations in key. Use the instrument buttons to fill out what your arrangement is missing.</p>
+                                <p>Choose curated values in each prompt section, type a custom override, or use <strong>Randomize All</strong>. The dice beside each section rerolls only that value.</p>
                             </div>
                             <div class="qs-step">
                                 <span class="qs-num">2</span>
@@ -369,19 +407,10 @@
                             <div class="shortcut-item-compact"><kbd>E</kbd> <span>Export Loops</span></div>
                             <div class="shortcut-item-compact"><kbd>P</kbd> <span>Screenshot</span></div>
                             <div class="shortcut-item-compact"><kbd>G</kbd> <span>Generate Track</span></div>
-                            <div class="shortcut-item-compact"><kbd>D</kbd> <span>Random Drums</span></div>
-                            <div class="shortcut-item-compact"><kbd>B</kbd> <span>Random Bass</span></div>
-                            <div class="shortcut-item-compact"><kbd>L</kbd> <span>Random Lead</span></div>
-                            <div class="shortcut-item-compact"><kbd>H</kbd> <span>Prompt History</span></div>
+                            <div class="shortcut-item-compact"><kbd>H</kbd> <span>Generation History</span></div>
                             <div class="shortcut-item-compact"><kbd>V</kbd> <span>Save Project</span></div>
-                            <div class="shortcut-item-compact"><kbd>K</kbd> <span>In Key Prompt</span></div>
-                            <div class="shortcut-item-compact"><kbd>N</kbd> <span>Random Prompt</span></div>
-                            <div class="shortcut-item-compact"><kbd>C</kbd> <span>Change Chord</span></div>
-                            <div class="shortcut-item-compact"><kbd>M</kbd> <span>Change Mood</span></div>
-                            <div class="shortcut-item-compact"><kbd>A</kbd> <span>Change Accent</span></div>
+                            <div class="shortcut-item-compact"><kbd>N</kbd> <span>Randomize Builder</span></div>
                             <div class="shortcut-item-compact"><kbd>O</kbd> <span>Load Project</span></div>
-                            <div class="shortcut-item-compact"><kbd>I</kbd> <span>Change Inst</span></div>
-                            <div class="shortcut-item-compact"><kbd>Y</kbd> <span>Change Style</span></div>
                             <div class="shortcut-item-compact"><kbd>T</kbd> <span>Toggle Split</span></div>
                             <div class="shortcut-item-compact"><kbd>F</kbd> <span>Song Mode</span></div>
                             <div class="shortcut-item-compact"><kbd>U</kbd> <span>MIDI Learn</span></div>
@@ -993,7 +1022,7 @@
                 <div class="quick-start-steps">
                     <div class="qs-step">
                         <span class="qs-num">1</span>
-                        <p>Use the random buttons to cook up variations in key. Use the instrument buttons to fill out what your arrangement is missing.</p>
+                        <p>Choose curated values in each prompt section, type a custom override, or use <strong>Randomize All</strong>. The dice beside each section rerolls only that value.</p>
                     </div>
                     <div class="qs-step">
                         <span class="qs-num">2</span>
@@ -1019,19 +1048,10 @@
                     <div class="shortcut-item-compact"><kbd>E</kbd> <span>Export Loops</span></div>
                     <div class="shortcut-item-compact"><kbd>P</kbd> <span>Screenshot</span></div>
                     <div class="shortcut-item-compact"><kbd>G</kbd> <span>Generate Track</span></div>
-                    <div class="shortcut-item-compact"><kbd>D</kbd> <span>Random Drums</span></div>
-                    <div class="shortcut-item-compact"><kbd>B</kbd> <span>Random Bass</span></div>
-                    <div class="shortcut-item-compact"><kbd>L</kbd> <span>Random Lead</span></div>
-                    <div class="shortcut-item-compact"><kbd>H</kbd> <span>Prompt History</span></div>
+                    <div class="shortcut-item-compact"><kbd>H</kbd> <span>Generation History</span></div>
                     <div class="shortcut-item-compact"><kbd>V</kbd> <span>Save Project</span></div>
-                    <div class="shortcut-item-compact"><kbd>K</kbd> <span>In Key Prompt</span></div>
-                    <div class="shortcut-item-compact"><kbd>N</kbd> <span>Random Prompt</span></div>
-                    <div class="shortcut-item-compact"><kbd>C</kbd> <span>Change Chord</span></div>
-                    <div class="shortcut-item-compact"><kbd>M</kbd> <span>Change Mood</span></div>
-                    <div class="shortcut-item-compact"><kbd>A</kbd> <span>Change Accent</span></div>
+                    <div class="shortcut-item-compact"><kbd>N</kbd> <span>Randomize Builder</span></div>
                     <div class="shortcut-item-compact"><kbd>O</kbd> <span>Load Project</span></div>
-                    <div class="shortcut-item-compact"><kbd>I</kbd> <span>Change Inst</span></div>
-                    <div class="shortcut-item-compact"><kbd>Y</kbd> <span>Change Style</span></div>
                     <div class="shortcut-item-compact"><kbd>T</kbd> <span>Toggle Split</span></div>
                     <div class="shortcut-item-compact"><kbd>F</kbd> <span>Song Mode</span></div>
                     <div class="shortcut-item-compact"><kbd>U</kbd> <span>MIDI Learn</span></div>
@@ -1075,8 +1095,34 @@
         </div>
     </div>
 
+    <div id="file-naming-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="file-naming-modal-title">
+        <div class="modal-content file-naming-modal-content">
+            <h2 class="modal-title" id="file-naming-modal-title">Loop Pack File Naming</h2>
+            <p class="file-naming-help">These fields control exported filenames and sidecars; they do not change the musical prompt.</p>
+            <div class="file-naming-fields">
+                <label class="asset-metadata-field" for="pack-name-input">
+                    <span class="chip-label">Pack</span>
+                    <input id="pack-name-input" type="text" maxlength="120" value="loopmaster" spellcheck="false" autocomplete="off" placeholder="cookout">
+                </label>
+                <label class="asset-metadata-field" for="descriptor-input">
+                    <span class="chip-label">File descriptor</span>
+                    <input id="descriptor-input" type="text" maxlength="240" spellcheck="false" autocomplete="off" placeholder="Auto from the active instrument or drums">
+                </label>
+            </div>
+            <p class="file-naming-example">Example: <code>cookout_smokerise_140bpm_gbmin_8bar_a1.wav</code></p>
+            <div class="modal-buttons">
+                <button class="btn-generate modal-primary-action" id="btn-file-naming-save" type="button">Save</button>
+                <button class="btn-modal-cancel" id="btn-file-naming-cancel" type="button">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Removed tuna.js -->
     <script src="/static/vendor/html2canvas-1.4.1.min.js"></script>
+    <script src="/static/prompt_core.js"></script>
+    <script src="/static/chord_progression_core.js"></script>
+    <script src="/static/prompt_builder.js"></script>
+    <script src="/static/wav_metadata_core.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

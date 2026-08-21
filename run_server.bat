@@ -5,7 +5,7 @@ echo ===================================================
 echo   LoopMaster SA3 Launcher
 echo ===================================================
 echo.
-echo   [1] Medium Model (Official - FP32 Precision, High VRAM, GPU)
+echo   [1] Medium Model (Official - FP16 Precision, GPU)
 echo   [2] Small Music Model (Lightweight, CPU/GPU)
 echo   [3] Small SFX Model (Sound Effects only)
 echo   [4] Medium Model (Optimized - BF16 Precision, Low VRAM, GPU)
@@ -23,7 +23,6 @@ set EXTRA_ARGS=
 
 if "%choice%"=="1" (
     set MODEL=medium
-    set EXTRA_ARGS=--no-half
 )
 if "%choice%"=="2" set MODEL=small-music
 if "%choice%"=="3" set MODEL=small-sfx
@@ -32,7 +31,6 @@ if "%choice%"=="4" set MODEL=medium-bf16
 :: Fallback if invalid or empty selection was made
 if "%MODEL%"=="" (
     set MODEL=medium
-    set EXTRA_ARGS=--no-half
 )
 
 echo.

@@ -264,7 +264,15 @@ def test_generate_route_enqueues_typed_task_and_reports_queue_state(monkeypatch)
         app_server.jobs.clear()
 
     client = app_server.app.test_client()
-    response = client.post("/api/generate", json={"prompt": "deep bass loop"})
+    response = client.post("/api/generate", json={
+        "prompt": "deep bass loop",
+        "prompt_sections": {"freePrompt": "deep bass loop"},
+        "pack_name": "Cook Out",
+        "descriptor": "Smoke Rise",
+        "key": "F# minor",
+        "chord_track": "gb_min@1:1",
+        "seed": 42,
+    })
 
     assert response.status_code == 202
     body = response.get_json()
@@ -276,6 +284,13 @@ def test_generate_route_enqueues_typed_task_and_reports_queue_state(monkeypatch)
     assert isinstance(task, GenerationTask)
     assert task.track_num == 7
     assert task.prompt == "deep bass loop"
+    assert task.prompt_sections == {"freePrompt": "deep bass loop"}
+    assert task.pack_name == "cookout"
+    assert task.descriptor == "smokerise"
+    assert task.key == "Gb minor"
+    assert task.chords == ({"bar": 1, "beat": 1, "chord": "gb_min"},)
+    assert task.seed == 42
+    assert task.requested_seed == 42
 
     status = client.get(f"/api/status/{job_id}")
     assert status.status_code == 200
@@ -286,6 +301,171 @@ def test_generate_route_enqueues_typed_task_and_reports_queue_state(monkeypatch)
     assert status_body["queue_capacity"] == 4
     with app_server.jobs_lock:
         app_server.jobs.clear()
+
+
+def progression_payload(**changes):
+    chord_track = (
+        "c_maj@1:1, g_maj@2:1, a_min@3:1, f_maj@4:1"
+    )
+    sections = {
+        "freePrompt": "warm piano hook",
+        "acoustic": "felt piano",
+        "sourceChoice": "acoustic",
+        "genre": "house",
+        "harmony": "Use Chord Progressor",
+        "progressionKey": "C major",
+        "progressionId": "major_hopeful_01",
+        "progression": "I-V-vi-IV: Hopeful",
+        "chordTrack": chord_track,
+    }
+    payload = {
+        "prompt_sections": sections,
+        "prompt": app_server.compose_prompt_sections(sections),
+        "bpm": 120,
+        "duration": 16,
+        "loop": True,
+        "chord_track": chord_track,
+        "seed": 7,
+    }
+    payload.update(changes)
+    return payload
+
+
+def test_generate_and_regenerate_preserve_server_resolved_progression(monkeypatch):
+    queue = RecordingQueue()
+    monkeypatch.setattr(app_server, "generation_queue", queue)
+    monkeypatch.setattr(app_server, "get_next_track_index", lambda: 12)
+    with app_server.jobs_lock:
+        app_server.jobs.clear()
+
+    client = app_server.app.test_client()
+    generated = client.post("/api/generate", json=progression_payload())
+    regenerated = client.post("/api/regenerate", json=progression_payload(
+        track_num=12,
+        unlocked_indices=[0, 3],
+    ))
+
+    assert generated.status_code == 202
+    assert regenerated.status_code == 202
+    generated_task = queue.submissions[0][1]
+    regenerated_task = queue.submissions[1][1]
+    expected_cycle = ("c_maj", "g_maj", "a_min", "f_maj")
+    expected_chords = tuple(
+        {
+            "bar": bar,
+            "beat": 1,
+            "chord": expected_cycle[(bar - 1) % 4],
+        }
+        for bar in range(1, 9)
+    )
+    for task in (generated_task, regenerated_task):
+        assert task.key == "C major"
+        assert tuple(
+            {
+                "bar": event["bar"],
+                "beat": event["beat"],
+                "chord": event["chord"],
+            }
+            for event in task.chords
+        ) == expected_chords
+        assert all(
+            {
+                "roman", "symbol", "formulaOffsets", "bass", "bassOffset"
+            }.issubset(event)
+            for event in task.chords
+        )
+        assert task.chord_source == "prompt"
+        assert task.progression.catalog_id == "major_hopeful_01"
+        assert task.progression.catalog_version == 1
+        assert task.progression.key == "C major"
+        assert task.progression.events == generated_task.progression.events
+        assert task.conditioned_prompt.endswith(
+            "harmonic progression locked to C - G - Am - F, one chord per bar, "
+            "repeat this exact four-bar cycle through 8 bars"
+        )
+    with app_server.jobs_lock:
+        app_server.jobs.clear()
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda payload: payload["prompt_sections"].update(
+                progressionKey=""
+            ),
+            "Choose a major or minor key",
+        ),
+        (
+            lambda payload: payload["prompt_sections"].update(
+                progressionId="missing"
+            ),
+            "Choose a chord progression preset",
+        ),
+        (
+            lambda payload: payload.update(loop=False),
+            "require loop generation",
+        ),
+        (
+            lambda payload: payload.update(key="C minor"),
+            "conflicts with progressionKey",
+        ),
+        (
+            lambda payload: payload.update(
+                chord_track="c_maj@1:1, f_maj@2:1"
+            ),
+            "conflicts with progressionId",
+        ),
+        (
+            lambda payload: payload["prompt_sections"].update(
+                progression="I-IV-V-I: Not the selected preset"
+            ),
+            "progression conflicts with progressionId",
+        ),
+        (
+            lambda payload: payload["prompt_sections"].update(
+                chordTrack="c_maj@1:1, f_maj@2:1"
+            ),
+            "prompt_sections.chordTrack conflicts with progressionId",
+        ),
+    ],
+)
+def test_progression_request_rejects_missing_invalid_non_loop_and_conflicts(
+    mutate, message
+):
+    payload = progression_payload()
+    mutate(payload)
+    # Keep structured prompt validation focused on the progression admission
+    # error after any prompt-section mutation.
+    payload["prompt"] = app_server.compose_prompt_sections(
+        payload["prompt_sections"]
+    )
+
+    response = app_server.app.test_client().post("/api/generate", json=payload)
+
+    assert response.status_code == 400
+    assert message in response.get_json()["error"]
+
+
+def test_dormant_progression_state_does_not_replace_legacy_manual_chords():
+    sections = progression_payload()["prompt_sections"]
+    sections["harmony"] = "A minor"
+    prompt = app_server.compose_prompt_sections(sections)
+
+    asset = app_server._parse_asset_request(
+        {"chord_track": "a_min@1:1"},
+        sections,
+        prompt,
+        bpm=120,
+        duration=8,
+        loop=True,
+    )
+
+    assert asset["key"] == "A minor"
+    assert asset["chords"] == ({"bar": 1, "beat": 1, "chord": "a_min"},)
+    assert asset["progression"] is None
+    assert asset["conditioned_prompt"] is None
+    assert asset["chord_source"] is None
 
 
 def test_cancel_route_marks_removed_job_cancelled_and_status_remains_queryable(monkeypatch):

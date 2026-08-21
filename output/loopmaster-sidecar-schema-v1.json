@@ -1,0 +1,567 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.loopmaster.app/loop-meta/v1.json",
+  "title": "LoopMaster per-audio metadata sidecar",
+  "description": "Complete metadata paired with one LoopMaster WAV file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema",
+    "version",
+    "id",
+    "file",
+    "metadataFile",
+    "kind",
+    "naming",
+    "audio",
+    "musical",
+    "loopRegion",
+    "waveform",
+    "slices",
+    "generation",
+    "provenance",
+    "embedded"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.loopmaster.app/loop-meta/v1.json"
+    },
+    "schema": {
+      "const": "com.loopmaster.loop-meta"
+    },
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/stem"
+    },
+    "file": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+\\.wav$"
+    },
+    "metadataFile": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+\\.meta\\.json$"
+    },
+    "kind": {
+      "enum": ["loop", "oneshot"]
+    },
+    "naming": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pack", "descriptor", "variation"],
+      "properties": {
+        "pack": { "$ref": "#/$defs/token" },
+        "descriptor": { "$ref": "#/$defs/token" },
+        "variation": {
+          "type": "string",
+          "pattern": "^[a-z][1-9][0-9]*$"
+        }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "encoding",
+        "sampleRate",
+        "channels",
+        "bitDepth",
+        "frames",
+        "durationSeconds",
+        "sha256",
+        "bytes"
+      ],
+      "properties": {
+        "format": { "const": "wav" },
+        "encoding": { "const": "pcm_s16le" },
+        "sampleRate": { "enum": [44100, 48000] },
+        "channels": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "bitDepth": { "const": 16 },
+        "frames": { "type": "integer", "minimum": 1 },
+        "durationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "bytes": { "type": "integer", "minimum": 45 }
+      }
+    },
+    "musical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bpm",
+        "meter",
+        "beats",
+        "bars",
+        "gridErrorBeats",
+        "key",
+        "chords",
+        "chordSource",
+        "chordsVerified"
+      ],
+      "properties": {
+        "bpm": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        },
+        "meter": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["numerator", "denominator"],
+          "properties": {
+            "numerator": { "const": 4 },
+            "denominator": { "const": 4 }
+          }
+        },
+        "beats": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        },
+        "bars": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        },
+        "gridErrorBeats": {
+          "oneOf": [
+            { "type": "number", "minimum": 0, "maximum": 0.03 },
+            { "type": "null" }
+          ]
+        },
+        "key": {
+          "oneOf": [
+            { "$ref": "#/$defs/key" },
+            { "type": "null" }
+          ]
+        },
+        "chords": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/chordEvent" }
+        },
+        "chordSource": {
+          "oneOf": [
+            { "enum": ["user", "prompt", "analyzed", "imported"] },
+            { "type": "null" }
+          ]
+        },
+        "chordsVerified": { "type": "boolean" }
+      }
+    },
+    "loopRegion": {
+      "oneOf": [
+        { "$ref": "#/$defs/loopRegion" },
+        { "type": "null" }
+      ]
+    },
+    "waveform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["peaks"],
+      "properties": {
+        "peaks": {
+          "type": "array",
+          "minItems": 64,
+          "maxItems": 64,
+          "items": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "slices": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "beatGrid", "transients", "preferred"],
+      "properties": {
+        "unit": { "const": "samples" },
+        "beatGrid": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/beatPoint" }
+        },
+        "transients": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/transientPoint" }
+        },
+        "preferred": {
+          "type": "array",
+          "maxItems": 15,
+          "items": {
+            "oneOf": [
+              { "$ref": "#/$defs/beatPoint" },
+              { "$ref": "#/$defs/transientPoint" }
+            ]
+          }
+        }
+      }
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "jobId": { "type": "string" },
+        "resultId": { "type": "string" },
+        "trackNumber": { "type": "integer", "minimum": 1 },
+        "variantIndex": { "type": "integer", "minimum": 0 },
+        "model": { "type": "string" },
+        "qualityTier": { "enum": ["draft", "final"] },
+        "requestedSeed": { "type": "integer" },
+        "seed": { "type": "integer", "minimum": 0 },
+        "seedOffset": { "type": "integer", "minimum": 0 },
+        "variantSeed": { "type": "integer", "minimum": 0 },
+        "steps": { "type": "integer", "minimum": 1 },
+        "cfgScale": { "type": "number", "minimum": 0 },
+        "requestedDurationSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "durationPaddingSeconds": { "type": "number", "minimum": 0 },
+        "sliceable": { "type": "boolean" },
+        "prompt": { "$ref": "#/$defs/prompt" },
+        "progression": { "$ref": "#/$defs/progression" },
+        "remix": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["generator", "createdAt", "license"],
+      "properties": {
+        "generator": { "type": "string", "minLength": 1 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "license": { "type": "string", "minLength": 1 },
+        "session": { "type": "string" }
+      }
+    },
+    "embedded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acid", "cue", "smpl", "listInfo", "ckup"],
+      "properties": {
+        "acid": { "type": "boolean" },
+        "cue": { "type": "boolean" },
+        "smpl": { "type": "boolean" },
+        "listInfo": { "type": "boolean" },
+        "ckup": { "type": "boolean" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "kind": { "const": "loop" } },
+        "required": ["kind"]
+      },
+      "then": {
+        "properties": {
+          "file": {
+            "pattern": "^[a-z0-9]+_[a-z0-9]+_[1-9][0-9]*bpm_(?:(?:c|db|d|eb|e|f|gb|g|ab|a|bb|b)(?:maj|min)|nokey)_[1-9][0-9]*bar_[a-z][1-9][0-9]*\\.wav$"
+          },
+          "loopRegion": { "$ref": "#/$defs/loopRegion" },
+          "musical": {
+            "properties": {
+              "bpm": { "type": "integer", "minimum": 1 },
+              "beats": { "type": "integer", "minimum": 1 },
+              "bars": { "type": "integer", "minimum": 1 },
+              "gridErrorBeats": { "type": "number", "minimum": 0, "maximum": 0.03 }
+            }
+          },
+          "slices": {
+            "properties": {
+              "beatGrid": { "minItems": 1 }
+            }
+          },
+          "embedded": {
+            "properties": {
+              "acid": { "const": true },
+              "cue": { "const": true },
+              "smpl": { "const": true },
+              "listInfo": { "const": true },
+              "ckup": { "const": true }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "kind": { "const": "oneshot" } },
+        "required": ["kind"]
+      },
+      "then": {
+        "properties": {
+          "file": {
+            "pattern": "^[a-z0-9]+_[a-z0-9]+_oneshot_(?:(?:c|db|d|eb|e|f|gb|g|ab|a|bb|b)(?:maj|min)|nokey)_[a-z][1-9][0-9]*\\.wav$"
+          },
+          "loopRegion": { "type": "null" },
+          "musical": {
+            "properties": {
+              "bpm": { "type": "null" },
+              "beats": { "type": "null" },
+              "bars": { "type": "null" },
+              "gridErrorBeats": { "type": "null" }
+            }
+          },
+          "slices": {
+            "properties": {
+              "beatGrid": { "maxItems": 0 }
+            }
+          },
+          "embedded": {
+            "properties": {
+              "acid": { "const": true },
+              "smpl": { "const": false },
+              "listInfo": { "const": true },
+              "ckup": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+$",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "stem": {
+      "type": "string",
+      "pattern": "^[a-z0-9_]+$",
+      "minLength": 1
+    },
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["token", "filename", "display", "rootMidi"],
+      "properties": {
+        "token": {
+          "type": "string",
+          "pattern": "^(c|db|d|eb|e|f|gb|g|ab|a|bb|b)_(maj|min)$"
+        },
+        "filename": {
+          "type": "string",
+          "pattern": "^(c|db|d|eb|e|f|gb|g|ab|a|bb|b)(maj|min)$"
+        },
+        "display": {
+          "type": "string",
+          "pattern": "^(C|Db|D|Eb|E|F|Gb|G|Ab|A|Bb|B) (major|minor)$"
+        },
+        "rootMidi": { "type": "integer", "minimum": 60, "maximum": 71 }
+      }
+    },
+    "chordEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bar", "beat", "chord"],
+      "properties": {
+        "bar": { "type": "integer", "minimum": 1 },
+        "beat": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "chord": { "$ref": "#/$defs/chordToken" },
+        "roman": { "type": "string", "minLength": 1 },
+        "symbol": { "type": "string", "minLength": 1 },
+        "formulaOffsets": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "bass": {
+          "oneOf": [
+            { "type": "string", "pattern": "^(c|db|d|eb|e|f|gb|g|ab|a|bb|b)$" },
+            { "type": "null" }
+          ]
+        },
+        "bassOffset": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 11 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "loopRegion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "startSample",
+        "endSampleInclusive",
+        "endSampleExclusive",
+        "startSeconds",
+        "endSeconds"
+      ],
+      "properties": {
+        "startSample": { "const": 0 },
+        "endSampleInclusive": { "type": "integer", "minimum": 0 },
+        "endSampleExclusive": { "type": "integer", "minimum": 1 },
+        "startSeconds": { "const": 0.0 },
+        "endSeconds": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "pointBase": {
+      "type": "object",
+      "required": ["id", "kind", "sample", "seconds"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "enum": ["beat", "transient"] },
+        "sample": { "type": "integer", "minimum": 0 },
+        "seconds": { "type": "number", "minimum": 0 }
+      }
+    },
+    "beatPoint": {
+      "allOf": [
+        { "$ref": "#/$defs/pointBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "sample", "seconds", "bar", "beat"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^beat_[1-9][0-9]*$" },
+            "kind": { "const": "beat" },
+            "sample": { "type": "integer", "minimum": 0 },
+            "seconds": { "type": "number", "minimum": 0 },
+            "bar": { "type": "integer", "minimum": 1 },
+            "beat": { "type": "integer", "minimum": 1, "maximum": 4 }
+          }
+        }
+      ]
+    },
+    "transientPoint": {
+      "allOf": [
+        { "$ref": "#/$defs/pointBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "sample", "seconds", "strength"],
+          "properties": {
+            "id": { "type": "string", "pattern": "^tx_[1-9][0-9]*$" },
+            "kind": { "const": "transient" },
+            "sample": { "type": "integer", "minimum": 0 },
+            "seconds": { "type": "number", "minimum": 0 },
+            "strength": { "type": "number", "minimum": 0 }
+          }
+        }
+      ]
+    },
+    "prompt": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["composed", "negative", "sections"],
+      "properties": {
+        "composed": { "type": "string" },
+        "conditioned": { "type": "string" },
+        "enhanced": { "type": "string" },
+        "negative": { "type": "string" },
+        "userNegative": { "type": "string" },
+        "sections": { "type": "object" }
+      }
+    },
+    "progression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalogId",
+        "catalogVersion",
+        "key",
+        "mode",
+        "mood",
+        "formula",
+        "selection",
+        "cycleBars",
+        "cycle",
+        "events"
+      ],
+      "properties": {
+        "catalogId": { "type": "string", "minLength": 1 },
+        "catalogVersion": { "type": "integer", "minimum": 1 },
+        "key": {
+          "type": "string",
+          "pattern": "^(C|Db|D|Eb|E|F|Gb|G|Ab|A|Bb|B) (major|minor)$"
+        },
+        "mode": { "enum": ["major", "minor"] },
+        "mood": { "type": "string", "minLength": 1 },
+        "formula": { "type": "string", "minLength": 1 },
+        "selection": { "type": "string", "minLength": 1 },
+        "cycleBars": { "const": 4 },
+        "cycle": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/progressionStep" }
+        },
+        "events": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/progressionEvent" }
+        }
+      }
+    },
+    "progressionStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot", "roman", "chord", "symbol", "bass", "bassOffset",
+        "formulaOffsets"
+      ],
+      "properties": {
+        "slot": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "roman": { "type": "string", "minLength": 1 },
+        "chord": { "$ref": "#/$defs/chordToken" },
+        "symbol": { "type": "string", "minLength": 1 },
+        "bass": {
+          "oneOf": [
+            { "type": "string", "pattern": "^(c|db|d|eb|e|f|gb|g|ab|a|bb|b)$" },
+            { "type": "null" }
+          ]
+        },
+        "bassOffset": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 11 },
+            { "type": "null" }
+          ]
+        },
+        "formulaOffsets": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "progressionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bar", "beat", "roman", "chord", "symbol", "formulaOffsets",
+        "bass", "bassOffset"
+      ],
+      "properties": {
+        "bar": { "type": "integer", "minimum": 1 },
+        "beat": { "const": 1 },
+        "roman": { "type": "string", "minLength": 1 },
+        "chord": { "$ref": "#/$defs/chordToken" },
+        "symbol": { "type": "string", "minLength": 1 },
+        "formulaOffsets": {
+          "type": "array",
+          "minItems": 3,
+          "items": { "type": "integer", "minimum": 0 }
+        },
+        "bass": {
+          "oneOf": [
+            { "type": "string", "pattern": "^(c|db|d|eb|e|f|gb|g|ab|a|bb|b)$" },
+            { "type": "null" }
+          ]
+        },
+        "bassOffset": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 11 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "chordToken": {
+      "type": "string",
+      "pattern": "^(c|db|d|eb|e|f|gb|g|ab|a|bb|b)_(maj|min|dim|aug|sus2|sus4|maj6|min6|maj7|min7|dom7|dim7|aug7|maj9|min9|dom9|min11|dom11|dom13|min13|majadd9|minadd9|majadd11|minadd11|dimaddaug5|min7aug5)$"
+    }
+  }
+}

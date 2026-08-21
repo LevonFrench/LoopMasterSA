@@ -1,19 +1,77 @@
 import json
 import numpy as np
 
-# LRU Cache for conditioning tensors
-_cond_cache = {}
+# Maximum entries in each model instance's conditioning LRU cache.
 _cond_cache_max = 16
 
-def _get_cond_key(prompt, negative_prompt, duration):
+
+def _get_cond_key(
+    prompt,
+    negative_prompt,
+    duration,
+    *,
+    batch_size,
+    device,
+    dtype,
+):
+    """Return a key for conditioning tensors with generation-shape semantics."""
     p_key = tuple(prompt) if isinstance(prompt, list) else prompt
     n_key = tuple(negative_prompt) if isinstance(negative_prompt, list) else negative_prompt
     d_key = tuple(duration) if isinstance(duration, list) else duration
-    return (p_key, n_key, d_key)
+    return (
+        p_key,
+        n_key,
+        d_key,
+        int(batch_size),
+        str(device),
+        str(dtype),
+    )
 
 import torch
 import typing as tp
 from torch.nn.functional import interpolate
+
+
+def _map_conditioning_tensors(value, tensor_transform):
+    """Copy a conditioning tree while applying ``tensor_transform`` to tensors."""
+    if torch.is_tensor(value):
+        return tensor_transform(value)
+    if isinstance(value, dict):
+        return {
+            key: _map_conditioning_tensors(item, tensor_transform)
+            for key, item in value.items()
+        }
+    if isinstance(value, tuple):
+        return tuple(
+            _map_conditioning_tensors(item, tensor_transform) for item in value
+        )
+    if isinstance(value, list):
+        return [
+            _map_conditioning_tensors(item, tensor_transform) for item in value
+        ]
+    return value
+
+
+def _freeze_conditioning_tensors(value):
+    """Store reusable text conditioning off-GPU and detached from inference state."""
+    return _map_conditioning_tensors(
+        value,
+        lambda tensor: tensor.detach().to(device="cpu", copy=True),
+    )
+
+
+def _restore_conditioning_tensors(value, device):
+    """Restore an isolated conditioning tree for one generation."""
+    target_device = torch.device(device)
+    return _map_conditioning_tensors(
+        value,
+        lambda tensor: tensor.to(
+            device=target_device,
+            non_blocking=target_device.type == "cuda",
+            copy=True,
+        ),
+    )
+
 
 from stable_audio_3.inference.audio_utils import prepare_audio, numpy_audio_to_tensor
 from stable_audio_3.inference.sampling import sample_diffusion
@@ -40,6 +98,10 @@ class StableAudioModel:
         self.model_config = model_config
         self.device = device
         self.model_half = model_half
+        # Conditioning depends on the particular model instance. Keeping the
+        # LRU here prevents identically worded prompts from crossing model
+        # boundaries while still retaining CPU-backed values between calls.
+        self._conditioning_cache = {}
         self.same = self.model.pretransform
         self.dit = self.model.model
         torch.backends.cuda.matmul.allow_tf32 = True
@@ -103,10 +165,12 @@ class StableAudioModel:
         load_and_apply_loras(
             self.model, lora_ckpt_paths, model_type, svd_bases_path=svd_bases_path
         )
+        self._conditioning_cache.clear()
 
     def set_lora_strength(self, strength: float, lora_index: int | None = None):
         _set_lora_strength(self.model.model, strength, lora_index=lora_index)
         _set_lora_strength(self.model.conditioner, strength, lora_index=lora_index)
+        self._conditioning_cache.clear()
 
     @torch.inference_mode()
     def generate(
@@ -185,6 +249,13 @@ class StableAudioModel:
         """
 
         device = str(self.device)
+        cache_prompt_conditioning = (
+            prompt is not None
+            and conditioning is None
+            and conditioning_tensors is None
+            and negative_conditioning is None
+            and negative_conditioning_tensors is None
+        )
         assert chunked_decode is not False, "The app must never disable chunked decoding on the 12GB backend."
 
         # Build conditioning from prompt string if not provided directly
@@ -292,14 +363,36 @@ class StableAudioModel:
             for gen in g
         ])
 
-        # Encode conditioning
-        cache_key = _get_cond_key(prompt, negative_prompt, duration) if prompt is not None else None
-        global _cond_cache
-        if cache_key and cache_key in _cond_cache:
+        # Encode conditioning. Only the simple prompt path is cacheable: callers
+        # supplying precomputed conditioning tensors own their lifecycle.
+        model_dtype = next(self.model.model.parameters()).dtype
+        cache_key = (
+            _get_cond_key(
+                prompt,
+                negative_prompt,
+                duration,
+                batch_size=batch_size,
+                device=device,
+                dtype=model_dtype,
+            )
+            if cache_prompt_conditioning
+            else None
+        )
+        if cache_key is not None and cache_key in self._conditioning_cache:
             print('[Generation] Cache hit for text conditioning')
-            conditioning_tensors, negative_conditioning_tensors = _cond_cache[cache_key]
+            cached_conditioning, cached_negative_conditioning = (
+                self._conditioning_cache[cache_key]
+            )
+            conditioning_tensors = _restore_conditioning_tensors(
+                cached_conditioning, device
+            )
+            negative_conditioning_tensors = _restore_conditioning_tensors(
+                cached_negative_conditioning, device
+            )
             # Move to end for LRU
-            _cond_cache[cache_key] = _cond_cache.pop(cache_key)
+            self._conditioning_cache[cache_key] = self._conditioning_cache.pop(
+                cache_key
+            )
         else:
             if conditioning_tensors is None:
                 conditioning_tensors = self.model.conditioner(conditioning, device)
@@ -314,19 +407,17 @@ class StableAudioModel:
             else:
                 negative_conditioning_tensors = {}
             if cache_key is not None:
-                # detach tensors before caching to prevent memory leaks;
-                # conditioner values may be tensors or (embedding, mask) tuples
-                def _detach_value(v):
-                    if torch.is_tensor(v):
-                        return v.detach()
-                    if isinstance(v, (tuple, list)):
-                        return type(v)(x.detach() if torch.is_tensor(x) else x for x in v)
-                    return v
-                detached_cond = {k: _detach_value(v) for k, v in conditioning_tensors.items()} if conditioning_tensors else {}
-                detached_neg = {k: _detach_value(v) for k, v in negative_conditioning_tensors.items()} if negative_conditioning_tensors else {}
-                _cond_cache[cache_key] = (detached_cond, detached_neg)
-                if len(_cond_cache) > _cond_cache_max:
-                    _cond_cache.pop(next(iter(_cond_cache)))
+                # The randomizer produces many unique prompts. Keeping these
+                # tensors on CUDA steadily consumes the VAE's decode headroom.
+                # CPU-backed copies preserve cache speed without pinning VRAM.
+                self._conditioning_cache[cache_key] = (
+                    _freeze_conditioning_tensors(conditioning_tensors or {}),
+                    _freeze_conditioning_tensors(negative_conditioning_tensors or {}),
+                )
+                if len(self._conditioning_cache) > _cond_cache_max:
+                    self._conditioning_cache.pop(
+                        next(iter(self._conditioning_cache))
+                    )
 
         # Process init audio
         if init_audio is not None:
@@ -375,7 +466,6 @@ class StableAudioModel:
                 negative_conditioning_tensors, negative=True
             )
 
-        model_dtype = next(self.model.model.parameters()).dtype
         noise = noise.type(model_dtype)
         conditioning_inputs = {
             k: v.type(model_dtype) if v is not None else v

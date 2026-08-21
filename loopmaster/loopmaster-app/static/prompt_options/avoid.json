@@ -1,0 +1,29 @@
+{
+  "version": "2026.08.21.1",
+  "optionGroups": [
+    { "label": "Digital artifacts", "options": [
+      "audible clipping", "hard clipping on transients", "intersample peak distortion", "digital crackle", "random clicks", "random pops", "bit-error glitches", "quantization grain", "aliasing artifacts", "codec warble", "metallic codec ringing", "pre-echo artifacts", "post-echo artifacts", "transient smearing", "audio dropouts"
+    ] },
+    { "label": "Noise and contamination", "options": [
+      "background hiss", "mains hum", "electrical buzz", "broadband white noise", "low-frequency rumble", "air-conditioning noise", "traffic noise", "room chatter", "microphone handling noise", "cable crackle", "fan noise", "wind noise", "plosive bursts", "mouth clicks", "excessive breath noise"
+    ] },
+    { "label": "Spectral and timbral problems", "options": [
+      "muddy low end", "boomy bass", "uncontrolled sub bass", "boxy low mids", "honky midrange", "nasal resonances", "harsh upper mids", "brittle high end", "piercing treble", "excessive sibilance", "dull top end", "missing bass frequencies", "narrow bandwidth", "comb-filter coloration", "ringing resonances"
+    ] },
+    { "label": "Dynamics and loudness problems", "options": [
+      "overcompressed dynamics", "crushed transients", "pumping compression", "limiter pumping", "abrupt level jumps", "inconsistent loudness", "sudden volume spikes", "inaudible quiet passages", "flat dynamics", "exaggerated dynamic swings", "audible limiter distortion", "noise-floor pumping", "uncontrolled peaks", "weak attack definition", "fading signal level"
+    ] },
+    { "label": "Stereo and spatial problems", "options": [
+      "unbalanced stereo image", "phase cancellation", "negative stereo correlation", "mono-incompatible widening", "wandering stereo image", "unstable source placement", "lopsided panning", "excessive stereo width", "collapsed stereo width", "unnatural depth perspective", "excessive room ambience", "excessive reverb", "overlong reverb tails", "obvious slapback echo", "channel crosstalk"
+    ] },
+    { "label": "Timing, tuning, and performance problems", "options": [
+      "timing drift", "random tempo changes", "off-grid transients", "flammed attacks", "rushed phrasing", "dragging rhythm", "uneven swing", "incorrect downbeat", "beat misalignment", "off-key notes", "pitch drift", "unstable tuning", "wrong chord tones", "unintended dissonance", "sloppy note endings"
+    ] },
+    { "label": "Loop and edit problems", "options": [
+      "audible loop seam", "click at loop start", "click at loop end", "mismatched loop endpoints", "truncated reverb tail", "abrupt cut-off", "leading silence", "trailing silence", "unintended fade-in", "unintended fade-out", "wrong bar length", "incomplete final bar", "pickup before the downbeat", "drift across repeated loops", "repeated dead air"
+    ] },
+    { "label": "Unwanted content", "options": [
+      "unwanted vocals", "intelligible speech", "vocal ad-libs", "producer tags", "audio watermarks", "count-ins", "metronome clicks", "crowd noise", "unwanted drums", "accidental percussion", "competing lead melodies", "overly dense layering", "random key changes", "random chord changes", "unrelated sound effects"
+    ] }
+  ]
+}

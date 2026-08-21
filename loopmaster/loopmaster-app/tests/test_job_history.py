@@ -72,6 +72,8 @@ def test_recovery_keeps_terminal_jobs_and_marks_active_work_interrupted(tmp_path
         assert recovered[job_id]["progress"] is None
         assert recovered[job_id]["queue_position"] is None
         assert recovered[job_id]["interrupted"] is True
+    assert recovered["waiting"]["last_progress"] == "Waiting"
+    assert recovered["running"]["last_progress"] == "Step 2"
 
     second_recovery = JobHistory(output_dir).recover()
     assert second_recovery["waiting"]["status"] == "error"
@@ -108,10 +110,14 @@ def test_progress_only_mutations_do_not_rewrite_snapshot(monkeypatch, isolate_ap
     app_server._mutate_job("job-1", status="generating", progress="Preparing")
     app_server._mutate_job("job-1", progress="Step 1")
     app_server._mutate_job("job-1", progress="Step 2")
+    app_server._mutate_job(
+        "job-1", progress="Decoding VAE variant 1/4", _persist=True
+    )
     app_server._mutate_job("job-1", status="done", progress=None, files=[])
 
     assert writes == [
         ("job-1", "queued"),
+        ("job-1", "generating"),
         ("job-1", "generating"),
         ("job-1", "done"),
     ]

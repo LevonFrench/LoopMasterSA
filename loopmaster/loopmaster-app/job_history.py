@@ -1,8 +1,8 @@
 """Crash-safe, bounded persistence for generation job status records.
 
 The history is deliberately a snapshot rather than an execution journal: GPU
-work is never resumed after a restart.  Only meaningful status transitions are
-published by the caller, keeping high-frequency progress updates off disk.
+work is never resumed after a restart. Only status transitions and coarse VAE
+checkpoints are published, keeping high-frequency diffusion updates off disk.
 """
 
 from collections import OrderedDict
@@ -48,12 +48,14 @@ class JobHistory:
             for entry in self._records.values():
                 job = entry["job"]
                 if job.get("status") in ACTIVE_STATUSES:
+                    last_progress = job.get("progress")
                     job.update({
                         "status": "error",
                         "progress": None,
                         "error": INTERRUPTED_ERROR,
                         "queue_position": None,
                         "interrupted": True,
+                        "last_progress": last_progress,
                     })
                     entry["updated_at"] = float(self._clock())
                     changed = True
@@ -66,7 +68,7 @@ class JobHistory:
             }
 
     def record(self, job_id, job):
-        """Publish one important state transition.
+        """Publish one important state transition or coarse stage checkpoint.
 
         The caller owns transition filtering.  Recording is synchronous so a
         successful return means the atomic snapshot was attempted; write errors

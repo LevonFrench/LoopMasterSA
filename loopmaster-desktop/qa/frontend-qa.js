@@ -161,9 +161,12 @@ async function testResponsiveOverflow() {
             windowUnderTest.setContentSize(width, 900, false);
             await new Promise(resolve => setTimeout(resolve, 50));
             observedWidth = await windowUnderTest.webContents.executeJavaScript('window.innerWidth');
-            if (observedWidth === width) break;
+            if (Math.abs(observedWidth - width) <= 1) break;
         }
-        assert(observedWidth === width, `Expected ${width}px viewport, got ${observedWidth}px`);
+        // Windows frame metrics can round a hidden BrowserWindow's requested
+        // content width by one physical pixel at fractional display scaling.
+        assert(Math.abs(observedWidth - width) <= 1,
+            `Expected approximately ${width}px viewport, got ${observedWidth}px`);
         const layout = await windowUnderTest.webContents.executeJavaScript(`(() => {
             const root = document.documentElement;
             const body = document.body;
@@ -300,6 +303,42 @@ async function testModalFocus() {
     return result;
 }
 
+async function testFileNamingModalFocus() {
+    const result = await windowUnderTest.webContents.executeJavaScript(`(async () => {
+        const trigger = document.getElementById('btn-file-naming');
+        const modal = document.getElementById('file-naming-modal');
+        const first = document.getElementById('pack-name-input');
+        const last = document.getElementById('btn-file-naming-cancel');
+        if (!trigger || !modal || !first || !last) {
+            return { exercised: false, reason: 'File Naming modal controls are missing' };
+        }
+        trigger.focus();
+        trigger.click();
+        const opened = modal.classList.contains('is-visible') && modal.getAttribute('aria-hidden') === 'false';
+        const initialFocus = document.activeElement === first;
+        last.focus();
+        last.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        const forwardWrapped = document.activeElement === first;
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+        const backwardWrapped = document.activeElement === last;
+        const originalValue = first.value;
+        first.value = 'cancelled-popup-edit';
+        first.dispatchEvent(new Event('input', { bubbles: true }));
+        await new Promise(resolve => setTimeout(resolve, 300));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        const closed = !modal.classList.contains('is-visible') && modal.getAttribute('aria-hidden') === 'true';
+        const focusReturned = document.activeElement === trigger;
+        const stored = JSON.parse(localStorage.getItem('loopmaster_asset_metadata_v1') || '{}');
+        const cancelRestored = first.value === originalValue && stored.pack_name === originalValue;
+        return { exercised: true, opened, initialFocus, forwardWrapped, backwardWrapped, closed, focusReturned, cancelRestored };
+    })()`);
+    assert(result.exercised, result.reason || 'File Naming modal test was not exercised');
+    for (const key of ['opened', 'initialFocus', 'forwardWrapped', 'backwardWrapped', 'closed', 'focusReturned', 'cancelRestored']) {
+        assert(result[key], `File Naming modal contract failed: ${key}`);
+    }
+    return result;
+}
+
 async function testTypedAttributesAndInlineStyles() {
     const result = await windowUnderTest.webContents.executeJavaScript(`(() => {
         const fixture = document.createElement('div');
@@ -339,6 +378,198 @@ async function testTypedAttributesAndInlineStyles() {
     return result;
 }
 
+async function testPromptOptionMuting() {
+    const details = await windowUnderTest.webContents.executeJavaScript(`(() => {
+        const storageKey = 'loopmaster_prompt_builder_v1';
+        const select = document.getElementById('prompt-select-genre');
+        const section = select?.closest('.prompt-builder-section');
+        const mute = section?.querySelector('.chip-mute');
+        const curated = Array.from(select?.options || []).filter(option => !option.value.startsWith('__'));
+        if (!select || !mute || curated.length < 2) {
+            throw new Error('Prompt mute controls or curated options are unavailable');
+        }
+
+        const originalSelection = select.value;
+        const lockedValue = curated[0].value;
+        try {
+            select.value = lockedValue;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            const valueBeforeMute = select.value;
+            mute.click();
+
+            const afterMute = JSON.parse(localStorage.getItem(storageKey));
+            const muteState = {
+                persisted: afterMute.mutedSections.includes('genre'),
+                valueUnchanged: select.value === valueBeforeMute,
+                diceDisabled: section.querySelector('.chip-dice')?.disabled === true,
+            };
+
+            const pressedBeforeUnmute = mute.getAttribute('aria-pressed');
+            mute.click();
+            const afterUnmute = JSON.parse(localStorage.getItem(storageKey));
+
+            return {
+                lockedValue,
+                muteState,
+                pressedBeforeUnmute,
+                unmuted: !afterUnmute.mutedSections.includes('genre'),
+                pressedAfterUnmute: mute.getAttribute('aria-pressed'),
+            };
+        } finally {
+            select.value = originalSelection;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    })()`);
+
+    assert(details.muteState.persisted, 'Muted prompt section was not persisted', details);
+    assert(details.muteState.valueUnchanged, 'Muting changed the current prompt value', details);
+    assert(details.muteState.diceDisabled, 'Muted section dice stayed enabled', details);
+    assert(details.pressedBeforeUnmute === 'true', 'Mute button did not expose its pressed state', details);
+    assert(details.unmuted, 'Prompt choice could not be unmuted', details);
+    assert(details.pressedAfterUnmute === 'false', 'Mute button stayed pressed after unmuting', details);
+    return details;
+}
+
+async function testPromptRandomizerSeparationAndFreeform() {
+    const details = await windowUnderTest.webContents.executeJavaScript(`(() => {
+        const freeform = document.getElementById('prompt-freeform');
+        const preview = document.getElementById('prompt-preview');
+        const acoustic = document.getElementById('prompt-select-acoustic');
+        const electric = document.getElementById('prompt-select-electric');
+        const drums = document.getElementById('prompt-select-drums');
+        const harmony = document.getElementById('prompt-select-harmony');
+        const randomizeAll = document.getElementById('btn-randomize-all');
+        const acousticSection = acoustic?.closest('.prompt-builder-section');
+        const acousticDice = acousticSection?.querySelector('.chip-dice');
+        const acousticMute = acousticSection?.querySelector('.chip-mute');
+        const harmonyMute = harmony?.closest('.prompt-builder-section')?.querySelector('.chip-mute');
+        if (!freeform || !preview || !acoustic || !electric || !drums || !harmony ||
+                !randomizeAll || !acousticDice || !acousticMute || !harmonyMute) {
+            throw new Error('Expanded prompt controls did not initialize');
+        }
+
+        const curatedAcoustic = Array.from(acoustic.options)
+            .map(option => option.value)
+            .filter(value => value && !value.startsWith('__'));
+        const curatedElectric = Array.from(electric.options)
+            .map(option => option.value)
+            .filter(value => value && !value.startsWith('__'));
+        const curatedDrums = Array.from(drums.options)
+            .map(option => option.value)
+            .filter(value => value && !value.startsWith('__'));
+        const drumTerms = /(drum|percussion|808|909)/i;
+        const typedPrompt = 'my freely typed glassy midnight melody';
+
+        harmony.value = 'a minor';
+        harmony.dispatchEvent(new Event('change', { bubbles: true }));
+        harmonyMute.click();
+        freeform.value = typedPrompt;
+        freeform.dispatchEvent(new Event('input', { bubbles: true }));
+
+        const forbiddenRolls = [];
+        for (let index = 0; index < 30; index += 1) {
+            acousticDice.click();
+            if (drumTerms.test(acoustic.value)) forbiddenRolls.push(acoustic.value);
+        }
+        const harmonyAfterInstrumentRolls = harmony.value;
+        acousticMute.click();
+        randomizeAll.click();
+        const stored = JSON.parse(localStorage.getItem('loopmaster_prompt_builder_v1'));
+        const activeSources = document.querySelectorAll('[data-column="sources"] .is-group-active').length;
+        const activeCharacters = document.querySelectorAll('[data-column="character"] .is-group-active').length;
+        acousticMute.click();
+        harmonyMute.click();
+
+        return {
+            curatedAcousticCount: curatedAcoustic.length,
+            curatedElectricCount: curatedElectric.length,
+            curatedDrumCount: curatedDrums.length,
+            acousticPoolHasDrums: curatedAcoustic.some(value => drumTerms.test(value)),
+            electricPoolHasDrums: curatedElectric.some(value => drumTerms.test(value)),
+            forbiddenRolls,
+            harmonyAfterInstrumentRolls,
+            harmonyAfterRandomizeAll: harmony.value,
+            selectedSourceAfterRandomizeAll: stored.selections.sourceChoice,
+            activeSources,
+            activeCharacters,
+            freeformAfterRandomizeAll: freeform.value,
+            previewAfterRandomizeAll: preview.textContent,
+            typedPrompt,
+        };
+    })()`);
+
+    assert(details.curatedAcousticCount >= 150, 'Acoustic pool was not expanded', details);
+    assert(details.curatedElectricCount >= 140, 'Electric pool was not expanded', details);
+    assert(details.curatedDrumCount >= 180, 'Dedicated drums pool was not expanded', details);
+    assert(!details.acousticPoolHasDrums, 'Acoustic pool still contains drums', details);
+    assert(!details.electricPoolHasDrums, 'Electric pool still contains drums', details);
+    assert(details.forbiddenRolls.length === 0, 'Acoustic dice selected drums', details);
+    assert(details.harmonyAfterInstrumentRolls === 'a minor', 'Instrument dice changed the chord', details);
+    assert(details.harmonyAfterRandomizeAll === 'a minor', 'Randomize All changed the muted chord', details);
+    assert(['electric', 'drums'].includes(details.selectedSourceAfterRandomizeAll),
+        'Randomize All selected the muted acoustic row', details);
+    assert(details.activeSources === 1, 'Randomize All did not activate exactly one instrument row', details);
+    assert(details.activeCharacters === 1, 'Randomize All did not activate exactly one character row', details);
+    assert(details.freeformAfterRandomizeAll === details.typedPrompt, 'Randomization erased free text', details);
+    assert(details.previewAfterRandomizeAll.includes(details.typedPrompt), 'Final prompt omitted free text', details);
+    return details;
+}
+
+async function testChordProgressor() {
+    const details = await windowUnderTest.webContents.executeJavaScript(`(() => {
+        const harmony = document.getElementById('prompt-select-harmony');
+        const harmonyMute = harmony?.closest('.prompt-builder-section')?.querySelector('.chip-mute');
+        const key = document.getElementById('progression-key-select');
+        const preset = document.getElementById('progression-preset-select');
+        const cards = document.getElementById('progression-chord-cards');
+        const progressorMute = document.getElementById('btn-progression-mute');
+        const randomizeAll = document.getElementById('btn-randomize-all');
+        const preview = document.getElementById('prompt-preview');
+        if (!harmony || !harmonyMute || !key || !preset || !cards ||
+                !progressorMute || !randomizeAll || !preview) {
+            throw new Error('Chord progressor controls did not initialize');
+        }
+        const sentinel = Array.from(harmony.options).find(option => option.value === 'Use Chord Progressor');
+        if (!sentinel) throw new Error('Key / Chord is missing Use Chord Progressor');
+
+        harmony.value = sentinel.value;
+        harmony.dispatchEvent(new Event('change', { bubbles: true }));
+        key.value = 'C major';
+        key.dispatchEvent(new Event('change', { bubbles: true }));
+        preset.value = 'major_hopeful_01';
+        preset.dispatchEvent(new Event('change', { bubbles: true }));
+        const before = JSON.parse(localStorage.getItem('loopmaster_prompt_builder_v1'));
+        const symbols = Array.from(cards.querySelectorAll('.chord-card-symbol')).map(node => node.textContent);
+
+        harmonyMute.click();
+        progressorMute.click();
+        randomizeAll.click();
+        const after = JSON.parse(localStorage.getItem('loopmaster_prompt_builder_v1'));
+        progressorMute.click();
+        harmonyMute.click();
+
+        return {
+            symbols,
+            preview: preview.textContent,
+            progressionBefore: before.selections.progressionId,
+            progressionAfter: after.selections.progressionId,
+            harmonyAfter: after.selections.harmony,
+            keyAfter: after.selections.progressionKey,
+            chordTrackCount: (after.selections.chordTrack || '').split(', ').filter(Boolean).length,
+        };
+    })()`);
+
+    assert(JSON.stringify(details.symbols) === JSON.stringify(['C', 'G', 'Am', 'F']),
+        'Hopeful C-major cards are incorrect', details);
+    assert(details.preview.includes('I-V-vi-IV'), 'Assembled prompt omitted the progression formula', details);
+    assert(details.progressionBefore === 'major_hopeful_01', 'Progression selection did not persist', details);
+    assert(details.progressionAfter === details.progressionBefore, 'Locked progression changed during Randomize All', details);
+    assert(details.harmonyAfter === 'Use Chord Progressor', 'Locked harmony changed during Randomize All', details);
+    assert(details.keyAfter === 'C major', 'Progression key changed unexpectedly', details);
+    assert(details.chordTrackCount === 4, 'Progressor did not materialize four chord events', details);
+    return details;
+}
+
 async function testQueuedCancellation() {
     return windowUnderTest.webContents.executeJavaScript(`(async () => {
         const dev = window._dev;
@@ -370,13 +601,15 @@ async function testQueuedCancellation() {
                 throw new Error('Unexpected QA fetch: ' + target);
             };
 
-            const prompt = document.getElementById('prompt-input');
+            const modifiers = document.getElementById('prompt-select-modifiers');
             const generate = document.getElementById('btn-generate');
             // Keep runGeneration's polling promise parked. The harness exercises
             // the queued -> cancelled UI state without letting a later status
             // request escape after the fetch stub is restored.
             window.setTimeout = () => 0;
-            prompt.value = 'QA stub only';
+            if (!modifiers) throw new Error('Structured prompt builder did not initialize');
+            modifiers.value = 'punchy transients';
+            modifiers.dispatchEvent(new Event('change', { bubbles: true }));
             generate.click();
             for (let i = 0; i < 50 && dev.getGenerationCancellationState()?.id !== 'qa-queued-job'; i += 1) {
                 await new Promise(resolve => originalSetTimeout(resolve, 10));
@@ -493,7 +726,11 @@ async function run() {
     await check('visible controls have accessible names', testAccessibleNames);
     await check('aria-pressed toggle state changes and restores', testAriaPressed);
     await check('modal focus trap, escape, and focus return', testModalFocus);
+    await check('file naming popup focus trap, escape, and focus return', testFileNamingModalFocus);
     await check('CSP-safe typed attributes and zero inline styles', testTypedAttributesAndInlineStyles);
+    await check('free text, split instrument pools, one-per-column rolls, and locked harmony', testPromptRandomizerSeparationAndFreeform);
+    await check('prompt sections lock without rerolling and persist across randomization', testPromptOptionMuting);
+    await check('four-chord progressor resolves, persists, and locks', testChordProgressor);
     const cancelResult = await check('stubbed queued job transitions to cancelled', testQueuedCancellation, {
         skipWhen: details => details?.skipped,
     });

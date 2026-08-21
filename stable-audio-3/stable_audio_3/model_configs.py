@@ -1,6 +1,39 @@
 from dataclasses import dataclass
+import os
+from pathlib import Path
 
 from huggingface_hub import hf_hub_download, try_to_load_from_cache
+
+
+def _model_roots() -> tuple[Path, ...]:
+    """Return local model roots in priority order."""
+    configured_root = os.environ.get("SA3_MODELS_DIR")
+    project_root = Path(__file__).resolve().parents[1] / "models"
+    roots = [Path(configured_root).expanduser()] if configured_root else []
+    roots.append(project_root)
+
+    unique_roots = []
+    seen = set()
+    for root in roots:
+        normalized = os.path.normcase(os.path.abspath(root))
+        if normalized not in seen:
+            seen.add(normalized)
+            unique_roots.append(root)
+    return tuple(unique_roots)
+
+
+def _find_local_file(repo_id: str, filename: str) -> str | None:
+    """Find a model file locally without making a network request."""
+    repo_name = repo_id.rsplit("/", 1)[-1]
+    for root in _model_roots():
+        candidate = root / repo_name / filename
+        if candidate.is_file():
+            return str(candidate)
+
+    cached = try_to_load_from_cache(repo_id=repo_id, filename=filename)
+    if isinstance(cached, str) and os.path.isfile(cached):
+        return cached
+    return None
 
 
 @dataclass(frozen=True)
@@ -11,22 +44,21 @@ class ModelConfig:
     config_repo_id: str = None
 
     def resolve(self):
-        """Download files from HuggingFace Hub or load from local models/ directory if present."""
-        import os
-        repo_name = self.repo_id.split("/")[-1]
-        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        local_dir = os.path.join(project_dir, "models", repo_name)
-        local_config = os.path.join(local_dir, self.config_path)
-        local_ckpt = os.path.join(local_dir, self.ckpt_path)
-
-        if os.path.exists(local_config) and os.path.exists(local_ckpt):
-            print(f"[Local Model] Found local files in {local_dir}. Using them directly.")
-            return local_config, local_ckpt
-
+        """Resolve each file locally before downloading only what is missing."""
         cfg_repo = self.config_repo_id if self.config_repo_id else self.repo_id
-        local_config = hf_hub_download(repo_id=cfg_repo, filename=self.config_path)
-        local_ckpt = hf_hub_download(repo_id=self.repo_id, filename=self.ckpt_path)
-        return local_config, local_ckpt
+        config = _find_local_file(cfg_repo, self.config_path)
+        checkpoint = _find_local_file(self.repo_id, self.ckpt_path)
+
+        if config is not None:
+            print(f"[Local Model] Using config: {config}")
+        else:
+            config = hf_hub_download(repo_id=cfg_repo, filename=self.config_path)
+
+        if checkpoint is not None:
+            print(f"[Local Model] Using checkpoint: {checkpoint}")
+        else:
+            checkpoint = hf_hub_download(repo_id=self.repo_id, filename=self.ckpt_path)
+        return config, checkpoint
 
 
 @dataclass(frozen=True)
@@ -46,41 +78,30 @@ class AutoencoderModelConfig:
 
     def resolve(self):
         """Return (config_path, ckpt_path), preferring a local/cached Stable Audio 3 checkpoint or local autoencoder."""
-        import os
-        ae_repo_name = self.ae_repo_id.split("/")[-1]
-        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        local_dir = os.path.join(project_dir, "models", ae_repo_name)
-        local_config = os.path.join(local_dir, self.ae_config_path)
-        local_ckpt = os.path.join(local_dir, self.ae_ckpt_path)
-
-        if os.path.exists(local_config) and os.path.exists(local_ckpt):
-            print(f"[Local Model] Found local autoencoder files in {local_dir}. Using them directly.")
+        local_config = _find_local_file(self.ae_repo_id, self.ae_config_path)
+        local_ckpt = _find_local_file(self.ae_repo_id, self.ae_ckpt_path)
+        if local_config is not None and local_ckpt is not None:
+            print(f"[Local Model] Using autoencoder config: {local_config}")
+            print(f"[Local Model] Using autoencoder checkpoint: {local_ckpt}")
             return local_config, local_ckpt
 
         for fallback in self.stable_audio_3:
-            fb_repo_name = fallback.repo_id.split("/")[-1]
-            fb_local_dir = os.path.join(project_dir, "models", fb_repo_name)
-            fb_config = os.path.join(fb_local_dir, fallback.config_path)
-            fb_ckpt = os.path.join(fb_local_dir, fallback.ckpt_path)
-            if os.path.exists(fb_config) and os.path.exists(fb_ckpt):
-                print(f"[Local Model] Found fallback local files in {fb_local_dir} for Autoencoder. Using them directly.")
-                return fb_config, fb_ckpt
-
-            cached_config = try_to_load_from_cache(
-                fallback.repo_id, fallback.config_path
-            )
-            cached_ckpt = try_to_load_from_cache(fallback.repo_id, fallback.ckpt_path)
-            if isinstance(cached_config, str) and isinstance(cached_ckpt, str):
-                return cached_config, cached_ckpt
+            config_repo = fallback.config_repo_id or fallback.repo_id
+            fallback_config = _find_local_file(config_repo, fallback.config_path)
+            fallback_ckpt = _find_local_file(fallback.repo_id, fallback.ckpt_path)
+            if fallback_config is not None and fallback_ckpt is not None:
+                print(f"[Local Model] Using fallback config: {fallback_config}")
+                print(f"[Local Model] Using fallback checkpoint: {fallback_ckpt}")
+                return fallback_config, fallback_ckpt
 
         # No Stable Audio 3 checkpoint found in local cache — download the AE-only repo.
-        local_config = hf_hub_download(
+        config = local_config or hf_hub_download(
             repo_id=self.ae_repo_id, filename=self.ae_config_path
         )
-        local_ckpt = hf_hub_download(
+        checkpoint = local_ckpt or hf_hub_download(
             repo_id=self.ae_repo_id, filename=self.ae_ckpt_path
         )
-        return local_config, local_ckpt
+        return config, checkpoint
 
 
 models: dict[str, ModelConfig] = {

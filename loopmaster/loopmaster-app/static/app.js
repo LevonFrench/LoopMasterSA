@@ -7,10 +7,8 @@
     'use strict';
 
     // --- DOM ---
-    const promptInput = document.getElementById('prompt-input');
     const bpmInput = document.getElementById('bpm-input');
     const btnGenerate = document.getElementById('btn-generate');
-    const btnPromptHistory = document.getElementById('btn-prompt-history');
     const statusBar = document.getElementById('status-bar');
     const statusText = document.getElementById('status-text');
     const btnPlayPause = document.getElementById('btn-play-pause');
@@ -19,16 +17,6 @@
     const btnStopAll = document.getElementById('btn-stop-all');
     const tracksContainer = document.getElementById('tracks-container');
     const welcomeBoardHTML = tracksContainer ? tracksContainer.innerHTML : '';
-    const btnRandomPrompt = document.getElementById('btn-random-prompt');
-    const btnRandomInKey = document.getElementById('btn-random-in-key');
-    const btnChangeChord = document.getElementById('btn-change-chord');
-    const btnChangeMood = document.getElementById('btn-change-mood');
-    const btnChangeStyle = document.getElementById('btn-change-style');
-    const btnChangeInstrument = document.getElementById('btn-change-instrument');
-    const btnChangeAccent = document.getElementById('btn-change-accent');
-    const btnRandomDrums = document.getElementById('btn-random-drums');
-    const btnRandomBass = document.getElementById('btn-random-bass');
-    const btnRandomLead = document.getElementById('btn-random-lead');
     const btnRenderMix = document.getElementById('btn-render-mix');
     const btnExportLoops = document.getElementById('btn-export-loops');
     const btnSaveProject = document.getElementById('btn-save-project');
@@ -39,6 +27,131 @@
     const recordLogList = document.getElementById('record-log-list');
     const btnClearRecordLog = document.getElementById('btn-clear-record-log');
     const btnCancelGeneration = document.getElementById('btn-cancel-generation');
+    const packNameInput = document.getElementById('pack-name-input');
+    const descriptorInput = document.getElementById('descriptor-input');
+    const btnFileNaming = document.getElementById('btn-file-naming');
+    const fileNamingModal = document.getElementById('file-naming-modal');
+    const btnFileNamingSave = document.getElementById('btn-file-naming-save');
+    const btnFileNamingCancel = document.getElementById('btn-file-naming-cancel');
+
+    const ASSET_PREFS_KEY = 'loopmaster_asset_metadata_v1';
+    let assetPrefsTimer = null;
+    let promptBuilder = null;
+    let fileNamingOpenSnapshot = null;
+    let fileNamingReturnFocus = null;
+
+    function currentFileNamingPreferences() {
+        return {
+            pack_name: packNameInput?.value.trim() || 'loopmaster',
+            descriptor: descriptorInput?.value.trim() || ''
+        };
+    }
+
+    function currentAssetPreferences() {
+        return {
+            ...currentFileNamingPreferences(),
+            chord_track: promptBuilder?.currentChordTrack?.() || ''
+        };
+    }
+
+    function persistAssetPreferences() {
+        if (assetPrefsTimer) {
+            clearTimeout(assetPrefsTimer);
+            assetPrefsTimer = null;
+        }
+        try {
+            localStorage.setItem(ASSET_PREFS_KEY, JSON.stringify(currentFileNamingPreferences()));
+        } catch (error) {
+            console.warn('Could not persist loop-pack metadata fields:', error);
+        }
+    }
+
+    try {
+        const savedAssetPreferences = JSON.parse(localStorage.getItem(ASSET_PREFS_KEY) || '{}');
+        if (packNameInput && typeof savedAssetPreferences.pack_name === 'string') {
+            packNameInput.value = savedAssetPreferences.pack_name || 'loopmaster';
+        }
+        if (descriptorInput && typeof savedAssetPreferences.descriptor === 'string') {
+            descriptorInput.value = savedAssetPreferences.descriptor;
+        }
+    } catch (error) {
+        console.warn('Ignoring invalid saved loop-pack metadata fields:', error);
+    }
+    [packNameInput, descriptorInput].filter(Boolean).forEach(input => {
+        input.addEventListener('input', () => {
+            if (assetPrefsTimer) clearTimeout(assetPrefsTimer);
+            assetPrefsTimer = setTimeout(persistAssetPreferences, 250);
+        });
+        input.addEventListener('blur', persistAssetPreferences);
+    });
+    window.addEventListener('pagehide', persistAssetPreferences);
+
+    function setFileNamingModal(open) {
+        if (!fileNamingModal) return;
+        fileNamingModal.classList.toggle('is-visible', Boolean(open));
+        fileNamingModal.setAttribute('aria-hidden', String(!open));
+        btnFileNaming?.setAttribute('aria-expanded', String(Boolean(open)));
+        if (open) {
+            fileNamingReturnFocus = document.activeElement;
+            fileNamingOpenSnapshot = {
+                pack: packNameInput?.value || 'loopmaster',
+                descriptor: descriptorInput?.value || ''
+            };
+            packNameInput?.focus();
+        } else if (fileNamingReturnFocus instanceof HTMLElement) {
+            fileNamingReturnFocus.focus();
+            fileNamingReturnFocus = null;
+        }
+    }
+
+    function visibleFileNamingControls() {
+        if (!fileNamingModal) return [];
+        return Array.from(fileNamingModal.querySelectorAll(
+            'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )).filter(control => control.getClientRects().length > 0);
+    }
+
+    btnFileNaming?.addEventListener('click', () => setFileNamingModal(true));
+    btnFileNamingSave?.addEventListener('click', () => {
+        persistAssetPreferences();
+        setFileNamingModal(false);
+    });
+    btnFileNamingCancel?.addEventListener('click', () => {
+        if (fileNamingOpenSnapshot) {
+            if (packNameInput) packNameInput.value = fileNamingOpenSnapshot.pack;
+            if (descriptorInput) descriptorInput.value = fileNamingOpenSnapshot.descriptor;
+        }
+        persistAssetPreferences();
+        setFileNamingModal(false);
+    });
+    fileNamingModal?.addEventListener('click', event => {
+        if (event.target === fileNamingModal) btnFileNamingCancel?.click();
+    });
+    document.addEventListener('keydown', event => {
+        if (!fileNamingModal?.classList.contains('is-visible')) return;
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            btnFileNamingCancel?.click();
+            return;
+        }
+        if (event.key === 'Tab') {
+            const controls = visibleFileNamingControls();
+            if (!controls.length) {
+                event.preventDefault();
+                return;
+            }
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+            }
+        }
+    });
 
     // CSP-safe presentation state.  Dynamic values live in data attributes and
     // are consumed by CSS; code never creates inline style attributes.
@@ -156,18 +269,6 @@
     let totalVariantsToLoad = 0;
     let loadedVariantsCount = 0;
 
-    // Prompt History State
-    let promptHistory = [];
-    try {
-        const savedHistory = localStorage.getItem('loopmaster_prompt_history');
-        if (savedHistory) {
-            promptHistory = JSON.parse(savedHistory);
-        }
-    } catch (e) {
-        console.warn('Failed to load prompt history', e);
-    }
-    let promptHistoryIndex = -1;
-
     // --- Audio Nodes & Metering State ---
     let masterGain = null;
     let masterLimiter = null;
@@ -204,10 +305,9 @@
     let copiedFxSettings = null;
     let copiedTrackSettings = null;
 
-    // --- Init Audio & Prompt State ---
+    // --- Init Audio State ---
     let selectedInitAudio = null; // { trackId, variantIndex, filePath, name }
     let remixMode = 'variation';  // 'variation' | 'inpaint' | 'continuation'
-    let currentKeyOrChord = null; // { type: 'key' | 'chord', value: string }
 
     // --- MIDI State ---
     let midiAccess = null;
@@ -910,12 +1010,6 @@
         }
         updatePlayheads();
 
-        // Sync BPM into the prompt text if it contains a BPM reference
-        const newBpm = bpmInput.value;
-        const current = promptInput.value;
-        if (/\b\d+\s*bpm\b/i.test(current)) {
-            promptInput.value = current.replace(/\b\d+\s*bpm\b/i, newBpm + ' bpm');
-        }
         updateAllTracksTempoSync();
     });
 
@@ -4222,7 +4316,11 @@ function updateTrackLockState(track) {
                         unlocked_indices: unlockedIndices,
                         duration_padding_sec: 2.0,
                         duration: trackDuration,
-                        loop: true
+                        loop: true,
+                        prompt_sections: track.originalParams?.promptSections || {},
+                        negative_prompt: track.originalParams?.negativePrompt || '',
+                        quality_tier: track.originalParams?.qualityTier || 'final',
+                        ...(track.originalParams?.asset || currentAssetPreferences())
                     };
 
                     const res = await fetch('/api/regenerate', {
@@ -6977,664 +7075,32 @@ function updateTrackLockState(track) {
         }
     }
 
-    // --- Random Prompt Generator ---
-    const instruments = [
-        'acoustic guitar', 'electric guitar', 'classical guitar', 'nylon string guitar', 'jazz guitar', 'slide guitar', 'pedal steel guitar',
-        'grand piano', 'upright piano', 'fender rhodes piano', 'wurlitzer piano', 'electric piano', 'toy piano', 'clavinet',
-        'synth lead', 'analog synthesizer', 'modular synthesizer', 'moog synthesizer', 'synth pad', 'fm synthesizer', 'tb-303 acid synth', 'synth bass', 'sub bass',
-        'funky bass guitar', 'fretless bass', 'acoustic double bass', 'slap bass', '808 bass',
-        'saxophone', 'alto saxophone', 'tenor saxophone', 'trumpet', 'trombone', 'french horn', 'brass section',
-        'flute', 'pan flute', 'ocarina', 'clarinet', 'oboe', 'violin', 'viola', 'cello', 'electric violin', 'string ensemble', 'brass ensemble', 'orchestral strings',
-        'drum kit', 'percussion', 'congas', 'bongos', 'djembe', 'cajon', 'handpan', 'hang drum', 'steel tongue drum',
-        'hammond organ', 'hammond b3 organ', 'church organ', 'accordion', 'electric organ',
-        'marimba', 'vibraphone', 'xylophone', 'kalimba', 'steel drums',
-        'classical harp', 'sitar', 'erhu', 'koto', 'tabla', 'dulcimer', 'zither', 'balalaika', 'oud', 'saz', 'bouzouki',
-        'music box', 'celesta', 'glockenspiel', 'glockenspeil', 'harmonica', 'banjo', 'mandolin',
-        'theremin', 'mellotron', 'mellotron flute', 'vocoder', 'hurdy gurdy', 'timpani', 'tubular bells',
-        'cowbell', 'shakers', 'tambourine', 'drum machine', '808 drum machine', '909 drum machine', 'vocal chops', 'vocal chants'
-    ];
+    // --- Structured Prompt Builder & Rolling History ---
+    promptBuilder = PromptBuilder.createPromptBuilder({ storage: localStorage });
 
-    const styles = [
-        'bluesy licks', 'funky riffs', 'jazz improvisation', 'ambient soundscapes',
-        'classical melody runs', 'chillhop beat elements', 'hyperpop sequence loops',
-        'lofi chords', 'synthwave arpeggios', 'psychedelic rock runs',
-        'soulful themes', 'melancholic motifs', 'groovy patterns', 'moody hooks',
-        'cinematic phrases', 'epic crescendo', 'minimal techno patterns',
-        'afrobeat rhythms', 'bossa nova groove', 'reggae skank',
-        'country licks', 'folk fingerpicking', 'R&B progressions',
-        'trap melodies', 'drill patterns', 'vaporwave textures',
-        'IDM glitch sequences', 'breakbeat chops', 'dub delays',
-        'new age atmospheres', 'world music fusion', 'tribal rhythms',
-        'neo-soul harmonies', 'gospel chords', 'progressive rock phrases',
-        'acid bassline', 'dubstep wobble', 'future bass chords', 'ambient drone evolving',
-        'cinematic brass swell', 'orchestral staccato', 'swinging jazz groove', 'rhythmic pluck sequence',
-        'boogie-woogie piano', 'walking bass line', 'reverberant pluck', 'staccato chords',
-        'legato melody', 'pizzicato theme', 'glitchy percussion', 'vinyl crackle ambiance',
-        'spacey arpeggios', 'heavy metal riffs', 'funk slap pattern', 'flamenco rasgueado',
-        'bluegrass roll', 'reggaeton riddim', 'amapiano log drum groove', 'liquid drum and bass roller',
-        'house chord stabs', 'techno rumble bass', 'disco bass octave groove', 'garage 2-step groove',
-        'shoegaze guitar walls', 'ambient guitar swells', 'industrial noise rhythm', 'glitch hop percussion'
-    ];
-
-    const moods = [
-        'euphoric', 'melancholic', 'dreamy', 'dark', 'uplifting', 'peaceful',
-        'aggressive', 'mysterious', 'nostalgic', 'ethereal', 'energetic', 'hypnotic',
-        'spacious', 'intimate', 'epic', 'playful', 'haunting', 'cinematic',
-        'warm', 'cold', 'bright', 'lush', 'gritty', 'smooth', 'moody', 'chill',
-        'vintage', 'futuristic', 'psychedelic', 'soothing', 'suspenseful', 'triumphant',
-        'mystical', 'relaxed', 'sombre', 'reflective', 'pensive', 'cozy', 'serene',
-        'surreal', 'trippy', 'funky', 'soulful', 'laid-back', 'intense', 'spooky'
-    ];
-
-    const productionStyles = [
-        'studio quality', 'lo-fi', 'vintage analog', 'pristine digital',
-        'lush reverb', 'dry close-mic', 'tape saturated', 'modern polished',
-        'textured', '1980s production', 'ambient washed', 'crisp',
-        'high fidelity', 'room reverb', 'cavernous reverb', 'tape flutter',
-        'vinyl crackle', 'bit-crushed lofi', '44.1 kHz stereo', 'well-mixed',
-        'analog warmth', 'tube saturation', 'compressed punch', 'wide stereo image',
-        'subtle tape hiss', 'dead room recording', 'spring reverb', 'plate reverb',
-        'gated reverb', 'stereo delay feedback', 'high-fidelity stereo mix', 'crisp modern master',
-        'tape cassette emulation', 'dusty vinyl rip', 'record crackle', 'tape saturation warmth',
-        'tube preamplifier distortion', 'spring reverb tank', 'dynamic delay slapback',
-        'clean direct input (DI)', 'stereo widening effect', 'bitcrushed texture', 'vintage sampler tone',
-        'well-balanced mix', 'radio edit', 'professional master', 'dry dry close-up', 'binaural recording',
-        'field recording ambiance'
-    ];
-
-    const keys = [
-        'C major', 'C minor', 'C# minor', 'D major', 'D minor', 'Eb major',
-        'E major', 'E minor', 'F major', 'F minor', 'F# minor', 'G major',
-        'G minor', 'Ab major', 'A major', 'A minor', 'Bb major', 'Bb minor',
-        'B major', 'B minor', 'D dorian', 'A dorian', 'E dorian', 'G dorian',
-        'A phrygian', 'E phrygian', 'B phrygian', 'F lydian', 'C lydian', 'G mixolydian',
-        'D mixolydian', 'B locrian', 'A minor pentatonic', 'E minor pentatonic',
-        'C major pentatonic', 'G major pentatonic', 'A blues scale', 'E blues scale',
-        'double harmonic major scale', 'harmonic minor scale', 'melodic minor scale',
-        'acoustic scale', 'whole tone scale', 'octatonic scale', 'gypsy minor scale'
-    ];
-
-    const chords = [
-        'Cmaj7 to Fmaj7 chord progression', 'Am9 to Dm9 chord sequence',
-        'G7 to Cmaj7 jazz turnaround', 'Fmaj7 chord changes',
-        'Emin7 to A7 pattern', 'Bbmaj7 to Ebmaj7 progression',
-        'minor 7th arpeggios', 'major 7th voicings',
-        'ii-V-I jazz progression', 'I-vi-IV-V pop progression',
-        'I-V-vi-IV anthem progression', 'vi-IV-I-V emotional progression',
-        'dim7 chromatic passing chords', 'sus4 resolution patterns',
-        'minor 9th chord stabs', 'major 6/9 voicings',
-        'i-IV dorian progression', 'i-bII phrygian cadence',
-        'I-bVII-IV mixolydian rock progression', 'maj9 to min11 neo-soul chords',
-        'parallel minor 9th slides', 'rootless jazz voicings',
-        'i-VI-III-VII melodic house progression', 'I-bVII-bVI-bVII epic progression',
-        'minor 11th chord stabs', 'dominant 9sus4 chords',
-        'chromatic passing diminished 7th chords', 'minor 7th to major 7th smooth changes',
-        'Andalusian cadence', 'picardy third resolution',
-        'circle of fifths chord progression', 'suspensive suspension resolutions',
-        'Neapolitan chord transitions', 'Bach-style counterpoint progressions',
-        'suspended chord arpeggios', 'open fifth dyads', 'quartal harmony stacks',
-        'drone-based static harmonies', 'morphing pad cluster chords',
-        'major 9th/13th chord swells', 'minor 7b5 chord shapes'
-    ];
-
-    const genres = {
-        electronic: {
-            instruments: ['analog synthesizer', 'modular synthesizer', 'moog synthesizer', 'synth lead', 'synth pad', 'fm synthesizer', 'tb-303 acid synth', 'synth bass', 'sub bass', '808 bass', 'drum machine', '808 drum machine', '909 drum machine', 'vocoder', 'theremin'],
-            styles: ['ambient soundscapes', 'hyperpop sequence loops', 'synthwave arpeggios', 'minimal techno patterns', 'acid bassline', 'dubstep wobble', 'future bass chords', 'ambient drone evolving', 'rhythmic pluck sequence', 'spacey arpeggios', 'liquid drum and bass roller', 'house chord stabs', 'techno rumble bass', 'disco bass octave groove', 'garage 2-step groove', 'industrial noise rhythm', 'glitch hop percussion', 'IDM glitch sequences', 'breakbeat chops', 'dub delays'],
-            productionStyles: ['pristine digital', 'lush reverb', 'modern polished', 'ambient washed', 'bit-crushed lofi', 'wide stereo image', 'stereo delay feedback', 'crisp modern master', 'stereo widening effect', 'bitcrushed texture', 'vintage sampler tone'],
-            moods: ['euphoric', 'dark', 'uplifting', 'hypnotic', 'spacious', 'futuristic', 'psychedelic', 'trippy', 'intense', 'energetic']
-        },
-        acoustic: {
-            instruments: ['acoustic guitar', 'classical guitar', 'nylon string guitar', 'slide guitar', 'pedal steel guitar', 'upright piano', 'acoustic double bass', 'flute', 'violin', 'viola', 'cello', 'cajon', 'handpan', 'hang drum', 'steel tongue drum', 'accordion', 'marimba', 'kalimba', 'classical harp', 'dulcimer', 'zither', 'harmonica', 'banjo', 'mandolin'],
-            styles: ['country licks', 'folk fingerpicking', 'bluegrass roll', 'flamenco rasgueado', 'reverberant pluck', 'staccato chords', 'legato melody', 'pizzicato theme', 'melancholic motifs'],
-            productionStyles: ['dry close-mic', 'room reverb', 'dead room recording', 'clean direct input (DI)', 'binaural recording', 'field recording ambiance', 'high fidelity', 'well-balanced mix'],
-            moods: ['peaceful', 'dreamy', 'nostalgic', 'intimate', 'warm', 'cozy', 'serene', 'sombre', 'reflective', 'pensive', 'relaxed']
-        },
-        jazz: {
-            instruments: ['jazz guitar', 'grand piano', 'fender rhodes piano', 'wurlitzer piano', 'acoustic double bass', 'fretless bass', 'saxophone', 'alto saxophone', 'tenor saxophone', 'trumpet', 'trombone', 'brass section', 'drum kit', 'hammond organ', 'hammond b3 organ', 'vibraphone'],
-            styles: ['jazz improvisation', 'swinging jazz groove', 'walking bass line', 'bluesy licks', 'soulful themes', 'groovy patterns', 'moody hooks'],
-            productionStyles: ['vintage analog', 'tape saturated', 'room reverb', 'analog warmth', 'tube saturation', 'tube preamplifier distortion', 'dusty vinyl rip', 'record crackle'],
-            moods: ['smooth', 'laid-back', 'chill', 'soulful', 'smoky', 'sophisticated', 'warm', 'moody']
-        },
-        classical: {
-            instruments: ['grand piano', 'church organ', 'flute', 'clarinet', 'oboe', 'violin', 'viola', 'cello', 'string ensemble', 'brass ensemble', 'orchestral strings', 'classical harp', 'music box', 'celesta', 'glockenspiel', 'timpani', 'tubular bells'],
-            styles: ['classical melody runs', 'cinematic phrases', 'epic crescendo', 'cinematic brass swell', 'orchestral staccato', 'legato melody', 'pizzicato theme'],
-            productionStyles: ['high fidelity', 'lush reverb', 'room reverb', 'cavernous reverb', '44.1 kHz stereo', 'well-mixed', 'professional master', 'binaural recording'],
-            moods: ['epic', 'cinematic', 'melancholic', 'triumphant', 'suspenseful', 'haunting', 'ethereal', 'mysterious', 'mystical', 'sombre']
-        },
-        urban: {
-            instruments: ['analog synthesizer', 'moog synthesizer', 'synth bass', 'sub bass', 'funky bass guitar', 'slap bass', '808 bass', 'saxophone', 'trumpet', 'brass section', 'drum kit', 'congas', 'bongos', 'djembe', 'hammond b3 organ', 'clavinet', 'electric organ', 'steel drums', 'vocoder', 'drum machine', '808 drum machine', '909 drum machine', 'vocal chops', 'vocal chants'],
-            styles: ['chillhop beat elements', 'lofi chords', 'soulful themes', 'groovy patterns', 'moody hooks', 'afrobeat rhythms', 'bossa nova groove', 'reggae skank', 'R&B progressions', 'trap melodies', 'drill patterns', 'funk slap pattern', 'reggaeton riddim', 'amapiano log drum groove', 'disco bass octave groove', 'garage 2-step groove', 'glitch hop percussion', 'gospel chords', 'neo-soul harmonies'],
-            productionStyles: ['lo-fi', 'vintage analog', 'tape saturated', 'tape flutter', 'vinyl crackle', 'tape cassette emulation', 'dusty vinyl rip', 'record crackle', 'tape saturation warmth', 'vintage sampler tone'],
-            moods: ['chill', 'gritty', 'soulful', 'laid-back', 'intense', 'funky', 'moody', 'nostalgic', 'dreamy']
-        }
-    };
-
-    function updateRandomInKeyButton(value) {
-        if (!btnRandomInKey) return;
-        btnRandomInKey.title = `Generate Random Prompt in ${value}`;
-        btnRandomInKey.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3M15.5 7.5L14 9"/></svg>';
-        btnRandomInKey.appendChild(document.createTextNode(value));
-    }
-
-    function detectGenre(prompt) {
-        if (!prompt) return 'electronic';
-        const lowercasePrompt = prompt.toLowerCase();
-        let scores = { electronic: 0, acoustic: 0, jazz: 0, classical: 0, urban: 0 };
-        for (const genreKey of Object.keys(genres)) {
-            const genre = genres[genreKey];
-            for (const inst of genre.instruments) {
-                if (lowercasePrompt.includes(inst.toLowerCase())) scores[genreKey] += 3;
-            }
-            for (const style of genre.styles) {
-                if (lowercasePrompt.includes(style.toLowerCase())) scores[genreKey] += 2;
-            }
-            for (const mood of genre.moods) {
-                if (lowercasePrompt.includes(mood.toLowerCase())) scores[genreKey] += 1;
-            }
-            for (const prod of genre.productionStyles) {
-                if (lowercasePrompt.includes(prod.toLowerCase())) scores[genreKey] += 1;
-            }
-        }
-        let maxScore = -1;
-        let detectedGenre = 'electronic';
-        for (const genreKey of Object.keys(scores)) {
-            if (scores[genreKey] > maxScore) {
-                maxScore = scores[genreKey];
-                detectedGenre = genreKey;
-            }
-        }
-        return maxScore > 0 ? detectedGenre : 'electronic';
-    }
-
-    function generateRandomPrompt(keepKey = false) {
-        const isPureRandom = Math.random() < 0.25;
-        let inst, style, mood, prod;
-
-        if (isPureRandom) {
-            inst = instruments[Math.floor(Math.random() * instruments.length)];
-            style = styles[Math.floor(Math.random() * styles.length)];
-            mood = moods[Math.floor(Math.random() * moods.length)];
-            prod = productionStyles[Math.floor(Math.random() * productionStyles.length)];
-        } else {
-            const genreKeys = Object.keys(genres);
-            const selectedGenreKey = genreKeys[Math.floor(Math.random() * genreKeys.length)];
-            const genre = genres[selectedGenreKey];
-            inst = genre.instruments[Math.floor(Math.random() * genre.instruments.length)];
-            style = genre.styles[Math.floor(Math.random() * genre.styles.length)];
-            mood = genre.moods[Math.floor(Math.random() * genre.moods.length)];
-            prod = genre.productionStyles[Math.floor(Math.random() * genre.productionStyles.length)];
-        }
-
-        if (!keepKey || !currentKeyOrChord) {
-            if (Math.random() < 0.5) {
-                const key = keys[Math.floor(Math.random() * keys.length)];
-                currentKeyOrChord = { type: 'key', value: key };
-            } else {
-                const chord = chords[Math.floor(Math.random() * chords.length)];
-                currentKeyOrChord = { type: 'chord', value: chord };
-            }
-        }
-
-        let generated = "";
-        if (currentKeyOrChord.type === 'key') {
-            generated = `${mood} ${inst} ${style} in ${currentKeyOrChord.value}`;
-        } else {
-            generated = `${mood} ${inst} ${style} playing ${currentKeyOrChord.value}`;
-        }
-
-        // Occasionally add production style
-        if (Math.random() < 0.3) {
-            generated += `, ${prod}`;
-        }
-
-        updateRandomInKeyButton(currentKeyOrChord.value);
-
-        promptInput.value = generated;
-        promptInput.focus();
-    }
-
-    if (btnRandomPrompt) {
-        btnRandomPrompt.addEventListener('click', () => {
-            generateRandomPrompt(false);
-        });
-    }
-
-    if (btnRandomInKey) {
-        btnRandomInKey.addEventListener('click', () => {
-            generateRandomPrompt(true);
-        });
-    }
-
-    function changeChordOnly() {
-        if (Math.random() < 0.5) {
-            const key = keys[Math.floor(Math.random() * keys.length)];
-            currentKeyOrChord = { type: 'key', value: key };
-        } else {
-            const chord = chords[Math.floor(Math.random() * chords.length)];
-            currentKeyOrChord = { type: 'chord', value: chord };
-        }
-
-        const currentPrompt = promptInput.value.trim();
-        updateRandomInKeyButton(currentKeyOrChord.value);
-
-        let newPrompt = currentPrompt;
-        const inRegex = /\bin\s+([A-Ga-g][#b]?(?:\s+[a-zA-Z0-9#\/\-\+]+)*)/i;
-        const playingRegex = /\bplaying\s+([^,]+)/i;
-
-        const newVal = currentKeyOrChord.value;
-        const transitionWord = currentKeyOrChord.type === 'key' ? 'in' : 'playing';
-
-        if (inRegex.test(currentPrompt)) {
-            newPrompt = currentPrompt.replace(inRegex, `${transitionWord} ${newVal}`);
-        } else if (playingRegex.test(currentPrompt)) {
-            newPrompt = currentPrompt.replace(playingRegex, `${transitionWord} ${newVal}`);
-        } else {
-            generateRandomPrompt(true);
-            return;
-        }
-
-        promptInput.value = newPrompt;
-        promptInput.focus();
-    }
-
-    function findInstrumentInPrompt(prompt, poolToSearch) {
-        let searchList = [...poolToSearch];
-        ['drums', 'bass', 'lead'].forEach(item => {
-            if (!searchList.some(x => x.toLowerCase() === item)) {
-                searchList.push(item);
-            }
-        });
-        searchList.sort((a, b) => b.length - a.length);
-
-        const lowercasePrompt = prompt.toLowerCase();
-        for (const inst of searchList) {
-            const escaped = inst.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-            if (regex.test(lowercasePrompt)) {
-                return inst;
-            }
-        }
-        return null;
-    }
-
-    function changeStyleOnly() {
-        const currentPrompt = promptInput.value.trim();
-        const isPureRandom = Math.random() < 0.25;
-
-        let newStyle, genreInstruments, genreMoods;
-        if (isPureRandom) {
-            newStyle = styles[Math.floor(Math.random() * styles.length)];
-            genreInstruments = instruments;
-            genreMoods = moods;
-        } else {
-            const genreKey = detectGenre(currentPrompt);
-            const genre = genres[genreKey];
-            newStyle = genre.styles[Math.floor(Math.random() * genre.styles.length)];
-            genreInstruments = genre.instruments;
-            genreMoods = genre.moods;
-        }
-
-        let matchedInstrument = findInstrumentInPrompt(currentPrompt, genreInstruments);
-        if (!matchedInstrument && !isPureRandom) {
-            matchedInstrument = findInstrumentInPrompt(currentPrompt, instruments);
-        }
-
-        const inMatch = currentPrompt.match(/\bin\s+/i);
-        const playingMatch = currentPrompt.match(/\bplaying\s+/i);
-        const markerMatch = inMatch || playingMatch;
-
-        if (matchedInstrument && markerMatch) {
-            const instEscaped = matchedInstrument.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            const regex = new RegExp(`(\\b${instEscaped}\\b\\s+)(.*?\\s+)(in|playing\\b)`, 'i');
-
-            if (regex.test(currentPrompt)) {
-                const newPrompt = currentPrompt.replace(regex, `$1${newStyle} $3`);
-                promptInput.value = newPrompt;
-                promptInput.focus();
-                return;
-            }
-        }
-
-        const inst = matchedInstrument || genreInstruments[Math.floor(Math.random() * genreInstruments.length)];
-        const mood = genreMoods[Math.floor(Math.random() * genreMoods.length)];
-        if (!currentKeyOrChord) {
-            const key = keys[Math.floor(Math.random() * keys.length)];
-            currentKeyOrChord = { type: 'key', value: key };
-        }
-
-        const transitionWord = currentKeyOrChord.type === 'key' ? 'in' : 'playing';
-        let generated = `${mood} ${inst} ${newStyle} ${transitionWord} ${currentKeyOrChord.value}`;
-
-        promptInput.value = generated;
-        promptInput.focus();
-    }
-
-    function changeInstrumentOnly() {
-        const currentPrompt = promptInput.value.trim();
-        const isPureRandom = Math.random() < 0.25;
-
-        let matchedInstrument = null;
-        let pool = instruments;
-        let genreMoods = moods;
-        let genreStyles = styles;
-
-        if (isPureRandom) {
-            matchedInstrument = findInstrumentInPrompt(currentPrompt, instruments);
-            pool = instruments;
-        } else {
-            const genreKey = detectGenre(currentPrompt);
-            const genre = genres[genreKey];
-            matchedInstrument = findInstrumentInPrompt(currentPrompt, genre.instruments);
-            if (!matchedInstrument) {
-                matchedInstrument = findInstrumentInPrompt(currentPrompt, instruments);
-            }
-            pool = genre.instruments;
-            genreMoods = genre.moods;
-            genreStyles = genre.styles;
-        }
-
-        let excluded = [];
-        if (matchedInstrument) {
-            excluded.push(matchedInstrument.toLowerCase());
-            if (matchedInstrument.toLowerCase() === 'glockenspiel' || matchedInstrument.toLowerCase() === 'glockenspeil') {
-                excluded.push('glockenspiel', 'glockenspeil');
-            }
-        }
-
-        const filteredInstruments = pool.filter(inst => !excluded.includes(inst.toLowerCase()));
-        const finalPool = filteredInstruments.length > 0 ? filteredInstruments : pool;
-        const newInstrument = finalPool[Math.floor(Math.random() * finalPool.length)];
-
-        if (matchedInstrument) {
-            const regex = new RegExp(`\\b${matchedInstrument.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
-            const newPrompt = currentPrompt.replace(regex, newInstrument);
-            promptInput.value = newPrompt;
-            promptInput.focus();
-            return;
-        }
-
-        const mood = genreMoods[Math.floor(Math.random() * genreMoods.length)];
-        const style = genreStyles[Math.floor(Math.random() * genreStyles.length)];
-        if (!currentKeyOrChord) {
-            const key = keys[Math.floor(Math.random() * keys.length)];
-            currentKeyOrChord = { type: 'key', value: key };
-        }
-        const transitionWord = currentKeyOrChord.type === 'key' ? 'in' : 'playing';
-        const generated = `${mood} ${newInstrument} ${style} ${transitionWord} ${currentKeyOrChord.value}`;
-
-        promptInput.value = generated;
-        promptInput.focus();
-    }
-
-    function changeMoodOnly() {
-        const currentPrompt = promptInput.value.trim();
-        const isPureRandom = Math.random() < 0.25;
-
-        let genreMoods = moods;
-        if (!isPureRandom) {
-            const genreKey = detectGenre(currentPrompt);
-            const genre = genres[genreKey];
-            genreMoods = genre.moods;
-        }
-
-        let matchedMood = null;
-        const sortedMoods = [...moods].sort((a, b) => b.length - a.length);
-        for (const mood of sortedMoods) {
-            const regex = new RegExp(`\\b${mood}\\b`, 'i');
-            if (regex.test(currentPrompt)) {
-                matchedMood = mood;
-                break;
-            }
-        }
-
-        const excluded = matchedMood ? [matchedMood.toLowerCase()] : [];
-        const filteredMoods = genreMoods.filter(m => !excluded.includes(m.toLowerCase()));
-        const finalPool = filteredMoods.length > 0 ? filteredMoods : genreMoods;
-        const newMood = finalPool[Math.floor(Math.random() * finalPool.length)];
-
-        if (matchedMood) {
-            const escaped = matchedMood.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-            const newPrompt = currentPrompt.replace(regex, newMood);
-            promptInput.value = newPrompt;
-            promptInput.focus();
-            return;
-        }
-
-        if (currentPrompt.length === 0) {
-            promptInput.value = newMood;
-        } else {
-            promptInput.value = `${newMood} ${currentPrompt}`;
-        }
-        promptInput.focus();
-    }
-
-    function changeAccentOnly() {
-        const currentPrompt = promptInput.value.trim();
-        const isPureRandom = Math.random() < 0.25;
-
-        let newProd;
-        if (isPureRandom) {
-            newProd = productionStyles[Math.floor(Math.random() * productionStyles.length)];
-        } else {
-            const genreKey = detectGenre(currentPrompt);
-            const genre = genres[genreKey];
-            newProd = genre.productionStyles[Math.floor(Math.random() * genre.productionStyles.length)];
-        }
-
-        let newPrompt = currentPrompt;
-        if (currentPrompt.includes(',')) {
-            const lastCommaIdx = currentPrompt.lastIndexOf(',');
-            newPrompt = currentPrompt.substring(0, lastCommaIdx) + `, ${newProd}`;
-        } else {
-            newPrompt = currentPrompt + `, ${newProd}`;
-        }
-
-        promptInput.value = newPrompt;
-        promptInput.focus();
-    }
-
-    if (btnChangeChord) {
-        btnChangeChord.addEventListener('click', changeChordOnly);
-    }
-
-    if (btnChangeMood) {
-        btnChangeMood.addEventListener('click', changeMoodOnly);
-    }
-
-    if (btnChangeStyle) {
-        btnChangeStyle.addEventListener('click', changeStyleOnly);
-    }
-
-    if (btnChangeInstrument) {
-        btnChangeInstrument.addEventListener('click', changeInstrumentOnly);
-    }
-
-    if (btnChangeAccent) {
-        btnChangeAccent.addEventListener('click', changeAccentOnly);
-    }
-
-    // --- Random Drum Loop Generator ---
-    const drumGenres = [
-        'trap', 'boom bap', 'lo-fi hip hop', 'drill', 'jungle', 'breakbeat',
-        'house', 'deep house', 'tech house', 'techno', 'minimal techno',
-        'drum and bass', 'liquid drum and bass', 'UK garage', 'afrobeat',
-        'reggaeton', 'jazz', 'funk', 'rock', 'metal', 'pop', 'R&B', 'disco',
-        'footwork', 'juke', 'dancehall', 'amapiano', 'baile funk',
-        'industrial', 'electro', 'IDM', 'grime'
-    ];
-
-    const drumDescriptors = [
-        'hard-hitting', 'crispy', 'punchy', 'tight', 'bouncy', 'swinging',
-        'aggressive', 'laid-back', 'groovy', 'minimal', 'complex', 'syncopated',
-        'live acoustic', 'processed 808', 'vintage drum machine', 'sampled breaks',
-        'shuffled', 'polyrhythmic', 'rolling', 'glitchy',
-        'lo-fi dusty', 'compressed', 'thundering', 'hypnotic'
-    ];
-
-    const drumElements = [
-        '', ', heavy kick', ', crispy snare', ', shaker groove',
-        ', hi-hat rolls', ', open hat patterns', ', tom fills',
-        ', clap layers', ', rim shots', ', cowbell accents'
-    ];
-
-    function generateRandomDrumPrompt() {
-        const genre = drumGenres[Math.floor(Math.random() * drumGenres.length)];
-        const desc = drumDescriptors[Math.floor(Math.random() * drumDescriptors.length)];
-        const elem = drumElements[Math.floor(Math.random() * drumElements.length)];
-        const bpm = parseInt(bpmInput.value) || 120;
-        promptInput.value = `${desc} ${genre} drum loop at ${bpm} bpm${elem}`;
-        promptInput.focus();
-    }
-
-    if (btnRandomDrums) {
-        btnRandomDrums.addEventListener('click', () => {
-            generateRandomDrumPrompt();
-        });
-    }
-
-    // --- Random Bass Prompt Generator ---
-    const bassStyles = [
-        'bass line', 'bass sequence', 'live bass', 'slap bass', 'synth bass',
-        'funky bass', 'choppy bass', 'dubstep wobble bass', 'wobble bass',
-        'sub bass', 'acid bass', 'fingerstyle bass', 'picked bass',
-        'fretless bass', 'moog bass', 'reese bass', 'plucky bass',
-        'distorted bass', '808 bass', 'deep house bass', 'walking bass',
-        'funk bass riff', 'dub bass', 'neuro bass', 'rubber bass',
-        'thumping bass', 'groovy bass', 'minimal bass', 'pulsing bass',
-        'staccato bass', 'legato bass', 'gliding bass', 'portamento bass',
-        'FM bass', 'wavetable bass', 'detuned bass', 'growling bass',
-        'garage bass', 'liquid bass', 'electro bass', 'trance bass',
-        'midrange bass', 'rolling bass', 'square bass', 'filtered bass',
-        'sidechain bass', 'tape bass', 'analog bass', 'digital bass'
-    ];
-
-    const bassDescriptors = [
-        'deep', 'punchy', 'warm', 'aggressive', 'smooth', 'gritty',
-        'fat', 'tight', 'bouncy', 'heavy', 'mellow', 'driving',
-        'hypnotic', 'rolling', 'dirty', 'clean', 'saturated', 'crispy',
-        'dark', 'rumbling', 'throbbing', 'squelchy', 'wobbly', 'massive',
-        'round', 'buzzing', 'distorted', 'compressed'
-    ];
-
-    function generateRandomBassPrompt() {
-        const style = bassStyles[Math.floor(Math.random() * bassStyles.length)];
-        const desc = bassDescriptors[Math.floor(Math.random() * bassDescriptors.length)];
-        const bpm = parseInt(bpmInput.value) || 120;
-
-        // Use current key if available
-        let keyPart = '';
-        if (currentKeyOrChord) {
-            if (currentKeyOrChord.type === 'key') {
-                keyPart = ` in ${currentKeyOrChord.value}`;
-            } else {
-                keyPart = ` playing ${currentKeyOrChord.value}`;
-            }
-        } else {
-            const key = keys[Math.floor(Math.random() * keys.length)];
-            currentKeyOrChord = { type: 'key', value: key };
-            keyPart = ` in ${key}`;
-        }
-
-        promptInput.value = `${desc} ${style}${keyPart} at ${bpm} bpm`;
-        promptInput.focus();
-    }
-
-    if (btnRandomBass) {
-        btnRandomBass.addEventListener('click', () => {
-            generateRandomBassPrompt();
-        });
-    }
-
-    // --- Random Lead Prompt Generator ---
-    const leadStyles = [
-        'synth lead', 'lead melody', 'lead riff', 'arpeggio lead', 'pluck lead',
-        'pad lead', 'supersaw lead', 'square wave lead', 'sawtooth lead',
-        'FM synth lead', 'bell lead', 'brass lead', 'string lead',
-        'vocal chop lead', 'glitch lead', 'chip tune lead', 'theremin lead',
-        'whistle melody', 'flute lead', 'electric guitar lead',
-        'organ lead', 'marimba lead', 'kalimba melody', 'steel drum lead',
-        'sitar lead', 'erhu melody', 'pizzicato lead', 'harp arpeggio',
-        'music box melody', 'glass lead', 'crystal lead', 'ethereal lead',
-        'acid lead', 'hoover lead', 'trance lead', 'progressive lead',
-        'formant lead', 'vocoder melody', 'granular lead', 'wavetable lead',
-        'PWM lead', 'unison lead', 'portamento lead', 'stab lead',
-        'ambient lead', 'tape loop melody', 'processed piano melody', 'delay-soaked lead'
-    ];
-
-    const leadDescriptors = [
-        'soaring', 'bright', 'dreamy', 'euphoric', 'melancholic', 'energetic',
-        'ambient', 'sharp', 'shimmering', 'lush', 'epic', 'catchy',
-        'hypnotic', 'playful', 'dark', 'ethereal', 'punchy', 'airy',
-        'nostalgic', 'cinematic', 'pulsing', 'gliding',
-        'haunting', 'mystical', 'crystalline', 'warm', 'icy', 'psychedelic',
-        'distorted', 'clean', 'reverb-drenched', 'intimate'
-    ];
-
-    function generateRandomLeadPrompt() {
-        const style = leadStyles[Math.floor(Math.random() * leadStyles.length)];
-        const desc = leadDescriptors[Math.floor(Math.random() * leadDescriptors.length)];
-        const bpm = parseInt(bpmInput.value) || 120;
-
-        let keyPart = '';
-        if (currentKeyOrChord) {
-            if (currentKeyOrChord.type === 'key') {
-                keyPart = ` in ${currentKeyOrChord.value}`;
-            } else {
-                keyPart = ` playing ${currentKeyOrChord.value}`;
-            }
-        } else {
-            const key = keys[Math.floor(Math.random() * keys.length)];
-            currentKeyOrChord = { type: 'key', value: key };
-            keyPart = ` in ${key}`;
-        }
-
-        promptInput.value = `${desc} ${style}${keyPart} at ${bpm} bpm`;
-        promptInput.focus();
-    }
-
-    if (btnRandomLead) {
-        btnRandomLead.addEventListener('click', () => {
-            generateRandomLeadPrompt();
-        });
-    }
-
-    // --- History ---
-    function addToHistory(prompt) {
-        if (!prompt) return;
-        if (promptHistory.length > 0 && promptHistory[0] === prompt) {
-            return;
-        }
-        promptHistory.unshift(prompt);
-        if (promptHistory.length > 10) {
-            promptHistory.pop();
-        }
-        promptHistoryIndex = -1;
+    async function submitCurrentGeneration(options = {}) {
         try {
-            localStorage.setItem('loopmaster_prompt_history', JSON.stringify(promptHistory));
-        } catch (e) {
-            console.warn('Failed to save prompt history', e);
+            await promptBuilder.ready;
+        } catch (_error) {
+            showStatus('Prompt builder is unavailable.', 'error');
+            return;
         }
-    }
-
-    if (btnPromptHistory) {
-        btnPromptHistory.addEventListener('click', () => {
-            if (promptHistory.length === 0) return;
-            promptHistoryIndex = (promptHistoryIndex + 1) % promptHistory.length;
-            promptInput.value = promptHistory[promptHistoryIndex];
-            promptInput.focus();
+        const prompt = promptBuilder.currentPrompt();
+        if (!prompt) {
+            showStatus('Choose at least one prompt section before generating.', 'error');
+            return;
+        }
+        const historyEntry = promptBuilder.createHistoryEntry('pending', null);
+        await runGeneration(prompt, {
+            ...options,
+            historyEntryId: historyEntry.id,
+            selections: historyEntry.selections
         });
     }
 
-    // --- Generation ---
-    btnGenerate.addEventListener('click', () => {
-        const prompt = promptInput.value.trim();
-        if (!prompt) { promptInput.focus(); return; }
-        addToHistory(prompt);
-        runGeneration(prompt);
-    });
-
+    btnGenerate.addEventListener('click', () => submitCurrentGeneration());
+    promptBuilder.setOnEnter(() => btnGenerate.click());
+    promptBuilder.setOnResend(() => submitCurrentGeneration());
     // --- Kit Builder ---
     const kitPanel = document.getElementById('kit-builder-panel');
     const btnKitToggle = document.getElementById('btn-kit-toggle');
@@ -7774,8 +7240,13 @@ function updateTrackLockState(track) {
             zip.file('kit.json', JSON.stringify(kit.manifest, null, 2));
             for (const entry of kit.manifest.entries) {
                 const res = await fetch(`/outputs/${kit.dir}/${entry.file}`);
-                if (!res.ok) continue;
+                if (!res.ok) throw new Error(`Missing kit audio: ${entry.file}`);
                 zip.file(entry.file, await res.blob());
+                const metadataFile = entry.metadataFile || entry.metadata;
+                if (!metadataFile) throw new Error(`Missing metadata reference for ${entry.file}`);
+                const metadataResponse = await fetch(`/outputs/${kit.dir}/${metadataFile}`);
+                if (!metadataResponse.ok) throw new Error(`Missing metadata sidecar: ${metadataFile}`);
+                zip.file(metadataFile, await metadataResponse.text());
             }
             const blob = await zip.generateAsync({ type: 'blob' });
             const url = URL.createObjectURL(blob);
@@ -7831,7 +7302,15 @@ function updateTrackLockState(track) {
             const { job_id } = await res.json();
             const result = await pollJob(job_id);
             if (result.status !== 'done' || !result.kit) throw new Error(result.error || 'Kit build failed');
-            showStatus(`Kit done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
+            const partialErrorCount = Array.isArray(result.partial_errors)
+                ? result.partial_errors.length
+                : 0;
+            showStatus(
+                partialErrorCount
+                    ? `Kit done in ${result.elapsed?.toFixed(1) || '?'}s with ${partialErrorCount} skipped output${partialErrorCount === 1 ? '' : 's'}.`
+                    : `Kit done in ${result.elapsed?.toFixed(1) || '?'}s`,
+                partialErrorCount ? 'error' : 'done'
+            );
             renderKitResults(result.kit);
         } catch (err) {
             if (err?.name !== 'GenerationCancelledError') {
@@ -7856,15 +7335,11 @@ function updateTrackLockState(track) {
     Object.entries(SLICER_FEED_PRESETS).forEach(([id, presetPrompt]) => {
         const btn = document.getElementById(id);
         if (!btn) return;
-        btn.addEventListener('click', () => {
-            promptInput.value = presetPrompt;
-            addToHistory(presetPrompt);
-            runGeneration(presetPrompt, { sliceable: true });
+        btn.addEventListener('click', async () => {
+            await promptBuilder.ready;
+            promptBuilder.restoreLegacyPrompt(presetPrompt);
+            submitCurrentGeneration({ sliceable: true });
         });
-    });
-
-    promptInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); btnGenerate.click(); }
     });
 
     async function runGeneration(prompt, options = {}) {
@@ -7874,9 +7349,11 @@ function updateTrackLockState(track) {
         const seedInput = document.getElementById('seed-input');
         const cfgInput = document.getElementById('cfg-input');
         const stepsInput = document.getElementById('steps-input');
+        const tierInput = document.getElementById('generation-tier');
         const seed = seedInput ? parseInt(seedInput.value) : -1;
         const cfgScale = cfgInput ? parseFloat(cfgInput.value) : 1.0;
         const steps = stepsInput ? parseInt(stepsInput.value) : 8;
+        const qualityTier = tierInput ? tierInput.value : 'draft';
 
         btnGenerate.disabled = true;
         btnGenerate.classList.add('is-generating');
@@ -7884,6 +7361,8 @@ function updateTrackLockState(track) {
         showStatus('Submitting…');
 
         try {
+            const serverPromptSections = { ...(options.selections || {}) };
+            const assetPreferences = currentAssetPreferences();
             const bodyPayload = {
                 prompt,
                 bpm,
@@ -7893,7 +7372,11 @@ function updateTrackLockState(track) {
                 seed,
                 cfg_scale: cfgScale,
                 steps,
-                sliceable: !!options.sliceable
+                quality_tier: qualityTier,
+                prompt_sections: serverPromptSections,
+                negative_prompt: promptBuilder.currentNegativePrompt(),
+                sliceable: !!options.sliceable,
+                ...assetPreferences
             };
             let parentTrackId = null;
             if (selectedInitAudio) {
@@ -7930,13 +7413,23 @@ function updateTrackLockState(track) {
             }
 
             const { job_id } = await res.json();
+            if (options.historyEntryId) {
+                promptBuilder.updateGeneration(options.historyEntryId, 'pending', { jobId: job_id });
+            }
             setGenerationCancelState(job_id);
             showStatus('Submitting generation...');
 
             const result = await pollJob(job_id);
             if (result.status !== 'done') throw new Error(result.error || 'Failed');
 
-            showStatus(`Done in ${result.elapsed?.toFixed(1) || '?'}s`, 'done');
+            const successfulFiles = (result.files || []).filter(Boolean);
+            const partialErrorCount = (result.partial_errors || []).length;
+            showStatus(
+                partialErrorCount
+                    ? `Done with ${successfulFiles.length} result(s); ${partialErrorCount} variant(s) failed.`
+                    : `Done in ${result.elapsed?.toFixed(1) || '?'}s`,
+                partialErrorCount ? 'error' : 'done'
+            );
             const originalParams = {
                 prompt,
                 bpm,
@@ -7950,13 +7443,32 @@ function updateTrackLockState(track) {
                 inpaintStart: selectedInitAudio && remixMode === 'inpaint' ? bodyPayload.inpaint_start : null,
                 inpaintEnd: selectedInitAudio && remixMode === 'inpaint' ? bodyPayload.inpaint_end : null,
                 continueStart: selectedInitAudio && remixMode === 'continuation' ? bodyPayload.continue_start : null,
-                parentTrackId: parentTrackId
+                parentTrackId: parentTrackId,
+                promptSections: serverPromptSections,
+                negativePrompt: bodyPayload.negative_prompt,
+                qualityTier,
+                asset: assetPreferences
             };
-            addTrackRow(result.files, prompt, result.track_num, true, parentTrackId, originalParams);
+            addTrackRow(successfulFiles, prompt, result.track_num, true, parentTrackId, originalParams);
+            if (options.historyEntryId) {
+                promptBuilder.updateGeneration(options.historyEntryId, 'complete', {
+                    jobId: job_id,
+                    files: result.files,
+                    metadataFiles: result.metadata_files || [],
+                    trackNum: result.track_num,
+                    partialErrors: result.partial_errors || []
+                });
+            }
             clearInitAudio();
 
         } catch (err) {
             if (err.name !== 'GenerationCancelledError') console.error('Generation error:', err);
+            if (options.historyEntryId) {
+                promptBuilder.updateGeneration(options.historyEntryId, 'failed', {
+                    error: err.message,
+                    cancelled: err.name === 'GenerationCancelledError'
+                });
+            }
             showStatus(err.name === 'GenerationCancelledError' ? 'Queued generation cancelled.' : `Error: ${err.message}`, err.name === 'GenerationCancelledError' ? 'done' : 'error');
         } finally {
             setGenerationCancelState(null);
@@ -8000,7 +7512,11 @@ function updateTrackLockState(track) {
                 duration: targetDuration,
                 init_audio_path: variant.filePath,
                 remix_mode: 'continuation',
-                continue_start: parentDuration
+                continue_start: parentDuration,
+                prompt_sections: originalParams.promptSections || {},
+                negative_prompt: originalParams.negativePrompt || '',
+                quality_tier: originalParams.qualityTier || 'final',
+                ...(originalParams.asset || currentAssetPreferences())
             };
 
             const res = await fetch('/api/generate', {
@@ -8033,7 +7549,11 @@ function updateTrackLockState(track) {
                 remixMode: 'continuation',
                 invertTiming: false,
                 continueStart: parentDuration,
-                parentTrackId: track.id
+                parentTrackId: track.id,
+                promptSections: originalParams.promptSections || {},
+                negativePrompt: originalParams.negativePrompt || '',
+                qualityTier: originalParams.qualityTier || 'final',
+                asset: originalParams.asset || currentAssetPreferences()
             };
 
             addTrackRow(result.files, prompt, result.track_num, true, track.id, outpaintParams);
@@ -8109,7 +7629,11 @@ function updateTrackLockState(track) {
                 duration: 960.0 / bpmVal,
                 remixMode: null,
                 invertTiming: false,
-                parentTrackId: parentTrackId
+                parentTrackId: parentTrackId,
+                promptSections: {},
+                negativePrompt: '',
+                qualityTier: 'final',
+                asset: currentAssetPreferences()
             };
         }
 
@@ -8511,7 +8035,7 @@ function updateTrackLockState(track) {
 
         // Restore the original prompt from the track that generated this audio
         if (track.prompt) {
-            promptInput.value = track.prompt;
+            promptBuilder.ready.then(() => promptBuilder.restoreLegacyPrompt(track.prompt));
         }
     }
 
@@ -8620,81 +8144,7 @@ function updateTrackLockState(track) {
     // WAV: no tempo, no loop flag, no beat markers. Anything downloaded from
     // here lands in a DAW as an untagged one-shot.
     function buildAcidMetadata(bpm, durationSec, sampleRate, loop) {
-        const beatCount = (bpm > 0 && durationSec > 0)
-            ? Math.round(durationSec * bpm / 60)
-            : 0;
-
-        // 'acid' chunk: 8-byte header + 24-byte payload
-        const acid = new ArrayBuffer(32);
-        const av = new DataView(acid);
-        av.setUint32(0, 0x64696361, true);            // "acid"
-        av.setUint32(4, 24, true);
-        av.setUint32(8, loop ? 1 : 0, true);          // 1 = loop, 0 = one-shot
-        av.setUint16(12, 0xFFFF, true);               // root note: ignore / don't transpose
-        av.setUint16(14, 0, true);                    // reserved
-        av.setInt32(16, loop ? beatCount : 0, true);
-        av.setFloat32(20, 4.0, true);                 // meter numerator
-        av.setFloat32(24, 4.0, true);                 // meter denominator
-        av.setFloat32(28, bpm, true);
-        const parts = [new Uint8Array(acid)];
-
-        if (loop && beatCount > 0) {
-            const samplesPerBeat = (60 / bpm) * sampleRate;
-            const n = beatCount + 1;                  // one per beat, plus an end marker
-
-            // 'cue ' chunk: 24 bytes per cue point
-            const cue = new ArrayBuffer(12 + 24 * n);
-            const cv = new DataView(cue);
-            cv.setUint32(0, 0x20657563, true);        // "cue "
-            cv.setUint32(4, 4 + 24 * n, true);
-            cv.setUint32(8, n, true);
-            const labels = [];
-            for (let k = 0; k < n; k++) {
-                const pos = Math.round(k * samplesPerBeat);
-                const base = 12 + k * 24;
-                cv.setUint32(base, k + 1, true);      // cue id
-                cv.setUint32(base + 4, pos, true);    // play order position
-                cv.setUint32(base + 8, 0x61746164, true); // "data"
-                cv.setUint32(base + 12, 0, true);     // chunk start
-                cv.setUint32(base + 16, 0, true);     // block start
-                cv.setUint32(base + 20, pos, true);   // sample offset
-                labels.push([k + 1, k < beatCount ? `Beat ${k + 1}` : 'End']);
-            }
-            parts.push(new Uint8Array(cue));
-
-            // LIST/adtl chunk of 'labl' sub-chunks naming each cue
-            const enc = new TextEncoder();
-            const subs = labels.map(([id, text]) => {
-                let name = enc.encode(text + '\0');
-                if (name.length % 2 !== 0) {
-                    const padded = new Uint8Array(name.length + 1);
-                    padded.set(name);
-                    name = padded;
-                }
-                const sub = new ArrayBuffer(12 + name.length);
-                const sv = new DataView(sub);
-                sv.setUint32(0, 0x6c62616c, true);    // "labl"
-                sv.setUint32(4, 4 + name.length, true);
-                sv.setUint32(8, id, true);
-                new Uint8Array(sub).set(name, 12);
-                return new Uint8Array(sub);
-            });
-            const subsLen = subs.reduce((total, s) => total + s.length, 0);
-            const list = new Uint8Array(12 + subsLen);
-            const lv = new DataView(list.buffer);
-            lv.setUint32(0, 0x5453494c, true);        // "LIST"
-            lv.setUint32(4, 4 + subsLen, true);
-            lv.setUint32(8, 0x6c746461, true);        // "adtl"
-            let at = 12;
-            subs.forEach(s => { list.set(s, at); at += s.length; });
-            parts.push(list);
-        }
-
-        const total = parts.reduce((sum, p) => sum + p.length, 0);
-        const out = new Uint8Array(total % 2 === 0 ? total : total + 1);
-        let at = 0;
-        parts.forEach(p => { out.set(p, at); at += p.length; });
-        return out;
+        return WavMetadataCore.buildAcidMetadata(bpm, durationSec, sampleRate, loop);
     }
 
     function bufferToWav(buffer, meta) {
@@ -9381,7 +8831,9 @@ function updateTrackLockState(track) {
             }
 
             const renderedBuffer = await offlineCtx.startRendering();
-            const wavBlob = bufferToWav(renderedBuffer, { bpm, loop: true });
+            // This mix contains a five-second effect tail, so it is deliberately
+            // tagged as a one-shot rather than falsely claiming a seamless loop.
+            const wavBlob = bufferToWav(renderedBuffer, { bpm, loop: false });
 
             let downloadBlob = wavBlob;
             let downloadFilename = filename || 'loopmastersa_mix';
@@ -9455,6 +8907,15 @@ function updateTrackLockState(track) {
 
             const zip = new JSZip();
             const bpm = parseInt(bpmInput.value) || 120;
+            const addedNames = new Set();
+            const manifest = {
+                schema: 'com.loopmaster.pack-manifest',
+                version: 1,
+                name: filename || currentAssetPreferences().pack_name,
+                createdAt: new Date().toISOString(),
+                bpm,
+                items: []
+            };
 
             for (const t of playing) {
                 const v = t.variants[t.selectedVariant];
@@ -9481,8 +8942,40 @@ function updateTrackLockState(track) {
                     blob = await convertResp.blob();
                     outFilename = outFilename.replace(/\.wav$/i, `.${targetFormat}`);
                 }
+                if (addedNames.has(outFilename)) {
+                    throw new Error(`Pack filename collision: ${outFilename}`);
+                }
+                addedNames.add(outFilename);
                 zip.file(outFilename, blob);
+                const item = { file: outFilename, source: v.filePath };
+                if (targetFormat === 'wav') {
+                    const metadataPath = v.filePath.replace(/\.wav$/i, '.meta.json');
+                    const metadataFilename = originalFilename.replace(/\.wav$/i, '.meta.json');
+                    const metadataResponse = await fetch(`/outputs/${metadataPath}`);
+                    if (!metadataResponse.ok) {
+                        throw new Error(`Missing metadata sidecar for ${originalFilename}`);
+                    }
+                    const metadataText = await metadataResponse.text();
+                    if (addedNames.has(metadataFilename)) {
+                        throw new Error(`Pack filename collision: ${metadataFilename}`);
+                    }
+                    addedNames.add(metadataFilename);
+                    zip.file(metadataFilename, metadataText);
+                    const metadata = JSON.parse(metadataText);
+                    item.metadataFile = metadataFilename;
+                    item.sha256 = metadata.audio?.sha256 || null;
+                    item.kind = metadata.kind || null;
+                    item.bpm = metadata.musical?.bpm || null;
+                    item.beats = metadata.musical?.beats || null;
+                    item.bars = metadata.musical?.bars || null;
+                    item.key = metadata.musical?.key?.token || null;
+                    item.chords = metadata.musical?.chords || [];
+                    item.slices = { preferred: metadata.slices?.preferred || [] };
+                }
+                manifest.items.push(item);
             }
+
+            zip.file('manifest.json', JSON.stringify(manifest, null, 2) + '\n');
 
             const content = await zip.generateAsync({ type: 'blob' });
             const url = URL.createObjectURL(content);
@@ -10580,17 +10073,8 @@ function updateTrackLockState(track) {
         'Space': { desc: 'Play / Pause', action: () => btnPlayPause && btnPlayPause.click() },
         'KeyS': { desc: 'Stop / Rewind', action: () => btnStopAll && btnStopAll.click() },
         'KeyG': { desc: 'Generate Track', action: () => btnGenerate && btnGenerate.click() },
-        'KeyK': { desc: 'Randomize In Key', action: () => btnRandomInKey && btnRandomInKey.click() },
-        'KeyN': { desc: 'Randomize Instrument', action: () => btnRandomPrompt && btnRandomPrompt.click() },
-        'KeyC': { desc: 'Change Key/Chord', action: () => btnChangeChord && btnChangeChord.click() },
-        'KeyM': { desc: 'Change Mood', action: () => btnChangeMood && btnChangeMood.click() },
-        'KeyA': { desc: 'Change Accent/Style', action: () => btnChangeAccent && btnChangeAccent.click() },
-        'KeyI': { desc: 'Change Instrument', action: () => btnChangeInstrument && btnChangeInstrument.click() },
-        'KeyY': { desc: 'Change Style/Genre', action: () => btnChangeStyle && btnChangeStyle.click() },
-        'KeyD': { desc: 'Generate Random Drums', action: () => btnRandomDrums && btnRandomDrums.click() },
-        'KeyB': { desc: 'Generate Random Bass', action: () => btnRandomBass && btnRandomBass.click() },
-        'KeyL': { desc: 'Generate Random Lead', action: () => btnRandomLead && btnRandomLead.click() },
-        'KeyH': { desc: 'Cycle Prompt History', action: () => btnPromptHistory && btnPromptHistory.click() },
+        'KeyN': { desc: 'Randomize Prompt Builder', action: () => promptBuilder.randomizeAll() },
+        'KeyH': { desc: 'Toggle Generation History', action: () => document.getElementById('btn-generation-history')?.click() },
         'KeyV': { desc: 'Save Project', action: () => btnSaveProject && btnSaveProject.click() },
         'KeyO': { desc: 'Load Project', action: () => btnLoadProject && btnLoadProject.click() },
         'KeyX': { desc: 'Render Mix', action: () => btnRenderMix && btnRenderMix.click() },

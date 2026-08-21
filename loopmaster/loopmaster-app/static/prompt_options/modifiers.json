@@ -1,0 +1,35 @@
+{
+  "version": "2026.08.21.1",
+  "optionGroups": [
+    { "label": "Format and role", "randomize": false, "options": [
+      "instrumental", "no vocals", "full arrangement", "isolated stem", "solo instrument", "duo format", "one shot", "tonal one shot", "four bar seamless loop", "eight bar seamless loop", "sixteen bar seamless loop", "short intro", "cold open", "slow build", "immediate hook", "radio edit structure", "loop-focused arrangement", "transition-ready ending"
+    ] },
+    { "label": "Arrangement and evolution", "options": [
+      "sparse arrangement", "stripped-back arrangement", "minimal layering", "spacious voicing", "dense wall of sound", "layered counterpoint", "call-and-response layers", "gradual layer buildup", "subtractive breakdown", "evolving every four bars", "variation every two bars", "variation every four bars", "steady energy", "rising energy", "drop-driven structure", "breakdown in the second half", "alternate final phrase", "restrained melodic movement"
+    ] },
+    { "label": "Rhythm and groove", "options": [
+      "straight sixteenth-note pulse", "swung sixteenth-note groove", "shuffled eighth-note groove", "syncopated accents", "offbeat accents", "halftime feel", "double-time feel", "four-on-the-floor pulse", "broken-beat groove", "polyrhythmic feel", "triplet feel", "humanized timing", "tightly quantized timing", "laid-back pocket", "behind-the-beat feel", "driving pulse", "sparse rhythmic hits", "rolling ostinato"
+    ] },
+    { "label": "Performance and articulation", "options": [
+      "legato phrasing", "staccato articulation", "palm-muted attack", "fingerpicked texture", "tremolo-picked texture", "arpeggiated pattern", "sustained drone", "repeating ostinato", "improvised phrasing", "virtuosic flourishes", "delicate touch", "aggressive attack", "expressive dynamics", "restrained performance", "breathy articulation", "percussive articulation", "melodic call and response", "octave doubling"
+    ] },
+    { "label": "Dynamics and envelopes", "options": [
+      "punchy transients", "soft rounded transients", "sharp attack", "slow attack", "fast decay", "long decay", "wide dynamics", "controlled dynamics", "parallel compression", "gentle bus compression", "glued mix bus", "sidechained pump", "subtle ducking", "transient-forward mix", "sustained envelope", "gated envelope", "snappy envelope", "natural dynamic range"
+    ] },
+    { "label": "Tone and spectral balance", "options": [
+      "tight low end", "huge mono low end", "deep sub emphasis", "restrained sub bass", "warm low mids", "scooped low mids", "forward midrange", "softened upper mids", "airy high end", "dark top end", "bright radio polish", "telephone filtering", "band-limited tone", "resonant filter sweep", "high-pass filtered intro", "low-pass filtered texture", "clear source separation", "balanced spectral contour"
+    ] },
+    { "label": "Saturation and lo-fi character", "options": [
+      "analog warmth", "tape saturated", "warm tube saturation", "saturated console", "subtle harmonic distortion", "overdriven texture", "soft clipping character", "transformer coloration", "cassette wow and flutter", "dusty vinyl", "vinyl crackle bed", "bit-crushed lo-fi", "reduced-bit texture", "grainy sampler texture", "vintage sampler tone", "worn tape texture", "unstable tape pitch", "pristine digital"
+    ] },
+    { "label": "Space and stereo image", "options": [
+      "dry close-mic", "clean direct input", "raw rehearsal room", "dark room ambience", "intimate room sound", "large live room", "chamber reverb", "plate reverb", "spring reverb", "lush reverb", "cavernous reverb", "short room reverb", "pre-delay separation", "mono-compatible width", "wide stereo image", "narrow stereo image", "centered low frequencies", "deep front-to-back space"
+    ] },
+    { "label": "Delay, modulation, and sound design", "options": [
+      "tempo-synced delay", "dotted-eighth delay", "ping-pong delay", "short slapback delay", "chorus shimmer", "slow phaser movement", "flanged edges", "rotary speaker motion", "subtle tremolo", "rhythmic amplitude gating", "filter automation", "pan automation", "granular texture", "frozen reverb texture", "reversed swells", "stutter edits", "tape-stop transition", "spectral shimmer"
+    ] },
+    { "label": "Mix, master, and loop delivery", "options": [
+      "compressed club master", "crisp modern master", "punchy transient mix", "clean open master", "loudness-balanced master", "conservative limiting", "unclipped true peaks", "consistent gain staging", "without a fade-in", "without a fade-out", "zero-gap loop boundary", "downbeat-aligned loop start", "complete final bar", "tail designed to wrap", "dry tail for clean slicing", "full-bandwidth export", "sample-pack-ready", "seamless repeated playback"
+    ] }
+  ]
+}

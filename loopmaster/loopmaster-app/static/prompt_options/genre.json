@@ -1,0 +1,32 @@
+{
+  "version": "2026.08.21.1",
+  "optionGroups": [
+    { "label": "Pop and crossover", "options": [
+      "pop", "dance-pop", "electropop", "synth-pop", "indie pop", "dream pop", "art pop", "chamber pop", "power pop", "hyperpop", "city pop", "bedroom pop", "psychedelic pop", "baroque pop", "bubblegum pop", "sophisti-pop", "new wave", "yacht rock", "k-pop", "j-pop"
+    ] },
+    { "label": "House, techno, and club", "options": [
+      "house", "acid house", "afro house", "balearic beat", "bass house", "chicago house", "deep house", "disco house", "electro house", "french house", "future house", "ghetto house", "jackin house", "latin house", "lo-fi house", "melodic house", "microhouse", "progressive house", "soulful house", "tech house", "tribal house", "tropical house", "techno", "acid techno", "ambient techno", "detroit techno", "dub techno", "hard techno", "industrial techno", "melodic techno", "minimal techno", "electro", "electroclash", "electronic body music"
+    ] },
+    { "label": "Breaks, bass, trance, and hardcore", "options": [
+      "breakbeat", "big beat", "broken beat", "breakbeat hardcore", "breakcore", "jungle", "ragga jungle", "drum and bass", "atmospheric drum and bass", "liquid drum and bass", "neurofunk", "jump-up drum and bass", "techstep", "dubstep", "riddim", "future garage", "uk garage", "2-step garage", "speed garage", "bassline", "uk funky", "grime", "footwork", "juke", "jersey club", "baltimore club", "future bass", "wave", "trance", "goa trance", "progressive trance", "psytrance", "hardstyle", "gabber"
+    ] },
+    { "label": "Hip-hop, R&B, soul, and funk", "options": [
+      "hip hop", "boom bap", "east coast hip hop", "west coast hip hop", "southern hip hop", "alternative hip hop", "abstract hip hop", "instrumental hip hop", "lo-fi hip hop", "jazz rap", "conscious hip hop", "g-funk", "trap", "drill", "uk drill", "cloud rap", "emo rap", "phonk", "afro trap", "latin trap", "crunk", "miami bass", "r&b", "alternative r&b", "neo-soul", "new jack swing", "soul", "funk", "disco", "gospel"
+    ] },
+    { "label": "Rock, punk, and metal", "options": [
+      "rock", "classic rock", "indie rock", "alternative rock", "garage rock", "surf rock", "blues rock", "folk rock", "country rock", "southern rock", "roots rock", "hard rock", "glam rock", "psychedelic rock", "progressive rock", "art rock", "math rock", "post-rock", "space rock", "krautrock", "noise rock", "gothic rock", "post-punk", "shoegaze", "slowcore", "grunge", "emo", "pop punk", "punk rock", "hardcore punk", "post-hardcore", "skate punk", "screamo", "heavy metal", "thrash metal", "death metal", "black metal", "doom metal", "stoner metal", "sludge metal", "groove metal", "power metal", "progressive metal", "metalcore", "deathcore", "djent", "post-metal", "grindcore"
+    ] },
+    { "label": "Jazz and blues", "options": [
+      "jazz", "swing", "bebop", "hard bop", "cool jazz", "modal jazz", "free jazz", "spiritual jazz", "jazz fusion", "jazz funk", "acid jazz", "nu jazz", "latin jazz", "afro-cuban jazz", "smooth jazz", "ragtime", "blues", "delta blues", "chicago blues", "texas blues", "electric blues", "acoustic blues", "jump blues", "boogie-woogie"
+    ] },
+    { "label": "Latin, Caribbean, and African", "options": [
+      "salsa", "son cubano", "timba", "mambo", "cha-cha-cha", "rumba", "bolero", "reggaeton", "dembow", "bachata", "merengue", "cumbia", "vallenato", "samba", "bossa nova", "forro", "baile funk", "tango", "reggae", "roots reggae", "dub", "dancehall", "rocksteady", "ska", "soca", "calypso", "zouk", "kompa", "afrobeat", "afrobeats", "highlife", "soukous", "amapiano", "gqom", "kuduro", "kwaito"
+    ] },
+    { "label": "Folk, country, and regional", "options": [
+      "country", "classic country", "outlaw country", "alt-country", "americana", "bluegrass", "honky-tonk", "western swing", "country pop", "folk", "contemporary folk", "indie folk", "folk pop", "celtic folk", "appalachian folk", "old-time", "cajun", "zydeco", "flamenco", "fado", "klezmer", "bhangra", "qawwali", "hindustani classical", "carnatic", "gamelan"
+    ] },
+    { "label": "Ambient, experimental, and screen", "options": [
+      "ambient", "dark ambient", "drone", "new age", "minimalism", "neoclassical", "contemporary classical", "orchestral", "chamber music", "electroacoustic", "musique concrete", "acousmatic", "soundscape", "industrial music", "noise", "glitch", "idm", "electronica", "folktronica", "vaporwave", "chillwave", "synthwave", "darksynth", "chiptune", "film score", "video game music", "library music", "trip hop", "downtempo", "psybient"
+    ] }
+  ]
+}

@@ -619,3 +619,12 @@
   - [x] load_diffusion_cond crashed with os error 1455 / segfault: safetensors mmap of the 9.2GB medium checkpoint fails on this machine while plain reads work. New iter_safetensors() streams tensors with buffered reads; model halved + moved to GPU before the checkpoint is read. Committed 40f5f78. Boot: 30.3s load, warmup OK.
 
 - [ ] P2 stable-audio-3/.venv exe shims broken ("uv trampoline failed to canonicalize script path" — venv was moved). Fix: run `uv sync` in stable-audio-3/. Python.exe works, so not urgent.
+
+- [~] P0 Prompting upgrade + top-half UI redesign (assignee: Claude, 2026-08-19):
+  > Driven by the official prompting guide (mirrored at .wiki/raw/repos/sa3-upstream-docs/guides/prompting.md). Three parallel agents: (A) one-shot LoRA padding experiment on GPU, (B) prompt-enhancement gap analysis -> spec, (C) top-half UI redesign directions. Claude implements B+C output: enhance_prompt v2, kit prompt templates v2, negative prompt v2, structured prompt-builder UI replacing the current pill-button row.
+  - [~] A: LoRA padding experiment (dataset pipeline behavior on 0.2-2s clips, latent mapping, optional smoke train)
+  - [~] B: prompt gap analysis + implementable spec
+  - [~] C: UI inventory + two design directions + implementation map
+  - [ ] Implement backend prompt v2 (wav_metadata.py, kit_executor.py, generation_executor.py negative prompt)
+  - [ ] Implement top-half redesign (index.html, app.css, app.js) — keep all existing handlers working
+  - [ ] Verify: node --check, py_compile, boot + generate, screenshot the new UI

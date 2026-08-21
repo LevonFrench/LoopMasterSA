@@ -1,0 +1,29 @@
+{
+  "version": "2026.08.21.1",
+  "optionGroups": [
+    {
+      "label": "Strings and plucked instruments",
+      "options": [
+        "acoustic guitar", "classical guitar", "flamenco guitar", "twelve-string acoustic guitar", "resonator guitar", "archtop acoustic guitar", "parlor guitar", "harp guitar", "acoustic bass guitar", "upright bass", "violin", "viola", "cello", "viola da gamba", "violone", "rebec", "hardanger fiddle", "nyckelharpa", "jouhikko", "gadulka", "gusle", "kamancheh", "sarangi", "esraj", "dilruba", "erhu", "zhonghu", "jinghu", "gaohu", "morin khuur", "haegeum", "kokyu", "ajaeng", "mandolin", "mandola", "mandocello", "octave mandolin", "banjo", "tenor banjo", "ukulele", "baritone ukulele", "charango", "ronroco", "cuatro", "tres", "tiple", "bajo sexto", "requinto guitar", "guitarron", "vihuela", "bouzouki", "baglama", "balalaika", "domra", "bandura", "gusli", "portuguese guitar", "lute", "archlute", "theorbo", "cittern", "oud", "qanun", "santur", "cimbalom", "hammered dulcimer", "mountain dulcimer", "autoharp", "concert zither", "psaltery", "lyre", "kora", "ngoni", "xalam", "krar", "begena", "valiha", "kantele", "langeleik", "koto", "shamisen", "biwa", "guzheng", "guqin", "pipa", "ruan", "liuqin", "yueqin", "sanxian", "gayageum", "geomungo", "dan tranh", "dan bau", "dan nguyet", "sitar", "surbahar", "sarod", "rudra veena", "saraswati veena", "tanpura", "rabab", "hurdy-gurdy"
+      ]
+    },
+    {
+      "label": "Keys, reeds, and free reeds",
+      "options": [
+        "grand piano", "upright piano", "fortepiano", "prepared piano", "harpsichord", "clavichord", "pipe organ", "harmonium", "pump organ", "accordion", "concertina", "bandoneon", "melodica", "harmonica", "chromatic harmonica", "bass harmonica", "glass harmonica"
+      ]
+    },
+    {
+      "label": "Woodwinds and folk winds",
+      "options": [
+        "flute", "piccolo", "alto flute", "bass flute", "recorder", "alto recorder", "bass recorder", "tin whistle", "low whistle", "ocarina", "pan flute", "shakuhachi", "bansuri", "ney", "kaval", "quena", "suling", "dizi", "xiao", "hulusi", "duduk", "clarinet", "bass clarinet", "oboe", "english horn", "bassoon", "contrabassoon", "soprano saxophone", "alto saxophone", "tenor saxophone", "baritone saxophone", "shawm", "shehnai", "suona", "zurna", "bagpipes", "uilleann pipes", "sheng", "sho", "khene", "didgeridoo"
+      ]
+    },
+    {
+      "label": "Brass",
+      "options": [
+        "alphorn", "french horn", "trumpet", "cornet", "flugelhorn", "trombone", "bass trombone", "euphonium", "tuba", "sousaphone"
+      ]
+    }
+  ]
+}

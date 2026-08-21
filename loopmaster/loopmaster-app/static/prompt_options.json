@@ -1,0 +1,30 @@
+{
+  "version": "2026.08.21.3",
+  "columns": [
+    { "key": "sources", "label": "Instruments", "hint": "Random All rolls one", "randomize": "one", "choiceKey": "sourceChoice", "sections": ["acoustic", "electric", "drums"] },
+    { "key": "music", "label": "Music", "hint": "Random All rolls all three", "randomize": "all", "sections": ["genre", "harmony", "style"] },
+    { "key": "character", "label": "Character", "hint": "Random All rolls one", "randomize": "one", "choiceKey": "characterChoice", "sections": ["mood", "negativePrompt", "modifiers"] }
+  ],
+  "sections": [
+    { "key": "acoustic", "label": "Acoustic", "placeholder": "Custom acoustic instrument", "optionsFile": "/static/prompt_options/acoustic.json" },
+    { "key": "electric", "label": "Electric", "placeholder": "Custom electric or electronic instrument", "optionsFile": "/static/prompt_options/electric.json" },
+    { "key": "drums", "label": "Drums", "placeholder": "Custom drums or percussion", "optionsFile": "/static/prompt_options/drums.json" },
+    { "key": "genre", "label": "Genre", "placeholder": "Custom genre", "optionsFile": "/static/prompt_options/genre.json" },
+    {
+      "key": "harmony",
+      "label": "Key / Chord",
+      "placeholder": "Custom key or harmony",
+      "options": [
+        "Use Chord Progressor",
+        "c major", "c minor", "db major", "db minor", "d major", "d minor",
+        "eb major", "eb minor", "e major", "e minor", "f major", "f minor",
+        "gb major", "gb minor", "g major", "g minor", "ab major", "ab minor",
+        "a major", "a minor", "bb major", "bb minor", "b major", "b minor"
+      ]
+    },
+    { "key": "style", "label": "Performance", "placeholder": "Custom performance or groove", "optionsFile": "/static/prompt_options/performance.json" },
+    { "key": "mood", "label": "Mood", "placeholder": "Custom mood", "optionsFile": "/static/prompt_options/mood.json" },
+    { "key": "negativePrompt", "label": "Avoid", "placeholder": "Custom negative prompt", "optionsFile": "/static/prompt_options/avoid.json" },
+    { "key": "modifiers", "label": "Modifiers", "placeholder": "Custom arrangement, production, or texture", "optionsFile": "/static/prompt_options/modifiers.json" }
+  ]
+}

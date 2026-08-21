@@ -364,6 +364,50 @@ def sample_flow_pingpong(model, x, sigmas, callback=None, disable_tqdm=False, ge
     return x
 
 
+def _decode_variants_sequentially(
+    pretransform,
+    sampled: torch.Tensor,
+    chunked_decode: bool,
+    on_variant=None,
+) -> torch.Tensor:
+    """Decode one variant at a time into one preallocated batch tensor.
+
+    Keeping decoded variants in a Python list and then calling ``torch.cat``
+    temporarily requires roughly two complete output batches on the device.
+    This copy-as-you-go form keeps only the final batch plus one variant live.
+    """
+    batch_size = sampled.shape[0]
+    if batch_size < 1:
+        raise ValueError("Cannot decode an empty variant batch")
+
+    decoded_batch = None
+    for index in range(batch_size):
+        decoded = pretransform.decode(
+            sampled[index:index + 1],
+            chunked=chunked_decode,
+            chunk_size=64,
+        )
+        if decoded.shape[0] != 1:
+            raise ValueError(
+                "Sequential VAE decode must return exactly one variant per call"
+            )
+        if decoded_batch is None:
+            decoded_batch = decoded.new_empty(
+                (batch_size, *decoded.shape[1:])
+            )
+        elif decoded.shape[1:] != decoded_batch.shape[1:]:
+            raise ValueError(
+                "Sequential VAE decode returned inconsistent variant shapes"
+            )
+
+        decoded_batch[index:index + 1].copy_(decoded)
+        del decoded
+        if on_variant is not None:
+            on_variant(index + 1, batch_size)
+
+    return decoded_batch
+
+
 
 @torch.no_grad()
 def sample_diffusion(
@@ -522,6 +566,19 @@ def sample_diffusion(
     # Decode if requested
     if decode and pretransform is not None:
         import time
+        sampled = sampled.to(next(pretransform.parameters()).dtype)
+
+        # Synchronize the final diffusion work before labeling the next stage.
+        # Without this boundary, an asynchronous diffusion failure is reported
+        # to the UI as a VAE hang.
+        if sampled.is_cuda:
+            torch.cuda.synchronize(sampled.device)
+
+            # Reclaim only unused allocator blocks when decode headroom is low.
+            free_mem, _ = torch.cuda.mem_get_info(sampled.device)
+            if free_mem < 2 * 1024 * 1024 * 1024:
+                torch.cuda.empty_cache()
+
         if callback is not None:
             try:
                 callback({"stage": "vae_start"})
@@ -529,23 +586,26 @@ def sample_diffusion(
                 pass
         print(f"\n[VAE] Starting VAE decoding of {sampled.shape[0]} latent variants on device {device}...")
         start_vae = time.time()
-        sampled = sampled.to(next(pretransform.parameters()).dtype)
-        
-        # Clear CUDA cache before VAE decoding to reclaim VRAM from the diffusion step
-        if torch.cuda.is_available():
-            free_mem, _ = torch.cuda.mem_get_info()
-            if free_mem < 2 * 1024 * 1024 * 1024:
-                torch.cuda.empty_cache()
-        # Decode sequentially to avoid VRAM exhaustion/hanging on large batches
-        decoded_variants = []
-        for i in range(sampled.shape[0]):
-            single_latent = sampled[i:i+1]
-            # Enforce a smaller chunk_size (64 instead of default 128) for 12GB cards
-            # 32 was causing a range() error because overlap defaults to 32 (32 - 32 = 0)
-            decoded = pretransform.decode(single_latent, chunked=chunked_decode, chunk_size=64)
-            decoded_variants.append(decoded)
-            
-        sampled = torch.cat(decoded_variants, dim=0)
+
+        def report_variant(completed, total):
+            if sampled.is_cuda:
+                torch.cuda.synchronize(sampled.device)
+            if callback is not None:
+                try:
+                    callback({
+                        "stage": "vae_variant",
+                        "completed": completed,
+                        "total": total,
+                    })
+                except Exception:
+                    pass
+
+        sampled = _decode_variants_sequentially(
+            pretransform,
+            sampled,
+            chunked_decode,
+            on_variant=report_variant,
+        )
         
         print(f"[VAE] VAE decoding completed in {time.time() - start_vae:.2f}s.")
         if callback is not None:

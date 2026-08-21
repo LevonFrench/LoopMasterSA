@@ -1,0 +1,29 @@
+{
+  "version": "2026.08.21.1",
+  "optionGroups": [
+    {
+      "label": "Electrified strings",
+      "options": [
+        "solid-body electric guitar", "hollow-body electric guitar", "semi-hollow electric guitar", "baritone electric guitar", "twelve-string electric guitar", "fretless electric guitar", "electric resonator guitar", "lap steel guitar", "pedal steel guitar", "electric bass", "fretless electric bass", "piccolo electric bass", "electric upright bass", "touchstyle bass", "electric violin", "electric viola", "electric cello", "electric double bass", "electric mandolin", "electric sitar", "electric harp", "electric banjo", "electric oud", "electric koto", "electric shamisen", "electric qanun", "electric zither", "electric kalimba", "electroacoustic guitar", "electroacoustic bass", "electroacoustic violin", "electroacoustic cello", "electroacoustic harp"
+      ]
+    },
+    {
+      "label": "Electric keys and controllers",
+      "options": [
+        "electric piano", "tine electric piano", "reed electric piano", "electric grand piano", "electric clavinet", "tonewheel organ", "transistor organ", "combo organ", "electronic organ", "digital organ", "virtual pipe organ", "digital piano", "stage piano", "electronic keyboard", "workstation keyboard", "arranger keyboard", "strap-worn keyboard", "electric accordion", "electronic wind controller", "breath-controlled synthesizer", "mallet controller", "ribbon-controlled synthesizer", "touchplate synthesizer", "motion-controlled synthesizer", "light-controlled synthesizer", "laser harp"
+      ]
+    },
+    {
+      "label": "Synthesizers",
+      "options": [
+        "analog monophonic synthesizer", "analog polyphonic synthesizer", "analog modular synthesizer", "semimodular synthesizer", "paraphonic synthesizer", "digital synthesizer", "hybrid analog-digital synthesizer", "virtual analog synthesizer", "wavetable synthesizer", "frequency modulation synthesizer", "phase distortion synthesizer", "additive synthesizer", "subtractive synthesizer", "granular synthesizer", "vector synthesizer", "physical modeling synthesizer", "spectral synthesizer", "formant synthesizer", "sample-based synthesizer", "software synthesizer", "modular software synthesizer", "digital modular synthesizer", "string synthesizer", "bass synthesizer", "sub bass synthesizer", "lead synthesizer", "pad synthesizer", "drone synthesizer", "ambient texture synthesizer", "acid bass synthesizer", "detuned sawtooth synthesizer", "chiptune synthesizer", "pulse-wave synthesizer", "wave sequence synthesizer", "wavefolding synthesizer", "west coast modular synthesizer", "east coast modular synthesizer", "microtonal synthesizer", "polyphonic aftertouch synthesizer", "resonator synthesizer", "noise synthesizer", "vocal synthesizer", "choir synthesizer", "brass synthesizer", "organ synthesizer", "modal synthesis instrument", "karplus-strong synthesizer", "scanned synthesis instrument", "stochastic synthesizer", "algorithmic synthesizer", "generative synthesizer", "neural audio synthesizer", "resynthesis instrument", "desktop synthesizer", "rackmount synthesizer", "keyboard synthesizer"
+      ]
+    },
+    {
+      "label": "Historical, sampled, and experimental",
+      "options": [
+        "theremin", "ondes martenot", "trautonium", "telharmonium", "monophonic vacuum-tube keyboard", "ribbon-controlled vacuum-tube keyboard", "tape replay keyboard", "optical disc keyboard", "sampler", "hardware sampler", "software sampler", "sampling keyboard", "phrase sampler", "granular sampler", "multisampler", "live looper", "turntable", "prepared turntable", "digital turntable", "cassette tape instrument", "reel-to-reel tape instrument", "shortwave radio instrument", "circuit-bent toy keyboard", "circuit-bent radio", "no-input mixer", "feedback mixer", "oscillator bank", "test oscillator", "function generator", "vocoder", "talk box", "pitch-shifting sampler", "phase vocoder instrument", "harmonizer instrument", "electronic feedback instrument", "chip sound generator", "video game sound chip", "tracker synthesizer", "sample-and-synthesis keyboard"
+      ]
+    }
+  ]
+}

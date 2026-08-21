@@ -1,5 +1,7 @@
 import os
 import sys
+import secrets
+import uuid
 
 # Add stable-audio-3 directory to system path to import stable_audio_3 module
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +24,6 @@ if sa3_dir not in sys.path:
 import datetime
 import time
 import argparse
-import struct
 import re
 
 # Explicitly force Windows to look into the active environment's PyTorch binary directory
@@ -37,10 +38,103 @@ import torchaudio
 from stable_audio_3 import StableAudioModel
 from stable_audio_3.verbose import set_verbose
 
-from wav_metadata import (
-    is_drum_prompt, parse_root_note, create_labl_chunk, create_adtl_list,
-    pack_cue_chunk, find_data_chunk_offset, acidize_wav_file, enhance_prompt
+from asset_contract import (
+    DEFAULT_LICENSE,
+    build_asset_filename,
+    build_sidecar_document,
+    derive_descriptor,
+    finalize_sidecar_for_wav,
+    musical_grid,
+    normalize_key,
+    parse_chord_track,
+    sidecar_path_for,
+    slug_token,
+    validate_sidecar,
+    variation_slot,
+    write_sidecar,
 )
+from wav_metadata import acidize_wav_file, enhance_prompt, is_drum_prompt
+
+
+NEGATIVE_PROMPT = "poor quality, bad quality, low quality, noise, distortion, artifact"
+
+
+def publish_variant_pair(
+    file_path,
+    waveform,
+    sample_rate,
+    *,
+    bpm,
+    is_loop,
+    prompt,
+    pack,
+    descriptor,
+    variation,
+    key,
+    chords,
+    generation,
+    provenance,
+):
+    """Atomically publish one canonical PCM16 WAV and adjacent v1 sidecar."""
+    directory = os.path.dirname(file_path)
+    temp_wav = os.path.join(
+        directory, f".{os.path.basename(file_path)}.{uuid.uuid4().hex}.tmp.wav"
+    )
+    sidecar_path = sidecar_path_for(file_path)
+    temp_sidecar = os.path.join(
+        directory, f".{os.path.basename(sidecar_path)}.{uuid.uuid4().hex}.tmp"
+    )
+    published_wav = False
+    try:
+        torchaudio.save(
+            temp_wav,
+            waveform,
+            sample_rate,
+            encoding="PCM_S",
+            bits_per_sample=16,
+        )
+        document = build_sidecar_document(
+            file_name=os.path.basename(file_path),
+            waveform=waveform,
+            sample_rate=sample_rate,
+            bpm=bpm,
+            kind="loop" if is_loop else "oneshot",
+            pack=pack,
+            descriptor=descriptor,
+            variation=variation,
+            key=key,
+            chords=chords,
+            generation=generation,
+            provenance=provenance,
+        )
+        acidize_wav_file(
+            temp_wav,
+            bpm,
+            waveform.shape[-1] / sample_rate,
+            is_loop,
+            prompt,
+            metadata_document=document,
+        )
+        document = finalize_sidecar_for_wav(document, temp_wav)
+        write_sidecar(temp_sidecar, document)
+        validate_sidecar(document)
+        os.replace(temp_wav, file_path)
+        published_wav = True
+        os.replace(temp_sidecar, sidecar_path)
+        return document
+    except Exception:
+        if published_wav:
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+        raise
+    finally:
+        for temp_path in (temp_wav, temp_sidecar):
+            try:
+                os.remove(temp_path)
+            except FileNotFoundError:
+                pass
 
 def main():
     parser = argparse.ArgumentParser(
@@ -61,6 +155,28 @@ def main():
             "small-sfx-base",
         ],
         help="Model to load (default: small-music)",
+    )
+    parser.add_argument("--pack", default="loopmaster", help="Canonical pack name")
+    parser.add_argument(
+        "--descriptor",
+        default="",
+        help="Filename descriptor (defaults to a prompt-derived token)",
+    )
+    parser.add_argument(
+        "--key",
+        default="",
+        help="Optional musical key, for example 'F# minor'",
+    )
+    parser.add_argument(
+        "--chord-track",
+        default="",
+        help="Optional timeline such as 'gb_min@1:1, d_maj@3:1'",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=-1,
+        help="Base seed; -1 resolves to a recorded random seed",
     )
     parser.add_argument(
         "--device",
@@ -121,8 +237,29 @@ def main():
     args = parser.parse_args()
     set_verbose(args.verbose)
 
+    if args.seed < -1:
+        parser.error("--seed must be -1 or a non-negative integer")
+
     # --- Prompt Engineering ---
     bpm_val = args.bpm or 120
+    if args.loop:
+        exact_beats = args.duration * bpm_val / 60.0
+        beat_count = int(round(exact_beats))
+        if abs(exact_beats - beat_count) > 0.03 or beat_count <= 0 or beat_count % 4:
+            parser.error("loop duration must land on a whole 4/4 bar grid within 0.03 beats")
+        requested_bars = beat_count // 4
+    else:
+        requested_bars = None
+    key_info = normalize_key(args.key) if args.key else None
+    if args.key and key_info is None:
+        parser.error("--key must name a major or minor key")
+    chords = parse_chord_track(args.chord_track, requested_bars)
+    if not args.loop and any((event["bar"], event["beat"]) != (1, 1) for event in chords):
+        parser.error("one-shot chord metadata can only start at bar 1 beat 1")
+    pack = slug_token(args.pack, "loopmaster")
+    descriptor = derive_descriptor(args.descriptor, prompt=args.prompt)
+    requested_seed = args.seed
+    resolved_seed = secrets.randbelow(100_000) if requested_seed == -1 else requested_seed
     final_prompt = enhance_prompt(args.prompt, bpm_val, args.duration, args.loop)
 
     # Build prompts list for batch size 8: make the 4th variant (index 3) a fill if it's a drum prompt
@@ -163,12 +300,13 @@ def main():
     with torch.inference_mode():
         audio = model.generate(
             prompt=prompts_list,
-            negative_prompt="poor quality, bad quality, low quality, noise, distortion, artifact",
+            negative_prompt=NEGATIVE_PROMPT,
             duration=args.duration,
             steps=args.steps,
             cfg_scale=args.cfg_scale,
             batch_size=8,
-            seed=-1,  # random seed so all variants differ
+            seed=resolved_seed,
+            seed_offsets=list(range(8)),
         )
     print(f"Generation completed in {time.time() - start_gen:.2f}s")
 
@@ -180,13 +318,57 @@ def main():
     sample_rate = model.model.sample_rate
     print(f"Saving variants to {out_dir}...")
     for i in range(8):
-        file_path = os.path.join(out_dir, f"{bpm_val}bpm_variant_{i+1}.wav")
-        torchaudio.save(file_path, audio[i].cpu(), sample_rate)
-        # Embed ACIDized loop and beat grid metadata
-        is_var_loop = args.loop
-        if i == 3 and is_drum:
-            is_var_loop = False
-        acidize_wav_file(file_path, bpm_val, args.duration, is_var_loop, args.prompt)
+        is_drum_fill = args.loop and i == 3 and is_drum
+        is_var_loop = args.loop and not is_drum_fill
+        asset_key = None if is_drum_fill else key_info
+        asset_chords = [] if is_drum_fill else chords
+        grid = musical_grid(int(audio[i].shape[-1]), sample_rate, bpm_val, is_var_loop)
+        variation = f"{variation_slot(i)}1"
+        filename = build_asset_filename(
+            pack=pack,
+            descriptor=descriptor,
+            bpm=bpm_val,
+            key=asset_key,
+            bars=grid["bars"],
+            variation=variation,
+            kind="loop" if is_var_loop else "oneshot",
+        )
+        file_path = os.path.join(out_dir, filename)
+        publish_variant_pair(
+            file_path,
+            audio[i].to(device="cpu", dtype=torch.float32),
+            sample_rate,
+            bpm=bpm_val,
+            is_loop=is_var_loop,
+            prompt=args.prompt,
+            pack=pack,
+            descriptor=descriptor,
+            variation=variation,
+            key=asset_key,
+            chords=asset_chords,
+            generation={
+                "model": args.model,
+                "requestedSeed": requested_seed,
+                "seed": resolved_seed,
+                "seedOffset": i,
+                "variantSeed": resolved_seed + i,
+                "steps": args.steps,
+                "cfgScale": args.cfg_scale,
+                "requestedDurationSeconds": args.duration,
+                "prompt": {
+                    "composed": args.prompt,
+                    "enhanced": prompts_list[i],
+                    "negative": NEGATIVE_PROMPT,
+                    "userNegative": "",
+                    "sections": {"freePrompt": args.prompt},
+                },
+            },
+            provenance={
+                "generator": "LoopMaster SA3 CLI",
+                "license": DEFAULT_LICENSE,
+                "session": os.path.basename(out_dir),
+            },
+        )
         print(f"  Saved: {file_path}")
 
     abs_out_dir = os.path.abspath(out_dir)

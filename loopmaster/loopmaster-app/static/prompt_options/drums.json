@@ -1,0 +1,29 @@
+{
+  "version": "2026.08.21.1",
+  "optionGroups": [
+    {
+      "label": "Kits and ensembles",
+      "options": [
+        "acoustic drum kit", "dry studio drum kit", "live room drum kit", "brushed jazz drum kit", "muted funk drum kit", "vintage soul drum kit", "garage rock drum kit", "arena rock drum kit", "breakbeat drum kit", "sampled breakbeat kit", "lo-fi sampler drum kit", "electronic drum kit", "analog drum machine", "digital drum machine", "synthesized percussion kit", "modular percussion synthesizer", "hybrid acoustic-electronic drum kit", "marching drum line", "orchestral percussion section", "concert percussion ensemble", "cinematic percussion ensemble", "industrial metal percussion", "junk percussion ensemble", "found-object percussion", "body percussion", "handclaps and stomps"
+      ]
+    },
+    {
+      "label": "Drums of the world",
+      "options": [
+        "kick drum", "concert bass drum", "snare drum", "piccolo snare drum", "field drum", "tenor drum", "floor tom", "rack tom", "concert toms", "rotating tension toms", "timpani", "frame drum", "tambourine", "bodhran", "djembe", "dunun", "talking drum", "udu", "ashiko", "bougarabou", "sabar", "tama", "ngoma", "bata drums", "congas", "quinto conga", "bongos", "timbales", "cajon", "bombo leguero", "surdo", "repinique", "caixa", "cuica", "pandeiro", "zabumba", "tamborim", "atabaque", "tabla", "bayan tabla", "mridangam", "pakhawaj", "kanjira", "ghatam", "dhol", "dholak", "nagara", "khol", "tavil", "davul", "darbuka", "riq", "bendir", "daf", "tombak", "dayereh", "taiko", "odaiko", "shime-daiko", "tsuzumi", "kakko", "janggu", "buk", "tanggu", "dagu", "paigu", "bangu", "kendang", "bedug", "rebana", "kompang"
+      ]
+    },
+    {
+      "label": "Pitched percussion",
+      "options": [
+        "gamelan percussion ensemble", "bonang", "kenong", "kempul", "gong ageng", "saron", "gamelan gender metallophone", "kulintang", "gangsa metallophone", "dabakan", "balafon", "gyil", "amadinda", "akadinda", "marimba", "xylophone", "vibraphone", "glockenspiel", "crotales", "tubular bells", "chimes", "bell tree", "handbells", "cowbell", "agogo bells", "steel tongue drum", "steelpan", "handpan", "lithophone", "jaltarang", "angklung", "kalimba", "mbira", "marimbula", "jaw harp", "music box", "toy piano", "celesta", "musical saw"
+      ]
+    },
+    {
+      "label": "Auxiliary and found percussion",
+      "options": [
+        "temple blocks", "woodblock", "claves", "castanets", "cabasa", "maracas", "shaker", "shekere", "caxixi", "guiro", "reco-reco", "rainstick", "ratchet", "flexible metal rattle", "triangle", "finger cymbals", "crash cymbals", "ride cymbal", "hi-hat cymbals", "splash cymbal", "china-type cymbal", "tam-tam", "gong", "wind gong", "opera gong", "singing bowl", "bell plate", "anvil", "thunder sheet", "whip slapstick", "sandpaper blocks", "washboard", "spoons", "bones", "tuned plastic tubes", "slit drum", "log drum", "ocean drum", "brake drum", "temple bell", "sleigh bells", "seed pod shaker", "finger snaps", "foot stomps", "clapsticks", "bamboo stamping tubes", "bamboo clappers", "wooden slit gong", "log xylophone", "bottle percussion", "glass bottle percussion", "ceramic pot percussion", "metal pipe percussion", "stone percussion", "chain percussion", "spring percussion", "bowed cymbals", "bowed vibraphone", "bowed crotales"
+      ]
+    }
+  ]
+}

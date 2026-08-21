@@ -1,5 +1,10 @@
 # Loop File Metadata Contract — what any looper wants in the file
 
+> **Superseded for new LoopMaster output.** The implemented sidecar-first v1
+> contract is documented in `loopmaster-sidecar-contract-v1.md`, with its
+> machine schema in `loopmaster-sidecar-schema-v1.json`. This file remains the
+> design/audit history for embedded WAV interoperability.
+
 **Status:** design proposal (Claude, 2026-08-20, owner-ordered: "scope out a design for
 exactly what our looper, any looper would want in file metadata"). Producers: LoopMaster
 (`wav_metadata.py`, browser `buildAcidMetadata`). Consumers today: THE COOKUP's loop

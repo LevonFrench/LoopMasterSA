@@ -12,7 +12,9 @@ let backendAttempt = 0;
 let appIsQuitting = false;
 let stopMessage = null;
 
-const STARTUP_TIMEOUT_MS = 120000;
+// A first model download can legitimately take several minutes. Do not kill a
+// healthy Python process at the old two-minute boundary and force a restart.
+const STARTUP_TIMEOUT_MS = 600000;
 const BACKEND_STATE = Object.freeze({
     STOPPED: 'stopped',
     STARTING: 'starting',
@@ -245,7 +247,7 @@ function pollServerReady(attempt, child) {
     }, 1000);
     startupTimeout = setTimeout(() => {
         if (!isCurrentAttempt(attempt, child) || backendState !== BACKEND_STATE.STARTING) return;
-        stopBackend(attempt, 'Stable Audio 3 did not become ready within two minutes. The backend was stopped; check the model and port 7861, then retry.');
+        stopBackend(attempt, 'Stable Audio 3 did not become ready within ten minutes. The backend was stopped; check the model download, GPU memory, and port 7861, then retry.');
     }, STARTUP_TIMEOUT_MS);
 }
 

@@ -611,6 +611,10 @@ class AudioAutoencoder(nn.Module):
         # chunk_size/overlap are in latent units — same as `latents`, no scaling.
         samples_per_latent = int(self.downsampling_ratio)
         hop_latents = chunk_size - overlap
+        if hop_latents <= 0:
+            raise ValueError(
+                "chunk_size must be greater than overlap for chunked decode"
+            )
         total_latents = latents.shape[-1]
 
         # Anchor the final chunk to the signal end (may overlap more than `overlap`).
@@ -618,22 +622,26 @@ class AudioAutoencoder(nn.Module):
         if chunk_starts[-1] != total_latents - chunk_size:
             chunk_starts.append(total_latents - chunk_size)
 
-        decoded_chunks = [self.decode(latents[..., s:s + chunk_size]) for s in chunk_starts]
-
         total_samples = total_latents * samples_per_latent
         chunk_size_samples = chunk_size * samples_per_latent
         half_overlap_samples = (overlap // 2) * samples_per_latent
-        output = latents.new_zeros(*decoded_chunks[0].shape[:-1], total_samples)
         num_chunks = len(chunk_starts)
 
-        # Trim half the overlap off inner edges (edges facing a neighbour chunk).
-        for i, (start_latent, chunk) in enumerate(zip(chunk_starts, decoded_chunks)):
+        # Decode and publish one chunk at a time. The previous list-based form
+        # retained every chunk, then allocated another full output tensor.
+        output = None
+        for i, start_latent in enumerate(chunk_starts):
+            chunk = self.decode(latents[..., start_latent:start_latent + chunk_size])
+            if output is None:
+                output = chunk.new_zeros(*chunk.shape[:-1], total_samples)
+
+            # Trim half the overlap off inner edges (edges facing a neighbour).
             is_first = i == 0
             is_last = i == num_chunks - 1
             out_start = (total_samples - chunk_size_samples) if is_last else (start_latent * samples_per_latent)
             left  = 0 if is_first else half_overlap_samples
             right = chunk_size_samples if is_last else chunk_size_samples - half_overlap_samples
             output[..., out_start + left : out_start + right] = chunk[..., left:right]
+            del chunk
 
         return output
-        

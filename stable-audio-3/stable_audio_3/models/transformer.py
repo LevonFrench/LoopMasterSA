@@ -22,8 +22,7 @@ except ImportError:
 try:
     from flash_attn import flash_attn_func, flash_attn_kvpacked_func
 except ImportError as e:
-    print(e)
-    print('flash_attn not installed, disabling Flash Attention')
+    logging.info("flash_attn unavailable; using PyTorch attention: %s", e)
     flash_attn_kvpacked_func = None
     flash_attn_func = None
 
@@ -31,8 +30,7 @@ try:
     from flash_attn import flash_attn_varlen_func
     from flash_attn.bert_padding import pad_input, unpad_input, index_first_axis
 except ImportError as e:
-    print(e)
-    print('flash_attn varlen/bert_padding not available, disabling varlen attention')
+    logging.info("flash_attn varlen support unavailable: %s", e)
     flash_attn_varlen_func = None
     pad_input = None
     unpad_input = None
