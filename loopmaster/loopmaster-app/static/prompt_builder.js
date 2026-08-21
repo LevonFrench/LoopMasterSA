@@ -93,6 +93,8 @@
         let history = core.enforceHistoryCap(readJson(storage, STORAGE_HISTORY, []));
         let currentSnapshotSubmitted = false;
         let promptAnnouncementCount = 0;
+        let pendingFreeformValue = null;
+        let pendingHistoryActions = [];
 
         function persistHistory() {
             history = core.enforceHistoryCap(history);
@@ -217,6 +219,12 @@
         }
 
         function queueFreeformUpdate() {
+            if (!config) {
+                // Buffer typing until initialize() resolves; the text stays in
+                // the textarea and is replayed once config is available.
+                pendingFreeformValue = freeform.value;
+                return;
+            }
             const hasPendingUpdate = customTimers.has(FREEFORM_KEY);
             const changed = commit({
                 ...selections,
@@ -929,12 +937,9 @@
             if (changed) persistHistory();
         }
 
-        function handleHistoryClick(event) {
-            const row = event.target.closest('[data-entry-id]');
-            if (!row) return;
-            const entry = history.find(item => item.id === row.dataset.entryId);
+        function runHistoryAction(entryId, action) {
+            const entry = history.find(item => item.id === entryId);
             if (!entry) return;
-            const action = event.target.closest('[data-history-action]')?.dataset.historyAction || 'restore';
             if (action === 'delete') {
                 history = history.filter(item => item.id !== entry.id);
                 persistHistory();
@@ -942,6 +947,19 @@
             }
             restore(entry);
             if (action === 'resend') onResend(entry);
+        }
+
+        function handleHistoryClick(event) {
+            const row = event.target.closest('[data-entry-id]');
+            if (!row) return;
+            const action = event.target.closest('[data-history-action]')?.dataset.historyAction || 'restore';
+            if (!config && action !== 'delete') {
+                // Restore/resend need config; queue the click and replay it
+                // once initialize() resolves.
+                pendingHistoryActions.push({ entryId: row.dataset.entryId, action });
+                return;
+            }
+            runHistoryAction(row.dataset.entryId, action);
         }
 
         async function initialize() {
@@ -1008,6 +1026,16 @@
                 renderHistory();
                 void reconcilePendingHistory();
                 randomizeAllButton.disabled = false;
+                if (pendingFreeformValue !== null) {
+                    // renderPromptBar() above rewrote the textarea; put the
+                    // buffered pre-init typing back and commit it as manual.
+                    freeform.value = pendingFreeformValue;
+                    pendingFreeformValue = null;
+                    queueFreeformUpdate();
+                }
+                const queuedHistoryActions = pendingHistoryActions;
+                pendingHistoryActions = [];
+                queuedHistoryActions.forEach(({ entryId, action }) => runHistoryAction(entryId, action));
             } catch (error) {
                 console.error('Unable to initialize prompt builder:', error);
                 errorBox.textContent = `Prompt builder unavailable: ${error.message}`;
@@ -1043,7 +1071,12 @@
         });
         historyViewport.addEventListener('click', handleHistoryClick);
         historyViewport.addEventListener('keydown', event => {
-            if (event.key === 'Enter' || event.key === ' ') handleHistoryClick(event);
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            // Focused buttons dispatch a native click on Enter/Space; the
+            // click listener handles those. Only activate the row itself.
+            if (event.target.closest('button')) return;
+            event.preventDefault();
+            handleHistoryClick(event);
         });
 
         renderHistory();

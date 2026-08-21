@@ -155,6 +155,14 @@
 
     // CSP-safe presentation state.  Dynamic values live in data attributes and
     // are consumed by CSS; code never creates inline style attributes.
+    // Length/number values rely on typed attr() (Chromium 133+).  LoopMaster
+    // also supports plain-browser launches (Firefox/Safari lack typed attr()),
+    // so detect support once at startup and fall back to writing equivalent
+    // styles through the CSSOM (element.style assignment is not blocked by
+    // style-src, unlike style="" attributes).
+    const TYPED_ATTR_SUPPORTED = typeof CSS !== 'undefined' && CSS.supports
+        && CSS.supports('width', 'calc(attr(data-progress type(<number>), 0) * 100%)');
+    const TYPED_ATTR_STYLE_KEYS = new Set(['left', 'right', 'top', 'bottom', 'width', 'opacity']);
     function setPresentation(el, values) {
         if (!el) return;
         Object.entries(values).forEach(([key, value]) => {
@@ -162,6 +170,7 @@
                 const rotation = String(value).match(/^rotate\(([^)]+)\)$/);
                 if (rotation) el.setAttribute('data-rotation', rotation[1]);
                 else el.removeAttribute('data-rotation');
+                if (!TYPED_ATTR_SUPPORTED) el.style.transform = rotation ? `rotate(${rotation[1]})` : '';
                 return;
             }
             if (key === 'boxShadow') {
@@ -169,8 +178,21 @@
                 return;
             }
             const name = `data-${key.replace(/[A-Z]/g, char => `-${char.toLowerCase()}`)}`;
-            if (value === null || value === undefined || value === '') el.removeAttribute(name);
+            const empty = value === null || value === undefined || value === '';
+            if (empty) el.removeAttribute(name);
             else el.setAttribute(name, String(value));
+            if (TYPED_ATTR_SUPPORTED) return;
+            if (key === 'progress') {
+                // Emulate the typed-attr() playhead/progress CSS.
+                const p = empty ? 0 : (parseFloat(value) || 0);
+                if (el.classList.contains('card-progress-fill') || el.classList.contains('arranger-time-bar-progress')) {
+                    el.style.width = `${p * 100}%`;
+                } else {
+                    el.style.left = `${p * 100}%`;
+                }
+            } else if (TYPED_ATTR_STYLE_KEYS.has(key)) {
+                el.style[key] = empty ? '' : String(value);
+            }
         });
     }
 
@@ -2240,13 +2262,18 @@
         });
 
         if (arrangerModeActive) {
+            // Quantize like the card playheads and skip unchanged writes; the
+            // CSS animates transform (translateX/scaleX), not left/width.
+            const arrangerProgress = (Math.round(pct * 1000) / 1000).toString();
             const playheadLine = document.getElementById('arranger-playhead-line');
-            if (playheadLine) {
-                setPresentation(playheadLine, { left: `${pct * 100}%` });
+            if (playheadLine && playheadLine._lastProgress !== arrangerProgress) {
+                playheadLine._lastProgress = arrangerProgress;
+                setPresentation(playheadLine, { progress: arrangerProgress });
             }
             const timeBarProgress = document.getElementById('arranger-time-bar-progress');
-            if (timeBarProgress) {
-                setPresentation(timeBarProgress, { width: `${pct * 100}%` });
+            if (timeBarProgress && timeBarProgress._lastProgress !== arrangerProgress) {
+                timeBarProgress._lastProgress = arrangerProgress;
+                setPresentation(timeBarProgress, { progress: arrangerProgress });
             }
         }
     }
@@ -7083,24 +7110,39 @@ function updateTrackLockState(track) {
     // --- Structured Prompt Builder & Rolling History ---
     promptBuilder = PromptBuilder.createPromptBuilder({ storage: localStorage });
 
+    // Generation mutex: every entry point (Generate button, history resend,
+    // slicer presets, outpaint) must acquire this before creating a pending
+    // history entry or submitting a job.  The disabled state of btnGenerate is
+    // a UI side effect, not the lock.
+    let generationInFlight = false;
+
     async function submitCurrentGeneration(options = {}) {
+        if (generationInFlight) {
+            showStatus('A generation is already in progress.', 'error');
+            return;
+        }
+        generationInFlight = true;
         try {
-            await promptBuilder.ready;
-        } catch (_error) {
-            showStatus('Prompt builder is unavailable.', 'error');
-            return;
+            try {
+                await promptBuilder.ready;
+            } catch (_error) {
+                showStatus('Prompt builder is unavailable.', 'error');
+                return;
+            }
+            const prompt = promptBuilder.currentPrompt();
+            if (!prompt) {
+                showStatus('Choose at least one prompt section before generating.', 'error');
+                return;
+            }
+            const historyEntry = promptBuilder.createHistoryEntry('pending', null);
+            await runGeneration(prompt, {
+                ...options,
+                historyEntryId: historyEntry.id,
+                selections: historyEntry.selections
+            });
+        } finally {
+            generationInFlight = false;
         }
-        const prompt = promptBuilder.currentPrompt();
-        if (!prompt) {
-            showStatus('Choose at least one prompt section before generating.', 'error');
-            return;
-        }
-        const historyEntry = promptBuilder.createHistoryEntry('pending', null);
-        await runGeneration(prompt, {
-            ...options,
-            historyEntryId: historyEntry.id,
-            selections: historyEntry.selections
-        });
     }
 
     btnGenerate.addEventListener('click', () => submitCurrentGeneration());
@@ -7348,6 +7390,10 @@ function updateTrackLockState(track) {
     });
 
     async function runGeneration(prompt, options = {}) {
+        // Acquire the mutex if a caller did not already hold it (all current
+        // callers go through submitCurrentGeneration, which does).
+        const acquiredLock = !generationInFlight;
+        if (acquiredLock) generationInFlight = true;
         const bpm = parseInt(bpmInput.value) || 120;
         const numVariants = 4;
         const loop = true;
@@ -7476,6 +7522,7 @@ function updateTrackLockState(track) {
             }
             showStatus(err.name === 'GenerationCancelledError' ? 'Queued generation cancelled.' : `Error: ${err.message}`, err.name === 'GenerationCancelledError' ? 'done' : 'error');
         } finally {
+            if (acquiredLock) generationInFlight = false;
             setGenerationCancelState(null);
             btnGenerate.disabled = false;
             btnGenerate.classList.remove('is-generating');
@@ -7484,7 +7531,8 @@ function updateTrackLockState(track) {
     }
 
     async function runOutpaint(track, variant, loopsCount) {
-        if (btnGenerate.disabled) return; // Prevent concurrent generations
+        if (generationInFlight) return; // Prevent concurrent generations
+        generationInFlight = true;
 
         const originalParams = track.originalParams || {
             prompt: track.prompt || "music loop",
@@ -7566,6 +7614,7 @@ function updateTrackLockState(track) {
             if (err.name !== 'GenerationCancelledError') console.error('Outpaint error:', err);
             showStatus(err.name === 'GenerationCancelledError' ? 'Queued generation cancelled.' : `Error: ${err.message}`, err.name === 'GenerationCancelledError' ? 'done' : 'error');
         } finally {
+            generationInFlight = false;
             setGenerationCancelState(null);
             btnGenerate.disabled = false;
             btnGenerate.classList.remove('is-generating');
@@ -7735,10 +7784,8 @@ function updateTrackLockState(track) {
     if (vizMetersCanvas) ro.observe(vizMetersCanvas);
 
     // --- Keyboard ---
-    document.addEventListener('keydown', (e) => {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-        if (e.code === 'Space') { e.preventDefault(); btnPlayPause.click(); }
-    });
+    // Play/pause on Space is handled by the window-level KEYBOARD_SHORTCUTS
+    // listener; a second document-level handler here double-fired it.
 
     // --- Metering Functions ---
     function dbToPct(db) {
@@ -9661,7 +9708,7 @@ function updateTrackLockState(track) {
 
         const activeDuration = getActiveDuration();
         const currentProgress = activeDuration > 0 ? (isPlaying ? ((audioCtx.currentTime - playStartCtxTime) % activeDuration) : playOffset) / activeDuration : 0;
-        setPresentation(progressEl, { width: `${currentProgress * 100}%` });
+        setPresentation(progressEl, { progress: (Math.round(currentProgress * 1000) / 1000).toString() });
         cellsHeader.appendChild(progressEl);
 
         // Add Scrubbing behavior (click and drag to seek playhead)
@@ -9718,8 +9765,11 @@ function updateTrackLockState(track) {
             const gridArray = arrangerGrid[track.id];
 
             for (let l = 0; l < numLoops; l++) {
-                const cell = document.createElement('div');
+                const cell = document.createElement('button');
+                cell.type = 'button';
                 cell.className = 'arranger-cell';
+                cell.setAttribute('aria-label', `Track ${idx + 1} loop ${l + 1}`);
+                cell.setAttribute('aria-pressed', gridArray[l] ? 'true' : 'false');
                 if (gridArray[l]) {
                     cell.classList.add('active');
                 }
@@ -9727,6 +9777,7 @@ function updateTrackLockState(track) {
                 cell.addEventListener('click', () => {
                     gridArray[l] = !gridArray[l];
                     cell.classList.toggle('active', gridArray[l]);
+                    cell.setAttribute('aria-pressed', gridArray[l] ? 'true' : 'false');
                 });
 
                 cells.appendChild(cell);
@@ -9737,17 +9788,12 @@ function updateTrackLockState(track) {
         });
 
         const playheadWrapper = document.createElement('div');
-        setPresentation(playheadWrapper, { position: 'absolute' });
-        setPresentation(playheadWrapper, { left: '128px' });
-        setPresentation(playheadWrapper, { right: '4px' });
-        setPresentation(playheadWrapper, { top: '0' });
-        setPresentation(playheadWrapper, { bottom: '0' });
-        setPresentation(playheadWrapper, { pointerEvents: 'none' });
+        playheadWrapper.className = 'arranger-playhead-wrapper';
 
         const playhead = document.createElement('div');
         playhead.className = 'arranger-playhead';
         playhead.id = 'arranger-playhead-line';
-        setPresentation(playhead, { left: `${currentProgress * 100}%` });
+        setPresentation(playhead, { progress: (Math.round(currentProgress * 1000) / 1000).toString() });
         setPresentation(playhead, { display: arrangerModeActive ? 'block' : 'none' });
 
         playheadWrapper.appendChild(playhead);
@@ -10109,9 +10155,11 @@ function updateTrackLockState(track) {
 
         const active = document.activeElement;
         if (active && (
-            active.tagName === 'INPUT' || 
-            active.tagName === 'TEXTAREA' || 
-            active.tagName === 'SELECT' || 
+            active.tagName === 'INPUT' ||
+            active.tagName === 'TEXTAREA' ||
+            active.tagName === 'SELECT' ||
+            active.tagName === 'BUTTON' ||
+            active.hasAttribute('tabindex') ||
             active.isContentEditable
         )) {
             return;

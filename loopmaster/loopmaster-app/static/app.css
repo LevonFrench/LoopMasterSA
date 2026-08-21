@@ -314,7 +314,7 @@ body::before {
     align-items: center;
     justify-content: center;
     border-radius: var(--radius-sm);
-    transition: all var(--transition-fast);
+    transition: color var(--transition-fast), background-color var(--transition-fast);
     z-index: 2;
 }
 .btn-prompt-history:hover {
@@ -874,7 +874,7 @@ body::before {
     background: transparent;
     color: var(--text-tertiary);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
     padding: 0;
     display: flex;
     align-items: center;
@@ -1355,7 +1355,7 @@ body.split-mode .card-split-line {
     border: 1px solid var(--border-input);
     background: rgba(255, 255, 255, 0.02);
     color: var(--text-tertiary);
-    transition: all var(--transition-fast);
+    transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
     line-height: 1;
     cursor: pointer;
 }
@@ -1399,8 +1399,17 @@ body.split-mode .card-split-line {
     left: 0;
     height: 100%;
     background: var(--accent-soft);
-    width: calc(attr(data-progress type(<number>), 0) * 100%);
+    transform-origin: left;
     pointer-events: none;
+}
+/* Typed attr() needs Chromium 133+. Browsers without it get inline styles
+   written by setPresentation's fallback path instead. */
+@supports (width: calc(attr(data-progress type(<number>), 0) * 100%)) {
+    .card-progress-fill {
+        width: 100%;
+        transform: scaleX(attr(data-progress type(<number>), 0));
+        will-change: transform;
+    }
 }
 
 /* --- Responsive --- */
@@ -1605,7 +1614,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     border-radius: 3px;
     padding: 1px 4px;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
     margin-right: 6px;
     display: inline-flex;
     align-items: center;
@@ -1736,7 +1745,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     border: none;
     cursor: pointer;
     border-radius: 3px;
-    transition: all var(--transition-fast);
+    transition: color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast);
     flex: 1;
 }
 
@@ -2100,7 +2109,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     cursor: pointer;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    transition: all var(--transition-fast);
+    transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .fx-toggle-btn:hover {
@@ -2130,7 +2139,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
 
 /* Lock track button states */
 .mixer-btn.lock-btn {
-    transition: all var(--transition-fast);
+    transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .mixer-btn.lock-btn:hover {
@@ -2374,7 +2383,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     border: 1px solid var(--border-card);
     border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2622,7 +2631,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     border-radius: 3px;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
 }
 .fx-map-btn:hover {
     color: var(--text-primary);
@@ -2774,7 +2783,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     border-radius: var(--radius-sm);
     color: var(--text-primary);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 .arranger-btn:hover {
     background: rgba(255,255,255,0.1);
@@ -2831,8 +2840,16 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     top: 0;
     bottom: 0;
     background: rgba(59, 130, 246, 0.12);
+    transform-origin: left;
     pointer-events: none;
     z-index: 0;
+}
+@supports (width: calc(attr(data-progress type(<number>), 0) * 100%)) {
+    .arranger-time-bar-progress {
+        width: 100%;
+        transform: scaleX(attr(data-progress type(<number>), 0));
+        will-change: transform;
+    }
 }
 .arranger-track-label {
     width: 120px;
@@ -2852,12 +2869,19 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     height: 100%;
 }
 .arranger-cell {
+    /* Button reset: toggle cells are <button type="button"> so skins keep
+       their div-era look. */
+    appearance: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
     flex: 1;
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.04);
     border-radius: 3px;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .arranger-cell:hover {
     background: rgba(59, 130, 246, 0.1);
@@ -2876,13 +2900,25 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     background: rgba(59, 130, 246, 0.4);
     border-color: rgba(59, 130, 246, 0.7);
 }
+.arranger-playhead-wrapper {
+    position: absolute;
+    left: 128px;
+    right: 4px;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    container-type: inline-size;
+}
 .arranger-playhead {
     position: absolute;
     top: 0;
     bottom: 0;
+    left: 0;
     width: 2px;
     background: var(--playhead-color);
     box-shadow: 0 0 6px var(--playhead-color);
+    transform: translateX(calc(attr(data-progress type(<number>), 0) * 100cqi));
+    will-change: transform;
     pointer-events: none;
     z-index: 100;
 }
@@ -3044,7 +3080,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     border-radius: 3px;
     padding: 1px 3px;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: color var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3082,7 +3118,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     border-radius: 9999px;
     padding: 2px 8px;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -3411,7 +3447,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     border-color: #00f2fe !important;
     box-shadow: 0 0 12px rgba(0, 242, 254, 0.9), inset 0 0 4px rgba(0, 242, 254, 0.5) !important;
     transform: scale(1.06) !important;
-    transition: all 0.15s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+    transition: border-color 0.15s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.15s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.15s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
     z-index: 50 !important;
 }
 
@@ -3590,7 +3626,7 @@ body[data-cursor="ns-resize"] { cursor: ns-resize; }
     border: 1px solid rgba(255, 255, 255, 0.03);
     border-radius: 6px;
     padding: 4px 8px;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
 .shortcut-item-compact:hover {

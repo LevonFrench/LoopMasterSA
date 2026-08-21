@@ -13,6 +13,10 @@ const TIMEOUT_MS = 45_000;
 const CAPTURE_SKINS = process.argv.includes('--capture-skins');
 const SKIN_PREVIEW_DIR = path.resolve(__dirname, '..', '..', 'output', 'skin-previews');
 
+// Pin userData before app-ready: without it Chromium derives the profile from a
+// garbled env prefix and litters empty mojibake dirs at the launch cwd (same fix as main.js).
+app.setPath('userData', path.resolve(__dirname, '..', '..', '.electron-profile'));
+
 app.commandLine.appendSwitch('disable-gpu');
 
 const MIME_TYPES = Object.freeze({
@@ -752,6 +756,7 @@ async function testTypedAttributesAndInlineStyles() {
             width: computed.width,
             transform: computed.transform,
             progressWidth: progressComputed.width,
+            progressTransform: progressComputed.transform,
             inlineStyleCount: document.querySelectorAll('[style]').length,
             supportsTypedAttr: CSS.supports('width', 'attr(data-width type(<length-percentage>), auto)'),
         };
@@ -762,9 +767,14 @@ async function testTypedAttributesAndInlineStyles() {
     assert(result.left === '37px' && result.top === '19px', `Typed position attrs did not compute: ${result.left}/${result.top}`);
     assert(result.width === '123px', `Typed width attr did not compute: ${result.width}`);
     assert(result.transform && result.transform !== 'none', 'Typed rotation/transform attr did not compute');
+    // The progress fill now animates via transform: scaleX(attr(data-progress))
+    // over a 100%-width element instead of animating width per frame.
     const progressPixels = Number.parseFloat(result.progressWidth);
-    assert(Number.isFinite(progressPixels) && Math.abs(progressPixels - 50.43) < 1,
-        `Typed progress attr did not compute to 41% of 123px: ${result.progressWidth}`);
+    assert(Number.isFinite(progressPixels) && Math.abs(progressPixels - 123) < 1,
+        `Progress fill base width did not compute to 100% of 123px: ${result.progressWidth}`);
+    const scaleMatch = /^matrix\(([-0-9.]+),/.exec(result.progressTransform || '');
+    assert(scaleMatch && Math.abs(Number.parseFloat(scaleMatch[1]) - 0.41) < 0.005,
+        `Typed progress attr did not compute to scaleX(0.41): ${result.progressTransform}`);
     assert(result.inlineStyleCount === 0, `Page contains ${result.inlineStyleCount} inline style attributes`);
     return result;
 }
