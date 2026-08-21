@@ -72,15 +72,47 @@ Already shipping from LoopMaster; freeze the fields:
 - OPTIONAL `IKEY`: musical key + scale as text (`F# minor`) for harmonic mixing later;
   rootNote alone loses major/minor.
 
-## Layer 5 — `cKUP` chunk: looper cache (OPTIONAL, ours)
+## Layer 5 — `cKUP` chunk: looper cache + CHORDS (OPTIONAL, ours; chords REQUIRED for harmonic loops — owner order 2026-08-21)
 
-A custom chunk (id `cKUP`, JSON payload) carrying what OUR looper computes at ingest so
-re-ingest is instant and display needs no audio decode:
-`{"v":1,"peaks":[64 x 0..1],"slug":"...","lufs":null}`
-Rules: never REQUIRED (any consumer must work without it); ignored by DAWs by design
-(unknown chunks are skipped); version field first so it can evolve. Writer: THE COOKUP's
-`ingest_loops.py` (roblox repo) on first ingest, or LoopMaster at render time if it wants
-to precompute peaks.
+A custom chunk (id `cKUP`, JSON payload), version-first so it evolves. v2 adds the
+chord track:
+
+```json
+{"v":2,
+ "peaks":[64 x 0..1],
+ "slug":"cookout_synthlead_120bpm_cmin_8bar_a1",
+ "key":"c_min",
+ "chords":[
+   {"bar":1,"beat":1,"chord":"c_min"},
+   {"bar":3,"beat":1,"chord":"ab_maj"},
+   {"bar":5,"beat":1,"chord":"eb_maj"},
+   {"bar":7,"beat":1,"chord":"bb_maj"}
+ ]}
+```
+
+**One chord grammar everywhere** — the same vocabulary rides the file chunk, the pack
+manifest, and THE COOKUP's runtime harmony broadcast (the in-game chord bus other
+sequencers/synths subscribe to), so a chord never gets translated between layers:
+
+- token = `<root>_<quality>` with optional extension: `c_min`, `ab_maj`, `f_dom7`,
+  `g_sus4`, `d_min7`, `eb_maj7`
+- roots: `c db d eb e f gb g ab a bb b` — FLATS ONLY, lowercase (same law as the
+  filename convention; `#` never appears)
+- qualities v1: `maj min dim aug sus2 sus4 dom` + optional trailing extension
+  `6 7 9 maj7` (grammar is versioned with the chunk; consumers must PASS THROUGH
+  unknown quality tokens rather than erroring — forward compatibility)
+- timing is MUSICAL, tempo-independent: `bar` (1-based) + `beat` (1-based within the
+  bar); a chord holds until the next entry; entry 1 must be bar 1 beat 1; positions
+  beyond the loop length are invalid
+- `key` duplicates the human layer (`INFO.IKEY` stays the display string like
+  "C minor"; `cKUP.key` is the machine token) — when both exist they must agree
+
+Harmonic loops (melodic/chordal content) MUST carry `key` + at least one chord entry;
+drum/percussion loops omit `chords` legitimately. Rules unchanged otherwise: chunk never
+REQUIRED for playback (consumers degrade to keyless), DAWs skip unknown chunks by
+design. Writers: LoopMaster at render time (it knows the prompt's key — tonight's
+prompts literally said "in C minor"), CookOutCarryOut at pack build, `ingest_loops.py`
+at ingest.
 
 ## Layer 6 — ID3 mapping (bpmxxx interop + the DJ-software dialect)
 
