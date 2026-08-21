@@ -253,7 +253,7 @@ html[data-lm-skin="session-sheet"] .controls-panel::before {
 
 html[data-lm-skin="session-sheet"] .controls-row {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     align-items: end;
     gap: 10px;
 }
@@ -269,14 +269,34 @@ html[data-lm-skin="session-sheet"] .controls-row > .control-group.prompt-group {
     min-width: 0;
 }
 
-html[data-lm-skin="session-sheet"] .controls-row > .control-group:has(#btn-kit-toggle) {
+html[data-lm-skin="session-sheet"] [data-lm-part="tempo-control"] {
     grid-column: 1;
     grid-row: 1;
 }
 
-html[data-lm-skin="session-sheet"] .controls-row > .control-group:has(#btn-generate) {
+html[data-lm-skin="session-sheet"] [data-lm-part="seed-control"] {
     grid-column: 2;
     grid-row: 1;
+}
+
+html[data-lm-skin="session-sheet"] [data-lm-part="kit-action"] {
+    grid-column: 3;
+    grid-row: 1;
+}
+
+html[data-lm-skin="session-sheet"] [data-lm-part="generate-action"] {
+    grid-column: 4;
+    grid-row: 1;
+}
+
+html[data-lm-skin="session-sheet"] [data-lm-part="steps-control"] {
+    grid-column: 1 / 3;
+    grid-row: 3;
+}
+
+html[data-lm-skin="session-sheet"] [data-lm-part="tier-control"] {
+    grid-column: 3 / 5;
+    grid-row: 3;
 }
 
 html[data-lm-skin="session-sheet"] .control-group-header {
@@ -393,29 +413,6 @@ html[data-lm-skin="session-sheet"] .prompt-freeform {
 html[data-lm-skin="session-sheet"] .prompt-freeform::placeholder {
     color: var(--sheet-faint);
     opacity: 1;
-}
-
-html[data-lm-skin="session-sheet"] .prompt-preview {
-    min-height: 72px;
-    padding: 30px 14px 12px 18px;
-    border: 0;
-    border-top: 1px solid var(--sheet-rule);
-    background: var(--sheet-paper-deep);
-    color: var(--sheet-graphite);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    line-height: 1.5;
-}
-
-html[data-lm-skin="session-sheet"] .prompt-preview::before {
-    content: 'COMPILED SCORE';
-    top: 9px;
-    left: 18px;
-    color: var(--sheet-margin-dark);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    font-weight: 750;
-    letter-spacing: 0.07em;
 }
 
 html[data-lm-skin="session-sheet"] .prompt-builder-grid {
@@ -1681,6 +1678,45 @@ html[data-lm-skin="session-sheet"] :is(.controls-panel, .tracks-container, .gene
         margin: -12px -12px 12px;
     }
 
+    html[data-lm-skin="session-sheet"] .controls-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    html[data-lm-skin="session-sheet"] [data-lm-part="tempo-control"] {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    html[data-lm-skin="session-sheet"] [data-lm-part="generate-action"] {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    html[data-lm-skin="session-sheet"] .control-group.prompt-group {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    html[data-lm-skin="session-sheet"] [data-lm-part="seed-control"] {
+        grid-column: 1;
+        grid-row: 3;
+    }
+
+    html[data-lm-skin="session-sheet"] [data-lm-part="steps-control"] {
+        grid-column: 2;
+        grid-row: 3;
+    }
+
+    html[data-lm-skin="session-sheet"] [data-lm-part="tier-control"] {
+        grid-column: 1;
+        grid-row: 4;
+    }
+
+    html[data-lm-skin="session-sheet"] [data-lm-part="kit-action"] {
+        grid-column: 2;
+        grid-row: 4;
+    }
+
     html[data-lm-skin="session-sheet"] .prompt-inline-btns {
         width: 100%;
         display: grid;
@@ -1870,7 +1906,7 @@ html[data-lm-skin="session-sheet"] :is(.controls-panel, .tracks-container, .gene
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    html[data-lm-skin="session-sheet"] .controls-row > .control-group:has(#btn-generate) {
+    html[data-lm-skin="session-sheet"] [data-lm-part="generate-action"] {
         position: sticky;
         bottom: 8px;
         z-index: 30;

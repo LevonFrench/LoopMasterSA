@@ -149,7 +149,7 @@ MAX_CFG_SCALE = 15.0
 MAX_PADDING_SECONDS = 10.0
 VALID_REMIX_MODES = {"variation", "inpaint", "response", "continuation"}
 PROMPT_SECTION_KEYS = {
-    "freePrompt", "acoustic", "electric", "drums", "genre", "harmony",
+    "promptMode", "freePrompt", "acoustic", "electric", "drums", "genre", "harmony",
     "style", "mood", "negativePrompt", "modifiers", "sourceChoice",
     "characterChoice", "progressionKey", "progressionId", "progression",
     "chordTrack", "instrument", "production",
@@ -198,6 +198,9 @@ def validate_prompt_sections(value):
                 f"prompt_sections.{key} must be {max_length} characters or fewer"
             )
         normalized[key] = section_value.strip()
+    prompt_mode = normalized.get("promptMode", "")
+    if prompt_mode and prompt_mode not in {"assembled", "manual"}:
+        raise ValueError("prompt_sections.promptMode must be assembled or manual")
     return normalized
 
 
@@ -207,6 +210,13 @@ def compose_prompt_sections(sections):
 
     def clean(key):
         return " ".join(values.get(key, "").split())
+
+    def free_prompt():
+        return values.get("freePrompt", "").strip()
+
+    prompt_mode = clean("promptMode")
+    if prompt_mode == "manual":
+        return free_prompt()
 
     source_choice = clean("sourceChoice")
     source = clean(source_choice) if source_choice in PROMPT_SOURCE_KEYS else ""
@@ -251,13 +261,15 @@ def compose_prompt_sections(sections):
                 progression = " ".join(filter(None, (
                     mood_text.lower(), "four-chord", formula, "progression"
                 )))
-    return ", ".join(filter(None, (
-        clean("freePrompt"),
+    assembled = ", ".join(filter(None, (
         lead,
         progression,
         clean("production"),
         modifiers,
     )))
+    if prompt_mode == "assembled":
+        return assembled
+    return ", ".join(filter(None, (clean("freePrompt"), assembled)))
 
 
 def rate_limit_generation_request():
@@ -809,7 +821,7 @@ def api_generate():
         prompt_sections = validate_prompt_sections(data.get("prompt_sections"))
         if prompt_sections:
             expected_prompt = compose_prompt_sections(prompt_sections)
-            if " ".join(prompt.split()) != expected_prompt:
+            if " ".join(prompt.split()) != " ".join(expected_prompt.split()):
                 raise ValueError(
                     "prompt does not match the supplied structured sections"
                 )
@@ -1052,7 +1064,7 @@ def api_regenerate():
         prompt_sections = validate_prompt_sections(data.get("prompt_sections"))
         if prompt_sections:
             expected_prompt = compose_prompt_sections(prompt_sections)
-            if " ".join(prompt.split()) != expected_prompt:
+            if " ".join(prompt.split()) != " ".join(expected_prompt.split()):
                 raise ValueError(
                     "prompt does not match the supplied structured sections"
                 )

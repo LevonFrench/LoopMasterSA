@@ -11,7 +11,10 @@
     const MIDDLE_KEYS = ['genre', 'harmony', 'style'];
     const LEGACY_POSITIVE_KEYS = ['instrument'];
     const CHORD_PROGRESSOR_VALUE = 'Use Chord Progressor';
+    const PROMPT_MODE_ASSEMBLED = 'assembled';
+    const PROMPT_MODE_MANUAL = 'manual';
     const DEFAULT_SELECTION_KEYS = [
+        'promptMode',
         'freePrompt',
         ...SOURCE_KEYS,
         ...MIDDLE_KEYS,
@@ -32,12 +35,35 @@
         return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
     }
 
+    function cleanFreePrompt(value) {
+        return typeof value === 'string' ? value.trim() : '';
+    }
+
     function normalizeSelections(selections, sectionKeys) {
         const source = selections && typeof selections === 'object' ? selections : {};
         const keys = Array.isArray(sectionKeys) && sectionKeys.length
             ? sectionKeys
             : DEFAULT_SELECTION_KEYS;
-        return Object.fromEntries(keys.map(key => [key, clean(source[key])]));
+        return Object.fromEntries(keys.map(key => [
+            key,
+            key === 'freePrompt' ? cleanFreePrompt(source[key]) : clean(source[key])
+        ]));
+    }
+
+    function migratePromptSelections(selections, sectionKeys) {
+        const normalized = normalizeSelections(selections, sectionKeys);
+        if (normalized.promptMode === PROMPT_MODE_MANUAL) return normalized;
+        if (normalized.promptMode === PROMPT_MODE_ASSEMBLED) {
+            normalized.freePrompt = '';
+            return normalized;
+        }
+        if (normalized.freePrompt) {
+            normalized.freePrompt = composePrompt(normalized);
+            normalized.promptMode = PROMPT_MODE_MANUAL;
+            return normalized;
+        }
+        normalized.promptMode = PROMPT_MODE_ASSEMBLED;
+        return normalized;
     }
 
     function normalizeMutedOptions(mutedOptions, sections) {
@@ -165,6 +191,7 @@
 
     function composePrompt(selections) {
         const values = normalizeSelections(selections);
+        if (values.promptMode === PROMPT_MODE_MANUAL) return values.freePrompt;
         const source = selectedGroupValue(values, 'sourceChoice', SOURCE_KEYS) ||
             LEGACY_POSITIVE_KEYS.map(key => values[key]).find(Boolean) || '';
         const characterChoice = values.characterChoice;
@@ -178,13 +205,17 @@
         const harmony = key ? `in ${key}` : '';
         const progression = progressorActive ? progressionPhrase(values.progression) : '';
         const lead = [head, harmony].filter(Boolean).join(' ');
-        return [
-            values.freePrompt,
+        const assembled = [
             lead,
             progression,
             values.production,
             modifiers
         ].filter(Boolean).join(', ');
+        if (values.promptMode === PROMPT_MODE_ASSEMBLED) return assembled;
+        // Mode-less payloads are old prefix-style snapshots. Keep their
+        // historical whitespace normalization while new manual mode retains
+        // the exact interior text.
+        return [clean(values.freePrompt), assembled].filter(Boolean).join(', ');
     }
 
     function effectiveNegativePrompt(selections) {
@@ -216,10 +247,27 @@
         const sourceSelections = isRecord(entry.selections) ? entry.selections : {};
         const selections = Object.fromEntries(Object.entries(sourceSelections)
             .filter(([, value]) => typeof value === 'string')
-            .map(([key, value]) => [key, clean(value)]));
+            .map(([key, value]) => [
+                key,
+                key === 'freePrompt' ? cleanFreePrompt(value) : clean(value)
+            ]));
         const prompt = typeof entry.prompt === 'string'
-            ? clean(entry.prompt)
+            ? cleanFreePrompt(entry.prompt)
             : composePrompt(selections);
+        const explicitMode = selections.promptMode === PROMPT_MODE_ASSEMBLED ||
+            selections.promptMode === PROMPT_MODE_MANUAL
+            ? selections.promptMode
+            : '';
+        if (explicitMode) {
+            selections.promptMode = explicitMode;
+        } else {
+            // Pre-mode history could contain both a free-text prefix and
+            // structured values. Preserve exactly what that entry displayed
+            // as a manual override so restoring it can never concatenate it
+            // with a newly randomized prompt.
+            selections.promptMode = PROMPT_MODE_MANUAL;
+            selections.freePrompt = prompt;
+        }
         const resultReference = isRecord(entry.resultReference)
             ? { ...entry.resultReference }
             : null;
@@ -283,6 +331,8 @@
         CHARACTER_KEYS,
         CHORD_PROGRESSOR_VALUE,
         MIDDLE_KEYS,
+        PROMPT_MODE_ASSEMBLED,
+        PROMPT_MODE_MANUAL,
         SOURCE_KEYS,
         appendHistory,
         chooseRandomOption,
@@ -291,6 +341,7 @@
         enforceHistoryCap,
         historyType,
         isSubmittedSnapshot,
+        migratePromptSelections,
         normalizeHistoryEntry,
         normalizeMutedOptions,
         normalizeSelections,

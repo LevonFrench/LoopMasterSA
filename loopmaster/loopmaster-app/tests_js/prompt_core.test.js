@@ -11,6 +11,7 @@ const {
     effectiveNegativePrompt,
     enforceHistoryCap,
     isSubmittedSnapshot,
+    migratePromptSelections,
     normalizeMutedOptions,
     progressionPhrase,
     randomizeGroupedSelections,
@@ -48,6 +49,68 @@ test('composePrompt includes only the active source and character rows', () => {
     assert.equal(effectiveNegativePrompt(selections), '');
 });
 
+test('prompt modes never concatenate a manual override with an assembled prompt', () => {
+    const selections = {
+        freePrompt: 'exact manually edited prompt',
+        genre: 'techno',
+        electric: 'analog synthesizer',
+        sourceChoice: 'electric',
+        mood: 'hypnotic',
+        characterChoice: 'mood',
+        harmony: 'C minor'
+    };
+
+    assert.equal(
+        composePrompt({ ...selections, promptMode: 'manual' }),
+        'exact manually edited prompt'
+    );
+    assert.equal(
+        composePrompt({ ...selections, promptMode: 'assembled' }),
+        'hypnotic techno analog synthesizer in C minor'
+    );
+    assert.equal(
+        composePrompt(selections),
+        'exact manually edited prompt, hypnotic techno analog synthesizer in C minor'
+    );
+    assert.equal(
+        composePrompt({
+            ...selections,
+            promptMode: 'manual',
+            freePrompt: 'line one  line two\nline three'
+        }),
+        'line one  line two\nline three'
+    );
+});
+
+test('legacy saved prefixes migrate to the exact formerly composed prompt', () => {
+    assert.deepEqual(migratePromptSelections({
+        freePrompt: 'old complete prompt',
+        genre: 'house',
+        electric: 'analog synthesizer',
+        sourceChoice: 'electric'
+    }), {
+        promptMode: 'manual',
+        freePrompt: 'old complete prompt, house analog synthesizer',
+        acoustic: '',
+        electric: 'analog synthesizer',
+        drums: '',
+        genre: 'house',
+        harmony: '',
+        style: '',
+        mood: '',
+        negativePrompt: '',
+        modifiers: '',
+        sourceChoice: 'electric',
+        characterChoice: '',
+        progressionKey: '',
+        progressionId: '',
+        progression: '',
+        chordTrack: '',
+        instrument: '',
+        production: ''
+    });
+});
+
 test('composePrompt switches the active source and character deterministically', () => {
     const selections = {
         genre: 'house',
@@ -74,7 +137,7 @@ test('composePrompt switches the active source and character deterministically',
     assert.equal(effectiveNegativePrompt(avoidActive), 'unwanted vocals');
 });
 
-test('composePrompt skips empty sections and normalizes whitespace', () => {
+test('composePrompt normalizes structured and legacy prefix whitespace', () => {
     assert.equal(
         composePrompt({ instrument: '  synth   bass ', modifiers: ' punchy ' }),
         'synth bass, punchy'
@@ -160,19 +223,58 @@ test('history normalization drops invalid entries and repairs malformed nested f
     ]);
 
     assert.deepEqual(history.map(entry => entry.id), ['cleaned-draft', 'safe-sent']);
-    assert.deepEqual(history[0].selections, { instrument: 'synth bass' });
-    assert.equal(history[0].prompt, 'spaced prompt');
+    assert.deepEqual(history[0].selections, {
+        instrument: 'synth bass',
+        promptMode: 'manual',
+        freePrompt: 'spaced   prompt'
+    });
+    assert.equal(history[0].prompt, 'spaced   prompt');
     assert.equal(history[0].resultReference, null);
     assert.equal(history[1].timestamp, 7);
-    assert.deepEqual(history[1].selections, {});
+    assert.deepEqual(history[1].selections, {
+        promptMode: 'manual',
+        freePrompt: ''
+    });
     assert.equal(history[1].prompt, '');
     assert.equal(history[1].resultReference, null);
 });
 
+test('history normalization migrates legacy entries to exact manual prompt snapshots', () => {
+    const history = enforceHistoryCap([
+        {
+            id: 'assembled',
+            timestamp: 2,
+            status: 'draft',
+            selections: {
+                promptMode: 'assembled',
+                freePrompt: 'stale prefix',
+                genre: 'house'
+            },
+            prompt: 'house'
+        },
+        {
+            id: 'legacy',
+            timestamp: 1,
+            status: 'draft',
+            selections: {
+                freePrompt: 'old prefix',
+                genre: 'techno'
+            },
+            prompt: 'old prefix, techno'
+        }
+    ]);
+
+    assert.equal(history[0].selections.promptMode, 'assembled');
+    assert.equal(history[0].selections.freePrompt, 'stale prefix');
+    assert.equal(history[1].selections.promptMode, 'manual');
+    assert.equal(history[1].selections.freePrompt, 'old prefix, techno');
+});
+
 test('submitted snapshot detection distinguishes sent entries from real drafts', () => {
-    const sectionKeys = ['freePrompt', 'instrument', 'drums', 'harmony', 'negativePrompt'];
+    const sectionKeys = ['promptMode', 'freePrompt', 'instrument', 'drums', 'harmony', 'negativePrompt'];
     const selections = {
-        freePrompt: '  custom   idea ',
+        promptMode: 'assembled',
+        freePrompt: '',
         instrument: 'synth bass',
         drums: '909 drum machine',
         harmony: 'A minor',
@@ -184,7 +286,7 @@ test('submitted snapshot detection distinguishes sent entries from real drafts',
             id: `sent-${status}`,
             timestamp: 1,
             status,
-            selections: { ...selections, freePrompt: 'custom idea' }
+            selections: { ...selections }
         }], selections, sectionKeys), true, `${status} is a submitted state`);
     }
 

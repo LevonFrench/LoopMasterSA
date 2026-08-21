@@ -80,6 +80,7 @@ ui-ux-pro-max-skill/
 # User Captured Screenshots
 screenshots/
 loopmaster-desktop/output/skin-previews/
+output/skin-previews/
 .electron-profile/
 
 

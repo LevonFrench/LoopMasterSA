@@ -276,7 +276,7 @@
 [data-lm-skin="cutline"] .prompt-composer-bar {
     min-height: 84px;
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 0;
     overflow: hidden;
     border: 2px solid var(--cut-ink);
@@ -289,27 +289,12 @@
     min-height: 80px;
     padding: 12px;
     border: 0;
-    border-right: 1px solid #596056;
+    border-right: 0;
     border-radius: 0;
     background: var(--cut-paper);
     color: var(--cut-ink);
     font-size: 0.86rem;
     line-height: 1.45;
-}
-
-[data-lm-skin="cutline"] .prompt-preview {
-    min-height: 80px;
-    padding: 25px 12px 10px;
-    background: var(--cut-well);
-    color: #e5eadc;
-    font: 0.74rem/1.45 var(--font-mono);
-}
-
-[data-lm-skin="cutline"] .prompt-preview::before {
-    content: 'OUTPUT / MODEL TAPE';
-    color: var(--cut-signal);
-    font-size: 0.58rem;
-    letter-spacing: 0.1em;
 }
 
 [data-lm-skin="cutline"] .prompt-builder-grid {
@@ -1115,7 +1100,7 @@
 
     [data-lm-skin="cutline"] .prompt-freeform {
         border-right: 0;
-        border-bottom: 1px solid #596056;
+        border-bottom: 0;
     }
 
     [data-lm-skin="cutline"] .prompt-builder-column {

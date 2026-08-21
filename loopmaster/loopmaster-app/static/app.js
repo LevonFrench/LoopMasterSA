@@ -8040,7 +8040,12 @@ function updateTrackLockState(track) {
 
         // Restore the original prompt from the track that generated this audio
         if (track.prompt) {
-            promptBuilder.ready.then(() => promptBuilder.restoreLegacyPrompt(track.prompt));
+            promptBuilder.ready.then(() => {
+                promptBuilder.restoreGenerationPrompt(
+                    track.originalParams?.promptSections,
+                    track.prompt
+                );
+            });
         }
     }
 
@@ -10140,13 +10145,31 @@ function updateTrackLockState(track) {
 
     // Expose dev variables for testing
     window._dev = {
-        // Narrow, read-only seams for the Electron QA harness.  They do not
-        // expose the mutable track collection or AudioContext.
+        // Narrow seams for the Electron QA harness. They do not expose the
+        // mutable track collection or AudioContext.
         trackEffectGraph: TrackEffectGraph,
         pollGenerationJob: pollJob,
         requestGenerationCancellation: cancelActiveGeneration,
         getGenerationCancellationState: () => activeGenerationJob ? { ...activeGenerationJob } : null,
         openExportModalForQa: () => openExportModal('render'),
+        restoreTrackPromptForQa: async ({ prompt, promptSections }) => {
+            await promptBuilder.ready;
+            clearInitAudio();
+            setInitAudio({
+                id: 'qa-prompt-restore',
+                prompt,
+                originalParams: { duration: 8, promptSections },
+                variants: [{}],
+                el: null
+            }, 0, 'qa-prompt-restore.wav', 'QA prompt restore');
+            await Promise.resolve();
+            const restored = {
+                prompt: promptBuilder.currentPrompt(),
+                selections: promptBuilder.getSelections()
+            };
+            clearInitAudio();
+            return restored;
+        },
         isPlaying: () => isPlaying,
         globalDuration: () => globalDuration,
         getActiveDuration

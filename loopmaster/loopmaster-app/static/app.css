@@ -4068,7 +4068,7 @@ kbd {
 
 .prompt-composer-bar {
     display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(240px, 0.85fr);
+    grid-template-columns: minmax(0, 1fr);
     overflow: hidden;
     background: var(--bg-input);
     border: 1px solid var(--border-input);
@@ -4398,33 +4398,6 @@ kbd {
     opacity: 0.45;
 }
 
-.prompt-preview {
-    position: relative;
-    display: block;
-    min-width: 0;
-    min-height: 88px;
-    padding: 29px 14px 12px;
-    overflow-wrap: anywhere;
-    background: rgba(94, 106, 210, 0.055);
-    border: 0;
-    border-left: 1px solid rgba(94, 106, 210, 0.22);
-    border-radius: 0;
-    color: var(--text-secondary);
-    font-size: 0.74rem;
-    line-height: 1.5;
-}
-
-.prompt-preview::before {
-    content: 'Assembled prompt';
-    position: absolute;
-    top: 10px;
-    left: 14px;
-    color: var(--text-accent);
-    font: 700 0.55rem/1 var(--font-sans);
-    letter-spacing: 0.075em;
-    text-transform: uppercase;
-}
-
 /* Four-bar progression: a full-width harmonic lane beneath the prompt grid. */
 .chord-progressor {
     position: relative;
@@ -4660,15 +4633,6 @@ kbd {
 }
 
 @media (max-width: 760px) {
-    .prompt-composer-bar {
-        grid-template-columns: 1fr;
-    }
-
-    .prompt-preview {
-        border-top: 1px solid rgba(94, 106, 210, 0.22);
-        border-left: 0;
-    }
-
     .chord-progressor-controls {
         grid-template-columns: 1fr;
     }

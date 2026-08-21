@@ -68,3 +68,14 @@ test('every catalog stylesheet exists and declares its root skin scope', () => {
             `${entry.id} targets a state class the arranger never emits`);
     }
 });
+
+test('generation controls expose unique semantic skin hooks', () => {
+    const html = fs.readFileSync(path.join(staticRoot, 'index.html'), 'utf8');
+    for (const part of [
+        'tempo-control', 'seed-control', 'steps-control', 'tier-control',
+        'generate-action', 'kit-action'
+    ]) {
+        const matches = html.match(new RegExp(`data-lm-part=["']${part}["']`, 'g')) || [];
+        assert.equal(matches.length, 1, `${part} should appear exactly once`);
+    }
+});

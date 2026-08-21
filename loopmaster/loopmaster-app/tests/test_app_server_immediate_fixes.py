@@ -135,6 +135,34 @@ def test_server_composes_structured_prompt_like_client():
     )
 
 
+def test_server_prompt_modes_do_not_join_manual_and_assembled_text():
+    sections = {
+        "freePrompt": "exact manual prompt",
+        "promptMode": "manual",
+        "mood": "hypnotic",
+        "genre": "techno",
+        "electric": "analog synthesizer",
+        "sourceChoice": "electric",
+        "harmony": "C minor",
+    }
+
+    assert app_server.compose_prompt_sections(sections) == "exact manual prompt"
+    sections["freePrompt"] = "line one  line two\nline three"
+    assert app_server.compose_prompt_sections(sections) == (
+        "line one  line two\nline three"
+    )
+    sections["freePrompt"] = "exact manual prompt"
+    sections["promptMode"] = "assembled"
+    assert app_server.compose_prompt_sections(sections) == (
+        "hypnotic techno analog synthesizer in C minor"
+    )
+
+
+def test_server_rejects_unknown_prompt_mode():
+    with pytest.raises(ValueError, match="promptMode"):
+        app_server.validate_prompt_sections({"promptMode": "prefix"})
+
+
 def test_server_composes_chord_progressor_phrase_like_client():
     sections = {
         "freePrompt": "hook",

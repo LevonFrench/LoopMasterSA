@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-21 — Prompt replacement and visible tempo controls
+
+- Replaced the ambiguous free-text-prefix behavior with explicit manual and assembled prompt modes: the top prompt bar is now the single source of truth, and Randomize All or a positive structured edit replaces its prior text instead of appending a second instrument and prompt.
+- Removed the redundant assembled/final prompt pane. Avoid edits and mute controls preserve an exact manual prompt, while key, chord-progression, negative-prompt, and asset metadata selections remain available independently.
+- Restored structured prompt state when using a modern generation as initialization, retained exact prompt-only compatibility for older tracks, and migrated saved builder/history state without changing what legacy entries resend.
+- Moved BPM into the initial generator view in SESSION SHEET and PADMODE, with responsive placement beside the primary generation controls.
+- Added Electron, JavaScript, and backend regressions for manual/assembled composition parity, restored-prompt replacement, one active source per roll, legacy migration, and BPM visibility at skin breakpoint boundaries.
+
 ## 2026-08-21 — Modular workstation skins
 
 - Added a versioned, CSS-only skin runtime with a same-origin registry, atomic latest-choice-wins switching, local preference persistence, query-string previewing, load-failure rollback, change/error events, and a script-independent boot fail-open.

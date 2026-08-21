@@ -89,6 +89,7 @@ Top-level regions use `data-lm-region`:
 Reusable parts use `data-lm-part`:
 
 - `prompt-builder`, `prompt-column`, `prompt-section`, and `progressor`
+- `tempo-control`, `seed-control`, `steps-control`, and `tier-control`
 - `generate-action` and `kit-action`
 - `track`, `track-row`, `mixer`, `variants`, and `fx-drawer`
 - `modal`
@@ -104,6 +105,7 @@ Skin authors must style the classes and attributes the application actually emit
 | active prompt source | `.prompt-builder-section.is-group-active` |
 | dormant prompt source | `.prompt-builder-section.is-group-dormant` |
 | randomizer lock | `.is-random-muted`, `.chip-mute.is-muted` |
+| exact/assembled prompt mode | `[data-prompt-mode="manual"]`, `[data-prompt-mode="assembled"]` |
 | active chord map | `.chord-progressor.is-active` |
 | selected take | `.audio-card.is-selected` |
 | queued/loading take | `.audio-card.is-queued`, `.audio-card.is-loading` |

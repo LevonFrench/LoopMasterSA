@@ -8,15 +8,22 @@
     const NONE_VALUE = '__none__';
     const CUSTOM_VALUE = '__custom__';
     const FREEFORM_KEY = '__free_prompt__';
+    const PROMPT_MODE_ASSEMBLED = 'assembled';
+    const PROMPT_MODE_MANUAL = 'manual';
     const CUSTOM_DEBOUNCE_MS = 250;
     const INITIAL_HISTORY_WINDOW = 30;
     const EXTRA_SELECTION_KEYS = [
-        'sourceChoice', 'characterChoice', 'progressionKey', 'progressionId',
+        'promptMode', 'sourceChoice', 'characterChoice', 'progressionKey', 'progressionId',
         'progression', 'chordTrack',
         // Kept for restoring histories written before the grouped builder.
         'instrument', 'production'
     ];
     const PROGRESSION_SECTION_KEY = 'chordProgression';
+
+    function normalizePromptMode(value, fallback = PROMPT_MODE_ASSEMBLED) {
+        if (value === PROMPT_MODE_MANUAL || value === PROMPT_MODE_ASSEMBLED) return value;
+        return fallback;
+    }
 
     function readJson(storage, key, fallback) {
         try {
@@ -57,7 +64,7 @@
         const storage = options.storage || root.localStorage;
         const sectionsRoot = document.getElementById('prompt-builder-sections');
         const freeform = document.getElementById('prompt-freeform');
-        const preview = document.getElementById('prompt-preview');
+        const promptAnnouncer = document.getElementById('prompt-announcer');
         const errorBox = document.getElementById('prompt-builder-error');
         const randomizeAllButton = document.getElementById('btn-randomize-all');
         const historyButton = document.getElementById('btn-generation-history');
@@ -85,6 +92,7 @@
         let onEnter = options.onEnter || (() => {});
         let history = core.enforceHistoryCap(readJson(storage, STORAGE_HISTORY, []));
         let currentSnapshotSubmitted = false;
+        let promptAnnouncementCount = 0;
 
         function persistHistory() {
             history = core.enforceHistoryCap(history);
@@ -101,7 +109,10 @@
                 history = core.appendHistory(history, {
                     id: makeId('legacy'),
                     timestamp: Date.now() - index,
-                    selections: { modifiers: prompt.trim() },
+                    selections: {
+                        promptMode: PROMPT_MODE_MANUAL,
+                        freePrompt: prompt.trim()
+                    },
                     prompt: prompt.trim(),
                     status: 'draft',
                     resultReference: null
@@ -111,7 +122,9 @@
         }
 
         function persistSelections() {
+            selections = selectionState(selections);
             writeJson(storage, STORAGE_SELECTIONS, {
+                stateSchemaVersion: 2,
                 configVersion: config && config.version,
                 selections,
                 mutedSections: [...mutedSections]
@@ -147,8 +160,22 @@
             return ['freePrompt', ...config.sections.map(section => section.key), ...EXTRA_SELECTION_KEYS];
         }
 
-        function snapshot() {
-            return core.normalizeSelections(selections, sectionKeys());
+        function selectionState(source = selections) {
+            const normalized = core.normalizeSelections(source, sectionKeys());
+            normalized.promptMode = normalizePromptMode(normalized.promptMode);
+            return normalized;
+        }
+
+        function snapshot(source = selections) {
+            const state = selectionState(source);
+            // Manual mode changes prompt composition, not the asset metadata.
+            // Keep the selected key/progression/negative fields available to
+            // history, sidecars, and the server while composePrompt() emits
+            // only the exact text in freePrompt.
+            if (state.promptMode === PROMPT_MODE_MANUAL) return state;
+            state.promptMode = PROMPT_MODE_ASSEMBLED;
+            state.freePrompt = '';
+            return state;
         }
 
         function currentPrompt() {
@@ -174,21 +201,33 @@
             persistHistory();
         }
 
-        function updatePreview() {
+        function renderPromptBar({ preserveEditor = false } = {}) {
             const prompt = currentPrompt();
-            const negativePrompt = core.effectiveNegativePrompt(selections);
-            preview.textContent = [
-                prompt || 'Choose options or randomize all.',
-                negativePrompt ? `Avoid: ${negativePrompt}` : ''
-            ].filter(Boolean).join('\n');
+            if (!preserveEditor) {
+                const promptChanged = freeform.value !== prompt;
+                freeform.value = prompt;
+                if (promptChanged && promptAnnouncer) {
+                    promptAnnouncementCount += 1;
+                    promptAnnouncer.textContent = prompt
+                        ? `Prompt updated (${promptAnnouncementCount}).`
+                        : `Prompt cleared (${promptAnnouncementCount}).`;
+                }
+            }
+            if (sectionsRoot) sectionsRoot.dataset.promptMode = selectionState().promptMode;
         }
 
         function queueFreeformUpdate() {
             const hasPendingUpdate = customTimers.has(FREEFORM_KEY);
             const changed = commit({
                 ...selections,
+                promptMode: PROMPT_MODE_MANUAL,
                 freePrompt: freeform.value
-            }, { capture: !hasPendingUpdate, persist: false });
+            }, {
+                capture: !hasPendingUpdate,
+                persist: false,
+                promptMode: PROMPT_MODE_MANUAL,
+                preserveEditor: true
+            });
             if (changed || hasPendingUpdate) scheduleSelectionPersistence(FREEFORM_KEY);
         }
 
@@ -197,14 +236,28 @@
         }
 
         function commit(nextSelections, options = {}) {
-            const { capture = true, persist = true, submitted } = options;
-            const previous = snapshot();
+            const {
+                capture = true,
+                persist = true,
+                submitted,
+                promptMode,
+                preserveEditor = false
+            } = options;
+            const previousState = selectionState(selections);
+            const previous = snapshot(previousState);
             const grouped = prepareGroupedSelections(nextSelections);
             const prepared = progressionCatalog
                 ? prepareProgressionSelections(grouped)
                 : grouped;
-            const normalized = core.normalizeSelections(prepared, sectionKeys());
-            const changed = sectionKeys().some(key => previous[key] !== normalized[key]);
+            const normalized = selectionState({
+                ...prepared,
+                promptMode: normalizePromptMode(
+                    promptMode ?? prepared.promptMode,
+                    previousState.promptMode
+                )
+            });
+            if (normalized.promptMode === PROMPT_MODE_ASSEMBLED) normalized.freePrompt = '';
+            const changed = sectionKeys().some(key => previousState[key] !== normalized[key]);
             if (!changed) {
                 if (typeof submitted === 'boolean') currentSnapshotSubmitted = submitted;
                 return false;
@@ -215,7 +268,7 @@
                 ? submitted
                 : false;
             if (persist) persistSelections();
-            updatePreview();
+            renderPromptBar({ preserveEditor });
             refreshGroupedSectionState();
             refreshProgressionUi();
             return true;
@@ -316,7 +369,11 @@
                 // a preserved value in a dormant sibling from resurfacing.
                 next[column.choiceKey] = section.key;
             }
-            commit(next, { capture });
+            const nextMode = section.key === 'negativePrompt' &&
+                selectionState().promptMode === PROMPT_MODE_MANUAL
+                ? PROMPT_MODE_MANUAL
+                : PROMPT_MODE_ASSEMBLED;
+            commit(next, { capture, promptMode: nextMode });
             applyControlValue(section, value);
             refreshGroupedSectionState();
         }
@@ -331,7 +388,15 @@
             if (column && column.randomize === 'one' && column.choiceKey && custom.value) {
                 next[column.choiceKey] = section.key;
             }
-            const changed = commit(next, { capture: !hasPendingUpdate, persist: false });
+            const nextMode = section.key === 'negativePrompt' &&
+                selectionState().promptMode === PROMPT_MODE_MANUAL
+                ? PROMPT_MODE_MANUAL
+                : PROMPT_MODE_ASSEMBLED;
+            const changed = commit(next, {
+                capture: !hasPendingUpdate,
+                persist: false,
+                promptMode: nextMode
+            });
             custom.hidden = false;
             select.value = CUSTOM_VALUE;
             refreshGroupedSectionState();
@@ -492,7 +557,10 @@
 
         function setProgressionEntry(entry, capture = true) {
             if (!entry) {
-                commit({ ...selections, progressionId: '', progression: '', chordTrack: '' }, { capture });
+                commit(
+                    { ...selections, progressionId: '', progression: '', chordTrack: '' },
+                    { capture, promptMode: PROMPT_MODE_ASSEMBLED }
+                );
                 refreshProgressionUi();
                 return;
             }
@@ -501,7 +569,7 @@
                 ...selections,
                 progressionKey: key,
                 progressionId: entry.id
-            }), { capture });
+            }), { capture, promptMode: PROMPT_MODE_ASSEMBLED });
             refreshProgressionUi();
         }
 
@@ -607,7 +675,7 @@
                     ...selections,
                     progressionKey: key,
                     progressionId: entry?.id || ''
-                }));
+                }), { promptMode: PROMPT_MODE_ASSEMBLED });
                 refreshProgressionUi();
             });
             progressionPresetSelect.addEventListener('change', () => {
@@ -668,13 +736,15 @@
                     next.progressionId = entry.id;
                 }
             }
-            commit(prepareProgressionSelections(next));
+            commit(prepareProgressionSelections(next), {
+                promptMode: PROMPT_MODE_ASSEMBLED
+            });
             config.sections.forEach(section => applyControlValue(section, selections[section.key]));
             refreshGroupedSectionState();
             refreshProgressionUi();
         }
 
-        function restore(entryOrSelections, capture = true) {
+        function restore(entryOrSelections, capture = true, submittedOverride) {
             const isHistoryEntry = entryOrSelections && typeof entryOrSelections === 'object' &&
                 !Array.isArray(entryOrSelections) &&
                 entryOrSelections.selections && typeof entryOrSelections.selections === 'object' &&
@@ -682,18 +752,52 @@
             const source = isHistoryEntry
                 ? entryOrSelections.selections
                 : entryOrSelections;
+            const sourceMode = normalizePromptMode(
+                source && source.promptMode,
+                source && typeof source.freePrompt === 'string' && source.freePrompt.trim()
+                    ? PROMPT_MODE_MANUAL
+                    : PROMPT_MODE_ASSEMBLED
+            );
             commit(source || {}, {
                 capture,
-                submitted: isHistoryEntry ? entryOrSelections.status !== 'draft' : false
+                submitted: typeof submittedOverride === 'boolean'
+                    ? submittedOverride
+                    : (isHistoryEntry ? entryOrSelections.status !== 'draft' : false),
+                promptMode: sourceMode
             });
             config.sections.forEach(section => applyControlValue(section, selections[section.key]));
-            freeform.value = selections.freePrompt || '';
+            renderPromptBar();
         }
 
         function restoreLegacyPrompt(prompt, capture = true) {
             const next = Object.fromEntries(sectionKeys().map(key => [key, '']));
+            next.promptMode = PROMPT_MODE_MANUAL;
             next.freePrompt = typeof prompt === 'string' ? prompt.trim() : '';
             restore(next, capture);
+        }
+
+        function restoreGenerationPrompt(promptSections, prompt, capture = true) {
+            const source = promptSections && typeof promptSections === 'object' &&
+                !Array.isArray(promptSections)
+                ? promptSections
+                : null;
+            const hasKnownSection = source && sectionKeys().some(key =>
+                Object.prototype.hasOwnProperty.call(source, key)
+            );
+            if (!hasKnownSection) {
+                const next = Object.fromEntries(sectionKeys().map(key => [key, '']));
+                next.promptMode = PROMPT_MODE_MANUAL;
+                next.freePrompt = typeof prompt === 'string' ? prompt.trim() : '';
+                restore(next, capture, true);
+                return;
+            }
+            const explicitMode = source.promptMode === PROMPT_MODE_MANUAL ||
+                source.promptMode === PROMPT_MODE_ASSEMBLED;
+            restore(explicitMode ? source : {
+                ...source,
+                promptMode: PROMPT_MODE_MANUAL,
+                freePrompt: typeof prompt === 'string' ? prompt.trim() : ''
+            }, capture, true);
         }
 
         function createHistoryEntry(status, resultReference) {
@@ -876,10 +980,11 @@
                     throw new Error('Prompt option columns are invalid');
                 }
                 const saved = readJson(storage, STORAGE_SELECTIONS, {});
-                selections = core.normalizeSelections(
+                const restoredSelections = core.migratePromptSelections(
                     prepareProgressionSelections(prepareGroupedSelections(saved.selections || {})),
                     sectionKeys()
                 );
+                selections = selectionState(restoredSelections);
                 const validSectionKeys = new Set([
                     ...config.sections.map(section => section.key),
                     PROGRESSION_SECTION_KEY
@@ -888,17 +993,16 @@
                     (Array.isArray(saved.mutedSections) ? saved.mutedSections : [])
                         .filter(key => validSectionKeys.has(key))
                 );
-                freeform.value = selections.freePrompt || '';
                 sectionsRoot.replaceChildren(...renderBuilderColumns());
                 config.sections.forEach(section => applyControlValue(section, selections[section.key]));
                 renderProgressionControls();
                 refreshGroupedSectionState();
-                updatePreview();
+                renderPromptBar();
                 persistSelections();
                 migrateLegacyHistory();
                 currentSnapshotSubmitted = core.isSubmittedSnapshot(
                     history,
-                    selections,
+                    snapshot(),
                     sectionKeys()
                 );
                 renderHistory();
@@ -948,17 +1052,19 @@
             ready,
             createHistoryEntry,
             currentChordTrack() {
-                return core.usesChordProgressor(selections.harmony)
-                    ? selections.chordTrack || ''
+                const current = snapshot();
+                return core.usesChordProgressor(current.harmony)
+                    ? current.chordTrack || ''
                     : '';
             },
             currentNegativePrompt() {
-                return core.effectiveNegativePrompt(selections);
+                return core.effectiveNegativePrompt(snapshot());
             },
             currentPrompt,
             getSelections: snapshot,
             randomizeAll,
             restore,
+            restoreGenerationPrompt,
             restoreLegacyPrompt,
             setOnEnter(callback) { onEnter = callback; },
             setOnResend(callback) { onResend = callback; },

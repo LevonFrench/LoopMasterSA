@@ -7,7 +7,8 @@ const path = require('node:path');
 
 const APP_ROOT = path.resolve(__dirname, '..', '..', 'loopmaster', 'loopmaster-app');
 const HOST = '127.0.0.1';
-const VIEWPORTS = [375, 768, 1280];
+const BASE_VIEWPORTS = [375, 768, 1280];
+const REDESIGN_VIEWPORTS = [375, 430, 431, 760, 761, 768, 1040, 1041, 1100, 1101, 1280];
 const TIMEOUT_MS = 45_000;
 const CAPTURE_SKINS = process.argv.includes('--capture-skins');
 const SKIN_PREVIEW_DIR = path.resolve(__dirname, '..', '..', 'output', 'skin-previews');
@@ -263,7 +264,10 @@ async function testResponsiveOverflow() {
         await windowUnderTest.webContents.executeJavaScript(
             `window.LoopMasterSkins.apply(${JSON.stringify(skinId)}, { persist: false })`
         );
-        for (const width of VIEWPORTS) {
+        const viewports = skinId === 'session-sheet' || skinId === 'padmode'
+            ? REDESIGN_VIEWPORTS
+            : BASE_VIEWPORTS;
+        for (const width of viewports) {
         // DevTools viewport emulation is deterministic for hidden Windows.
         // Native BrowserWindow resize requests can be coalesced while hidden,
         // leaving media queries at a stale width and producing false results.
@@ -285,6 +289,23 @@ async function testResponsiveOverflow() {
             const viewportWidth = window.innerWidth;
             const tracks = document.querySelector('[data-lm-region="tracks"]');
             const tracksRect = tracks?.getBoundingClientRect();
+            const generator = document.querySelector('[data-lm-region="generator"]');
+            const generatorRect = generator?.getBoundingClientRect();
+            const bpm = document.getElementById('bpm-input');
+            const bpmGroup = bpm?.closest('.control-group');
+            const bpmRect = bpmGroup?.getBoundingClientRect();
+            const bpmStyle = bpmGroup ? getComputedStyle(bpmGroup) : null;
+            const promptBar = document.querySelector('.prompt-composer-bar');
+            const promptRect = promptBar?.getBoundingClientRect();
+            const generateGroup = document.querySelector('[data-lm-part="generate-action"]');
+            const generateRect = generateGroup?.getBoundingClientRect();
+            const generateStyle = generateGroup ? getComputedStyle(generateGroup) : null;
+            const visibleHeight = rect => rect
+                ? Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0))
+                : 0;
+            const overlaps = (first, second) => Boolean(first && second &&
+                first.left < second.right - 1 && first.right > second.left + 1 &&
+                first.top < second.bottom - 1 && first.bottom > second.top + 1);
             const maxScrollY = Math.max(0, root.scrollHeight - window.innerHeight);
             const visiblePromptSelects = Array.from(document.querySelectorAll('.prompt-section-select'))
                 .filter(el => {
@@ -329,6 +350,29 @@ async function testResponsiveOverflow() {
                 bodyScrollWidth: body.scrollWidth,
                 horizontalOverflow: Math.max(root.scrollWidth, body.scrollWidth) - viewportWidth,
                 tracksReachable: !tracksRect || tracksRect.top <= window.innerHeight + maxScrollY + 1,
+                bpmVisibleInGenerator: Boolean(bpmRect && generatorRect && bpmStyle &&
+                    bpmStyle.display !== 'none' && bpmStyle.visibility !== 'hidden' &&
+                    bpmRect.width >= 80 && bpmRect.height >= 32 &&
+                    bpmRect.top >= generatorRect.top - 1 &&
+                    bpmRect.bottom <= Math.min(generatorRect.bottom, window.innerHeight) + 1),
+                bpmRect: bpmRect ? {
+                    top: Math.round(bpmRect.top * 10) / 10,
+                    right: Math.round(bpmRect.right * 10) / 10,
+                    bottom: Math.round(bpmRect.bottom * 10) / 10,
+                    left: Math.round(bpmRect.left * 10) / 10,
+                } : null,
+                promptAndGenerateVisible: Boolean(promptRect && generateRect && generateStyle &&
+                    generateStyle.display !== 'none' && generateStyle.visibility !== 'hidden' &&
+                    visibleHeight(promptRect) >= 44 && visibleHeight(generateRect) >= 44),
+                promptGenerateOverlap: overlaps(promptRect, generateRect),
+                promptRect: promptRect ? {
+                    top: Math.round(promptRect.top * 10) / 10,
+                    bottom: Math.round(promptRect.bottom * 10) / 10,
+                } : null,
+                generateRect: generateRect ? {
+                    top: Math.round(generateRect.top * 10) / 10,
+                    bottom: Math.round(generateRect.bottom * 10) / 10,
+                } : null,
                 minimumPromptSelectWidth: visiblePromptWidths.length ? Math.min(...visiblePromptWidths) : null,
                 minimumPromptSelect: visiblePromptSelects.length
                     ? visiblePromptSelects.reduce((smallest, item) => item.width < smallest.width ? item : smallest)
@@ -341,6 +385,17 @@ async function testResponsiveOverflow() {
             `${skinId} at ${width}px has ${layout.horizontalOverflow}px global horizontal overflow; `
             + `offenders=${JSON.stringify(layout.offenders)}`);
         assert(layout.tracksReachable, `${skinId} at ${width}px makes generated tracks unreachable`);
+        if (skinId === 'session-sheet' || skinId === 'padmode') {
+            assert(layout.bpmVisibleInGenerator,
+                `${skinId} at ${width}px hides BPM outside the initial generator view; `
+                + `rect=${JSON.stringify(layout.bpmRect)}`);
+            assert(layout.promptAndGenerateVisible,
+                `${skinId} at ${width}px hides Prompt or Generate from the initial workflow; `
+                + `prompt=${JSON.stringify(layout.promptRect)} generate=${JSON.stringify(layout.generateRect)}`);
+            assert(!layout.promptGenerateOverlap,
+                `${skinId} at ${width}px lets Generate cover the prompt bar; `
+                + `prompt=${JSON.stringify(layout.promptRect)} generate=${JSON.stringify(layout.generateRect)}`);
+        }
         const selectFloor = width <= 375 ? 160 : 110;
         if (layout.minimumPromptSelectWidth !== null) {
             assert(layout.minimumPromptSelectWidth >= selectFloor,
@@ -357,6 +412,154 @@ async function testResponsiveOverflow() {
         );
     }
     return layouts;
+}
+
+async function testRestoredPromptRandomizeReplacement() {
+    const details = await windowUnderTest.webContents.executeJavaScript(`(async () => {
+        const preset = document.getElementById('btn-slice-break');
+        const freeform = document.getElementById('prompt-freeform');
+        const announcer = document.getElementById('prompt-announcer');
+        const randomizeAll = document.getElementById('btn-randomize-all');
+        const generate = document.getElementById('btn-generate');
+        if (!preset || !freeform || !announcer || !randomizeAll || !generate) {
+            throw new Error('Legacy prompt reproduction controls did not initialize');
+        }
+
+        const originalFetch = window.fetch;
+        const originalRandom = Math.random;
+        const generationPayloads = [];
+        try {
+            window.fetch = async (url, options = {}) => {
+                if (String(url).endsWith('/api/generate') && options.body) {
+                    generationPayloads.push(JSON.parse(options.body));
+                }
+                const error = new Error('Expected QA cancellation');
+                error.name = 'GenerationCancelledError';
+                throw error;
+            };
+            preset.click();
+            for (let attempt = 0; attempt < 40 &&
+                    (!freeform.value || generationPayloads.length < 1 ||
+                        generate.classList.contains('is-generating'));
+                    attempt += 1) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+            const restoredPrompt = freeform.value;
+            Math.random = () => 0;
+            randomizeAll.click();
+            await new Promise(resolve => setTimeout(resolve, 0));
+            const assembledPrompt = freeform.value;
+            generate.click();
+            for (let attempt = 0; attempt < 40 &&
+                    (generationPayloads.length < 2 || generate.classList.contains('is-generating'));
+                    attempt += 1) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+            return {
+                restoredPrompt,
+                freeformAfterRandomizeAll: assembledPrompt,
+                activeSources: document.querySelectorAll(
+                    '[data-column="sources"] .is-group-active'
+                ).length,
+                manualPayload: generationPayloads[0] || null,
+                assembledPayload: generationPayloads[1] || null,
+                announcement: announcer.textContent,
+                fetchCalled: generationPayloads.length >= 2,
+                generationSettled: !generate.classList.contains('is-generating'),
+            };
+        } finally {
+            window.fetch = originalFetch;
+            Math.random = originalRandom;
+        }
+    })()`);
+
+    assert(details.restoredPrompt.includes('raw drum break'),
+        'Slicer preset did not exercise the restored full-prompt path', details);
+    assert(details.fetchCalled && details.generationSettled,
+        'Manual and assembled QA requests did not settle before assertions', details);
+    assert(details.manualPayload?.prompt === details.restoredPrompt &&
+        details.manualPayload?.prompt_sections?.promptMode === 'manual' &&
+        details.manualPayload?.prompt_sections?.freePrompt === details.restoredPrompt,
+        'Manual request did not preserve the exact prompt-mode payload', details);
+    assert(!details.freeformAfterRandomizeAll.includes(details.restoredPrompt),
+        'Randomize All retained a restored complete prompt as a stale prefix', details);
+    assert(details.freeformAfterRandomizeAll.length > 0,
+        'Randomize All did not replace the restored prompt with an assembled prompt', details);
+    assert(details.assembledPayload?.prompt === details.freeformAfterRandomizeAll &&
+        details.assembledPayload?.prompt_sections?.promptMode === 'assembled' &&
+        details.assembledPayload?.prompt_sections?.freePrompt === '',
+        'Assembled request did not match the replacement prompt-mode payload', details);
+    assert(details.announcement.startsWith('Prompt updated'),
+        'Programmatic prompt replacement was not announced to assistive technology', details);
+    assert(details.activeSources === 1,
+        'Randomize All did not leave exactly one active source', details);
+    return details;
+}
+
+async function testTrackPromptRestore() {
+    const details = await windowUnderTest.webContents.executeJavaScript(`(async () => {
+        const restore = window._dev?.restoreTrackPromptForQa;
+        if (!restore) throw new Error('Track prompt restore QA seam is unavailable');
+
+        const assembled = await restore({
+            prompt: 'techno nylon guitar in C minor',
+            promptSections: {
+                promptMode: 'assembled',
+                freePrompt: '',
+                genre: 'techno',
+                acoustic: 'nylon guitar',
+                sourceChoice: 'acoustic',
+                harmony: 'C minor'
+            }
+        });
+        const manual = await restore({
+            prompt: 'exact edited nocturnal guitar phrase',
+            promptSections: {
+                promptMode: 'manual',
+                freePrompt: 'exact edited nocturnal guitar phrase',
+                genre: 'techno',
+                acoustic: 'nylon guitar',
+                sourceChoice: 'acoustic',
+                harmony: 'C minor'
+            }
+        });
+        const legacy = await restore({
+            prompt: 'legacy complete prompt that must remain exact',
+            promptSections: {
+                genre: 'house',
+                electric: 'analog synthesizer',
+                sourceChoice: 'electric'
+            }
+        });
+        const historyBefore = JSON.parse(
+            localStorage.getItem('loopmaster_generation_history_v1') || '[]'
+        );
+        document.getElementById('btn-randomize-all').click();
+        const historyAfter = JSON.parse(
+            localStorage.getItem('loopmaster_generation_history_v1') || '[]'
+        );
+        return {
+            assembled,
+            manual,
+            legacy,
+            draftsBefore: historyBefore.filter(entry => entry.status === 'draft').length,
+            draftsAfter: historyAfter.filter(entry => entry.status === 'draft').length
+        };
+    })()`);
+
+    assert(details.assembled.prompt === 'techno nylon guitar in C minor' &&
+        details.assembled.selections.promptMode === 'assembled',
+        'Modern assembled track did not restore its structured prompt', details);
+    assert(details.manual.prompt === 'exact edited nocturnal guitar phrase' &&
+        details.manual.selections.promptMode === 'manual' &&
+        details.manual.selections.harmony === 'C minor',
+        'Modern manual track lost its exact prompt or structured metadata', details);
+    assert(details.legacy.prompt === 'legacy complete prompt that must remain exact' &&
+        details.legacy.selections.promptMode === 'manual',
+        'Legacy track did not restore as an exact manual prompt', details);
+    assert(details.draftsAfter === details.draftsBefore,
+        'Editing a Use-as-Init prompt duplicated the sent track as an unsent draft', details);
+    return details;
 }
 
 async function testAccessibleNames() {
@@ -621,17 +824,17 @@ async function testPromptOptionMuting() {
 async function testPromptRandomizerSeparationAndFreeform() {
     const details = await windowUnderTest.webContents.executeJavaScript(`(() => {
         const freeform = document.getElementById('prompt-freeform');
-        const preview = document.getElementById('prompt-preview');
         const acoustic = document.getElementById('prompt-select-acoustic');
         const electric = document.getElementById('prompt-select-electric');
         const drums = document.getElementById('prompt-select-drums');
         const harmony = document.getElementById('prompt-select-harmony');
+        const avoid = document.getElementById('prompt-select-negativePrompt');
         const randomizeAll = document.getElementById('btn-randomize-all');
         const acousticSection = acoustic?.closest('.prompt-builder-section');
         const acousticDice = acousticSection?.querySelector('.chip-dice');
         const acousticMute = acousticSection?.querySelector('.chip-mute');
         const harmonyMute = harmony?.closest('.prompt-builder-section')?.querySelector('.chip-mute');
-        if (!freeform || !preview || !acoustic || !electric || !drums || !harmony ||
+        if (!freeform || !acoustic || !electric || !drums || !harmony || !avoid ||
                 !randomizeAll || !acousticDice || !acousticMute || !harmonyMute) {
             throw new Error('Expanded prompt controls did not initialize');
         }
@@ -646,13 +849,11 @@ async function testPromptRandomizerSeparationAndFreeform() {
             .map(option => option.value)
             .filter(value => value && !value.startsWith('__'));
         const drumTerms = /(drum|percussion|808|909)/i;
-        const typedPrompt = 'my freely typed glassy midnight melody';
+        const typedPrompt = 'my freely typed  glassy\\nmidnight melody';
 
         harmony.value = 'a minor';
         harmony.dispatchEvent(new Event('change', { bubbles: true }));
         harmonyMute.click();
-        freeform.value = typedPrompt;
-        freeform.dispatchEvent(new Event('input', { bubbles: true }));
 
         const forbiddenRolls = [];
         for (let index = 0; index < 30; index += 1) {
@@ -660,7 +861,17 @@ async function testPromptRandomizerSeparationAndFreeform() {
             if (drumTerms.test(acoustic.value)) forbiddenRolls.push(acoustic.value);
         }
         const harmonyAfterInstrumentRolls = harmony.value;
+        freeform.value = typedPrompt;
+        freeform.dispatchEvent(new Event('input', { bubbles: true }));
+        const avoidValue = Array.from(avoid.options)
+            .map(option => option.value)
+            .find(value => value && !value.startsWith('__'));
+        avoid.value = avoidValue;
+        avoid.dispatchEvent(new Event('change', { bubbles: true }));
+        const freeformAfterAvoid = freeform.value;
+        const storedAfterAvoid = JSON.parse(localStorage.getItem('loopmaster_prompt_builder_v1'));
         acousticMute.click();
+        const freeformAfterMute = freeform.value;
         randomizeAll.click();
         const stored = JSON.parse(localStorage.getItem('loopmaster_prompt_builder_v1'));
         const activeSources = document.querySelectorAll('[data-column="sources"] .is-group-active').length;
@@ -681,7 +892,10 @@ async function testPromptRandomizerSeparationAndFreeform() {
             activeSources,
             activeCharacters,
             freeformAfterRandomizeAll: freeform.value,
-            previewAfterRandomizeAll: preview.textContent,
+            freeformAfterAvoid,
+            freeformAfterMute,
+            modeAfterAvoid: storedAfterAvoid.selections.promptMode,
+            modeAfterRandomizeAll: stored.selections.promptMode,
             typedPrompt,
         };
     })()`);
@@ -698,8 +912,18 @@ async function testPromptRandomizerSeparationAndFreeform() {
         'Randomize All selected the muted acoustic row', details);
     assert(details.activeSources === 1, 'Randomize All did not activate exactly one instrument row', details);
     assert(details.activeCharacters === 1, 'Randomize All did not activate exactly one character row', details);
-    assert(details.freeformAfterRandomizeAll === details.typedPrompt, 'Randomization erased free text', details);
-    assert(details.previewAfterRandomizeAll.includes(details.typedPrompt), 'Final prompt omitted free text', details);
+    assert(details.freeformAfterAvoid === details.typedPrompt,
+        'Changing Avoid modified the exact manual prompt', details);
+    assert(details.freeformAfterMute === details.typedPrompt,
+        'Muting a prompt section modified the exact manual prompt', details);
+    assert(details.modeAfterAvoid === 'manual',
+        'Editing Avoid exited exact manual prompt mode', details);
+    assert(details.freeformAfterRandomizeAll !== details.typedPrompt,
+        'Randomize All did not replace the exact manual prompt', details);
+    assert(!details.freeformAfterRandomizeAll.includes(details.typedPrompt),
+        'Randomize All retained the manual prompt as a prefix', details);
+    assert(details.modeAfterRandomizeAll === 'assembled',
+        'Randomize All did not enter assembled prompt mode', details);
     return details;
 }
 
@@ -712,9 +936,9 @@ async function testChordProgressor() {
         const cards = document.getElementById('progression-chord-cards');
         const progressorMute = document.getElementById('btn-progression-mute');
         const randomizeAll = document.getElementById('btn-randomize-all');
-        const preview = document.getElementById('prompt-preview');
+        const prompt = document.getElementById('prompt-freeform');
         if (!harmony || !harmonyMute || !key || !preset || !cards ||
-                !progressorMute || !randomizeAll || !preview) {
+                !progressorMute || !randomizeAll || !prompt) {
             throw new Error('Chord progressor controls did not initialize');
         }
         const sentinel = Array.from(harmony.options).find(option => option.value === 'Use Chord Progressor');
@@ -738,7 +962,7 @@ async function testChordProgressor() {
 
         return {
             symbols,
-            preview: preview.textContent,
+            promptText: prompt.value,
             progressionBefore: before.selections.progressionId,
             progressionAfter: after.selections.progressionId,
             harmonyAfter: after.selections.harmony,
@@ -749,7 +973,7 @@ async function testChordProgressor() {
 
     assert(JSON.stringify(details.symbols) === JSON.stringify(['C', 'G', 'Am', 'F']),
         'Hopeful C-major cards are incorrect', details);
-    assert(details.preview.includes('I-V-vi-IV'), 'Assembled prompt omitted the progression formula', details);
+    assert(details.promptText.includes('I-V-vi-IV'), 'Assembled prompt omitted the progression formula', details);
     assert(details.progressionBefore === 'major_hopeful_01', 'Progression selection did not persist', details);
     assert(details.progressionAfter === details.progressionBefore, 'Locked progression changed during Randomize All', details);
     assert(details.harmonyAfter === 'Use Chord Progressor', 'Locked harmony changed during Randomize All', details);
@@ -910,7 +1134,7 @@ async function run() {
     await waitForRendererReady();
 
     await check('skin runtime switches atomically and preserves UI state', testSkinRuntime);
-    await check('responsive overflow at 375/768/1280', testResponsiveOverflow);
+    await check('responsive overflow and breakpoint boundaries', testResponsiveOverflow);
     windowUnderTest.setContentSize(1280, 900, false);
     await check('visible controls have accessible names', testAccessibleNames);
     await check('aria-pressed toggle state changes and restores', testAriaPressed);
@@ -918,9 +1142,16 @@ async function run() {
     await check('skin picker focus trap, escape, and focus return', testSkinPickerFocus);
     await check('file naming popup focus trap, escape, and focus return', testFileNamingModalFocus);
     await check('CSP-safe typed attributes and zero inline styles', testTypedAttributesAndInlineStyles);
+    await check('restored complete prompt is replaced by structured randomization',
+        testRestoredPromptRandomizeReplacement);
+    await check('modern and legacy track prompts restore through Use-as-Init state',
+        testTrackPromptRestore);
     await check('free text, split instrument pools, one-per-column rolls, and locked harmony', testPromptRandomizerSeparationAndFreeform);
     await check('prompt sections lock without rerolling and persist across randomization', testPromptOptionMuting);
     await check('four-chord progressor resolves, persists, and locks', testChordProgressor);
+    await check('optional skin preview capture', captureSkinPreviews, {
+        skipWhen: () => !CAPTURE_SKINS,
+    });
     const cancelResult = await check('stubbed queued job transitions to cancelled', testQueuedCancellation, {
         skipWhen: details => details?.skipped,
     });
@@ -941,9 +1172,6 @@ async function run() {
     }
     await check('shared Web Audio effect graph renders finite audio', testWebAudioContract, {
         skipWhen: details => details?.skipped,
-    });
-    await check('optional skin preview capture', captureSkinPreviews, {
-        skipWhen: () => !CAPTURE_SKINS,
     });
 
     await new Promise(resolve => setTimeout(resolve, 100));

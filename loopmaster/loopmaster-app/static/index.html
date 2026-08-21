@@ -47,8 +47,8 @@
                     <div class="prompt-freeform-row">
                         <label class="chip-label" for="prompt-freeform">Prompt</label>
                         <div class="prompt-composer-bar">
-                            <textarea id="prompt-freeform" class="prompt-freeform" rows="2" maxlength="2000" spellcheck="true" placeholder="Type anything. Your words stay editable while the dropdown choices are assembled here."></textarea>
-                            <output id="prompt-preview" class="prompt-preview" aria-live="polite">Choose options or randomize all.</output>
+                            <textarea id="prompt-freeform" class="prompt-freeform" rows="3" maxlength="2000" spellcheck="true" placeholder="Type the exact prompt, or use the controls below to assemble one."></textarea>
+                            <span id="prompt-announcer" class="visually-hidden" aria-live="polite" aria-atomic="true"></span>
                         </div>
                     </div>
                     <div class="prompt-builder-grid" id="prompt-builder-sections" aria-live="polite">
@@ -90,7 +90,7 @@
                     </section>
                 </div>
 
-                <div class="control-group">
+                <div class="control-group" data-lm-part="tempo-control">
                     <div class="control-group-header">
                         <label class="control-label" for="bpm-input" title="Tempo in beats per minute. Determines loop length (4 bars). Drag to change, double-click to type.">BPM</label>
                     </div>
@@ -100,7 +100,7 @@
                            title="Click to type, drag ↕ to change. 120 BPM = 8s loop (4 bars)">
                 </div>
 
-                <div class="control-group">
+                <div class="control-group" data-lm-part="seed-control">
                     <div class="control-group-header">
                         <label class="control-label" for="seed-input" title="Random seed for reproducible generations. -1 = random each time. Set a number to get the same output.">Seed</label>
                     </div>
@@ -110,7 +110,7 @@
                            title="Click to type, drag ↕ to change. -1 = random">
                 </div>
 
-                <div class="control-group">
+                <div class="control-group" data-lm-part="steps-control">
                     <div class="control-group-header">
                         <label class="control-label" for="steps-input" title="Diffusion denoising passes. 8 = fast iteration, 20-30 = high quality, 50+ = diminishing returns.">Steps</label>
                     </div>
@@ -120,7 +120,7 @@
                            title="Click to type, drag ↕ to change. More = better but slower">
                 </div>
 
-                <div class="control-group">
+                <div class="control-group" data-lm-part="tier-control">
                     <div class="control-group-header">
                         <label class="control-label" for="generation-tier" title="Draft caps inference work for inexpensive iteration; Final uses the requested settings.">Tier</label>
                     </div>

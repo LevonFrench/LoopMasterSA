@@ -176,7 +176,7 @@ html[data-lm-skin="padmode"] .controls-panel {
     top: 10px;
     max-height: calc(100dvh - 20px);
     overflow: auto;
-    padding: 12px 12px 84px;
+    padding: 12px 12px 116px;
     border: 1px solid var(--pad-line);
     border-radius: var(--radius-lg);
     background: var(--pad-deck);
@@ -210,11 +210,33 @@ html[data-lm-skin="padmode"] .controls-row {
 
 html[data-lm-skin="padmode"] .control-group.prompt-group {
     grid-column: 1 / -1;
+    grid-row: 2;
     min-width: 0;
 }
 
-html[data-lm-skin="padmode"] .control-group:has(#btn-generate) {
+html[data-lm-skin="padmode"] [data-lm-part="tempo-control"] {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+html[data-lm-skin="padmode"] [data-lm-part="tier-control"] {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+html[data-lm-skin="padmode"] [data-lm-part="seed-control"] {
+    grid-column: 1;
+    grid-row: 3;
+}
+
+html[data-lm-skin="padmode"] [data-lm-part="steps-control"] {
+    grid-column: 2;
+    grid-row: 3;
+}
+
+html[data-lm-skin="padmode"] [data-lm-part="kit-action"] {
     grid-column: 1 / -1;
+    grid-row: 4;
 }
 
 html[data-lm-skin="padmode"] [data-lm-part="generate-action"] {
@@ -350,31 +372,13 @@ html[data-lm-skin="padmode"] .prompt-freeform {
     max-height: 240px;
     padding: 14px;
     border: 0;
-    border-bottom: 1px solid var(--pad-line);
+    border-bottom: 0;
     border-radius: 0;
     background: #f0f3ed;
     color: #121820;
     font-size: 1rem;
     line-height: 1.5;
     resize: vertical;
-}
-
-html[data-lm-skin="padmode"] .prompt-preview {
-    min-height: 94px;
-    padding: 34px 14px 12px;
-    border: 0;
-    border-radius: 0;
-    background: var(--pad-well);
-    color: var(--pad-text);
-    font: 0.92rem/1.5 var(--font-mono);
-}
-
-html[data-lm-skin="padmode"] .prompt-preview::before {
-    content: "MODEL SIGNAL";
-    top: 13px;
-    color: var(--pad-live);
-    font: 750 0.76rem/1 var(--pad-font-display);
-    letter-spacing: 0.1em;
 }
 
 html[data-lm-skin="padmode"] .prompt-builder-grid {
@@ -1533,7 +1537,7 @@ html[data-lm-skin="padmode"] ::selection {
 
 @media (max-width: 1040px) {
     html[data-lm-skin="padmode"] body {
-        padding-bottom: 86px;
+        padding-bottom: 120px;
     }
 
     html[data-lm-skin="padmode"] .app-container {
@@ -1576,17 +1580,45 @@ html[data-lm-skin="padmode"] ::selection {
         grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
-    html[data-lm-skin="padmode"] .control-group.prompt-group,
-    html[data-lm-skin="padmode"] .control-group:has(#btn-generate) {
+    html[data-lm-skin="padmode"] .control-group.prompt-group {
         grid-column: 1 / -1;
     }
 
+    html[data-lm-skin="padmode"] [data-lm-part="tempo-control"] {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    html[data-lm-skin="padmode"] [data-lm-part="seed-control"] {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    html[data-lm-skin="padmode"] [data-lm-part="steps-control"] {
+        grid-column: 3;
+        grid-row: 1;
+    }
+
+    html[data-lm-skin="padmode"] [data-lm-part="tier-control"] {
+        grid-column: 4;
+        grid-row: 1;
+    }
+
+    html[data-lm-skin="padmode"] .control-group.prompt-group {
+        grid-row: 2;
+    }
+
+    html[data-lm-skin="padmode"] [data-lm-part="kit-action"] {
+        grid-column: 1 / -1;
+        grid-row: 3;
+    }
+
     html[data-lm-skin="padmode"] .prompt-composer-bar {
-        grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+        grid-template-columns: minmax(0, 1fr);
     }
 
     html[data-lm-skin="padmode"] .prompt-freeform {
-        border-right: 1px solid var(--pad-line);
+        border-right: 0;
         border-bottom: 0;
     }
 
@@ -1674,6 +1706,36 @@ html[data-lm-skin="padmode"] ::selection {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    html[data-lm-skin="padmode"] [data-lm-part="tempo-control"] {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    html[data-lm-skin="padmode"] [data-lm-part="tier-control"] {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    html[data-lm-skin="padmode"] .control-group.prompt-group {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    html[data-lm-skin="padmode"] [data-lm-part="seed-control"] {
+        grid-column: 1;
+        grid-row: 3;
+    }
+
+    html[data-lm-skin="padmode"] [data-lm-part="steps-control"] {
+        grid-column: 2;
+        grid-row: 3;
+    }
+
+    html[data-lm-skin="padmode"] [data-lm-part="kit-action"] {
+        grid-column: 1 / -1;
+        grid-row: 4;
+    }
+
     html[data-lm-skin="padmode"] .prompt-group > .control-group-header,
     html[data-lm-skin="padmode"] .chord-progressor-header {
         align-items: stretch;
@@ -1698,7 +1760,7 @@ html[data-lm-skin="padmode"] ::selection {
 
     html[data-lm-skin="padmode"] .prompt-freeform {
         border-right: 0;
-        border-bottom: 1px solid var(--pad-line);
+        border-bottom: 0;
     }
 
     html[data-lm-skin="padmode"] .prompt-builder-grid {
@@ -1791,7 +1853,7 @@ html[data-lm-skin="padmode"] ::selection {
     }
 
     html[data-lm-skin="padmode"] .controls-panel {
-        padding: 10px;
+        padding: 10px 10px 116px;
     }
 
     html[data-lm-skin="padmode"] .controls-panel::before {
