@@ -701,7 +701,12 @@ def _publish_variants(task, runtime, audio, target_indices, is_drum, prompts):
     results = run_parallel_fanout(
         publish_requests,
         publish_one,
-        timeout_seconds=30.0,
+        # Local file publication must never run with a timeout: a timed-out
+        # attempt keeps running in an abandoned daemon thread and can overlap
+        # a retry on the same final paths, deleting the other attempt's
+        # freshly published WAV. With no deadline there is no abandoned
+        # attempt, so retries only ever follow a fully failed attempt.
+        timeout_seconds=None,
         retries=2,
         backoff_seconds=0.15,
         max_workers=min(4, len(publish_requests) or 1),

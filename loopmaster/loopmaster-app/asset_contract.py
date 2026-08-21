@@ -563,11 +563,22 @@ def build_sidecar_document(
     return document
 
 
-def finalize_sidecar_for_wav(document: dict, wav_path: str) -> dict:
-    digest = _sha256_file(wav_path)
+def finalize_sidecar_for_wav(
+    document: dict,
+    wav_path: str,
+    sha256: str | None = None,
+    size_bytes: int | None = None,
+) -> dict:
+    """Stamp integrity fields, reusing a precomputed digest/size when supplied.
+
+    Writers that already hold the final WAV bytes in memory (acidize_wav_file)
+    pass both values to avoid re-reading the file they just wrote.
+    """
     result = deepcopy(document)
-    result["audio"]["sha256"] = digest
-    result["audio"]["bytes"] = os.path.getsize(wav_path)
+    result["audio"]["sha256"] = sha256 if sha256 is not None else _sha256_file(wav_path)
+    result["audio"]["bytes"] = (
+        int(size_bytes) if size_bytes is not None else os.path.getsize(wav_path)
+    )
     return result
 
 

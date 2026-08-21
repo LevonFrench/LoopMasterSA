@@ -68,6 +68,7 @@ from generation_executor import (
     GenerationRuntime,
     GenerationTask,
     ProgressionProvenance,
+    _canonical_existing_variants,
 )
 from generation_queue import (
     GenerationCancelResult,
@@ -564,15 +565,22 @@ def _save_variant_atomically(
             provenance=metadata.get("provenance"),
             created_at=metadata.get("created_at"),
         )
-        acidize_wav_file(
+        acid_info = acidize_wav_file(
             temp_path,
             bpm,
             duration,
             is_loop,
             prompt,
             metadata_document=document,
+        ) or {}
+        # acidize_wav_file already held the final bytes in memory; reuse its
+        # digest/size instead of re-reading the whole WAV from disk.
+        document = finalize_sidecar_for_wav(
+            document,
+            temp_path,
+            sha256=acid_info.get("sha256"),
+            size_bytes=acid_info.get("bytes"),
         )
-        document = finalize_sidecar_for_wav(document, temp_path)
         write_sidecar(temp_sidecar_path, document)
         validate_sidecar(document)
         for attempt in range(5):
@@ -586,8 +594,17 @@ def _save_variant_atomically(
                 if attempt == 4:
                     raise
                 time.sleep(0.3)
-        os.replace(temp_sidecar_path, sidecar_path)
-        published_sidecar = True
+        for attempt in range(5):
+            try:
+                os.replace(temp_sidecar_path, sidecar_path)
+                published_sidecar = True
+                break
+            except PermissionError:
+                # Windows: the destination may be held open by a reader.
+                # Retry briefly, exactly like the WAV replace above.
+                if attempt == 4:
+                    raise
+                time.sleep(0.3)
     finally:
         if os.path.exists(temp_path):
             try:
@@ -655,6 +672,19 @@ def _make_generation_runtime():
         prune_terminal_jobs=_prune_terminal_jobs,
         sliceable_registry=sliceable_registry,
     )
+
+
+def _track_variant_count(track_num, default=4):
+    """Default regeneration to the variant slots already published on disk."""
+    if track_num is None:
+        return default
+    track_dir = os.path.join(SESSION_DIR, f"track_{track_num}")
+    if not os.path.isdir(track_dir):
+        return default
+    existing = _canonical_existing_variants(track_dir, 8)
+    if not existing:
+        return default
+    return max(default, max(existing) + 1)
 
 
 def _register_job(job_id, job, allocate_track=False):
@@ -886,44 +916,44 @@ def api_generate():
         "queue_position": None,
     }, allocate_track=True)
 
-    task = GenerationTask(
-        job_id=job_id,
-        prompt=prompt,
-        bpm=bpm,
-        duration=duration,
-        loop=loop,
-        steps=steps,
-        cfg_scale=cfg_scale,
-        track_num=track_num,
-        num_variants=num_variants,
-        duration_padding_sec=duration_padding_sec,
-        init_audio_path=init_audio_path,
-        init_noise_level=init_noise_level,
-        seed=seed,
-        remix_mode=remix_mode,
-        inpaint_start=inpaint_start,
-        inpaint_end=inpaint_end,
-        continue_start=continue_start,
-        invert_timing=invert_timing,
-        sliceable=sliceable,
-        negative_prompt=negative_prompt,
-        prompt_sections=dict(prompt_sections),
-        pack_name=asset["pack_name"],
-        descriptor=asset["descriptor"],
-        key=asset["key"],
-        chords=asset["chords"],
-        chord_source=asset["chord_source"],
-        conditioned_prompt=asset["conditioned_prompt"],
-        progression=(
-            ProgressionProvenance.from_resolution(asset["progression"])
-            if asset["progression"] is not None
-            else None
-        ),
-        quality_tier=quality_tier,
-        requested_seed=requested_seed,
-        model_name=loaded_model_name,
-    )
     try:
+        task = GenerationTask(
+            job_id=job_id,
+            prompt=prompt,
+            bpm=bpm,
+            duration=duration,
+            loop=loop,
+            steps=steps,
+            cfg_scale=cfg_scale,
+            track_num=track_num,
+            num_variants=num_variants,
+            duration_padding_sec=duration_padding_sec,
+            init_audio_path=init_audio_path,
+            init_noise_level=init_noise_level,
+            seed=seed,
+            remix_mode=remix_mode,
+            inpaint_start=inpaint_start,
+            inpaint_end=inpaint_end,
+            continue_start=continue_start,
+            invert_timing=invert_timing,
+            sliceable=sliceable,
+            negative_prompt=negative_prompt,
+            prompt_sections=dict(prompt_sections),
+            pack_name=asset["pack_name"],
+            descriptor=asset["descriptor"],
+            key=asset["key"],
+            chords=asset["chords"],
+            chord_source=asset["chord_source"],
+            conditioned_prompt=asset["conditioned_prompt"],
+            progression=(
+                ProgressionProvenance.from_resolution(asset["progression"])
+                if asset["progression"] is not None
+                else None
+            ),
+            quality_tier=quality_tier,
+            requested_seed=requested_seed,
+            model_name=loaded_model_name,
+        )
         generation_queue.submit(job_id, task)
     except GenerationQueueFull:
         _remove_job(job_id)
@@ -931,6 +961,11 @@ def api_generate():
             "error": "Generation queue is full. Try again after a job finishes.",
             "queue_capacity": generation_queue.capacity,
         }), 429
+    except Exception:
+        # Roll back the durably registered job so no phantom "queued" record
+        # outlives the failed request, then let the 500 and traceback surface.
+        _remove_job(job_id)
+        raise
 
     return jsonify({
         "job_id": job_id,
@@ -1017,22 +1052,22 @@ def api_generate_kit():
         "queue_position": None,
     })
 
-    task = KitTask(
-        job_id=job_id,
-        kit_name=kit_name,
-        style=style,
-        pieces=tuple(pieces),
-        velocities=tuple(velocities),
-        variations=variations,
-        steps=steps,
-        cfg_scale=cfg_scale,
-        seed=seed,
-        include_sheets=include_sheets,
-        sheet_hits=sheet_hits,
-        requested_seed=requested_seed,
-        model_name=loaded_model_name,
-    )
     try:
+        task = KitTask(
+            job_id=job_id,
+            kit_name=kit_name,
+            style=style,
+            pieces=tuple(pieces),
+            velocities=tuple(velocities),
+            variations=variations,
+            steps=steps,
+            cfg_scale=cfg_scale,
+            seed=seed,
+            include_sheets=include_sheets,
+            sheet_hits=sheet_hits,
+            requested_seed=requested_seed,
+            model_name=loaded_model_name,
+        )
         generation_queue.submit(job_id, task)
     except GenerationQueueFull:
         _remove_job(job_id)
@@ -1040,6 +1075,11 @@ def api_generate_kit():
             "error": "Generation queue is full. Try again after a job finishes.",
             "queue_capacity": generation_queue.capacity,
         }), 429
+    except Exception:
+        # Roll back the durably registered job so no phantom "queued" record
+        # outlives the failed request, then let the 500 and traceback surface.
+        _remove_job(job_id)
+        raise
 
     return jsonify({
         "job_id": job_id,
@@ -1084,13 +1124,16 @@ def api_regenerate():
         if quality_tier not in {"draft", "final"}:
             raise ValueError("quality_tier must be draft or final")
         steps = route_local_inference_steps(steps, quality_tier)
+        num_variants = bounded_number(
+            data, "num_variants", _track_variant_count(track_num), int, 1, 8
+        )
         asset = _parse_asset_request(
             data, prompt_sections, prompt, bpm, duration, loop
         )
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
 
-    
+
     unlocked_indices = data.get("unlocked_indices", [])
     if not isinstance(unlocked_indices, list) or not unlocked_indices:
         return jsonify({"error": "No unlocked indices provided"}), 400
@@ -1098,8 +1141,10 @@ def api_regenerate():
         unlocked_indices = sorted({int(index) for index in unlocked_indices})
     except (TypeError, ValueError):
         return jsonify({"error": "unlocked_indices must contain integers"}), 400
-    if any(index < 0 or index >= 4 for index in unlocked_indices):
-        return jsonify({"error": "unlocked_indices must be between 0 and 3"}), 400
+    if any(index < 0 or index >= num_variants for index in unlocked_indices):
+        return jsonify({
+            "error": f"unlocked_indices must be between 0 and {num_variants - 1}"
+        }), 400
 
     limited_response = rate_limit_generation_request()
     if limited_response is not None:
@@ -1123,36 +1168,37 @@ def api_regenerate():
         "queue_position": None,
     })
 
-    task = GenerationTask(
-        job_id=job_id,
-        prompt=prompt,
-        bpm=bpm,
-        duration=duration,
-        loop=loop,
-        steps=steps,
-        cfg_scale=cfg_scale,
-        track_num=track_num,
-        unlocked_indices=tuple(unlocked_indices),
-        duration_padding_sec=duration_padding_sec,
-        seed=seed,
-        negative_prompt=negative_prompt.strip(),
-        prompt_sections=dict(prompt_sections),
-        pack_name=asset["pack_name"],
-        descriptor=asset["descriptor"],
-        key=asset["key"],
-        chords=asset["chords"],
-        chord_source=asset["chord_source"],
-        conditioned_prompt=asset["conditioned_prompt"],
-        progression=(
-            ProgressionProvenance.from_resolution(asset["progression"])
-            if asset["progression"] is not None
-            else None
-        ),
-        quality_tier=quality_tier,
-        requested_seed=requested_seed,
-        model_name=loaded_model_name,
-    )
     try:
+        task = GenerationTask(
+            job_id=job_id,
+            prompt=prompt,
+            bpm=bpm,
+            duration=duration,
+            loop=loop,
+            steps=steps,
+            cfg_scale=cfg_scale,
+            track_num=track_num,
+            num_variants=num_variants,
+            unlocked_indices=tuple(unlocked_indices),
+            duration_padding_sec=duration_padding_sec,
+            seed=seed,
+            negative_prompt=negative_prompt.strip(),
+            prompt_sections=dict(prompt_sections),
+            pack_name=asset["pack_name"],
+            descriptor=asset["descriptor"],
+            key=asset["key"],
+            chords=asset["chords"],
+            chord_source=asset["chord_source"],
+            conditioned_prompt=asset["conditioned_prompt"],
+            progression=(
+                ProgressionProvenance.from_resolution(asset["progression"])
+                if asset["progression"] is not None
+                else None
+            ),
+            quality_tier=quality_tier,
+            requested_seed=requested_seed,
+            model_name=loaded_model_name,
+        )
         generation_queue.submit(job_id, task)
     except GenerationQueueFull:
         _remove_job(job_id)
@@ -1160,6 +1206,11 @@ def api_regenerate():
             "error": "Generation queue is full. Try again after a job finishes.",
             "queue_capacity": generation_queue.capacity,
         }), 429
+    except Exception:
+        # Roll back the durably registered job so no phantom "queued" record
+        # outlives the failed request, then let the 500 and traceback surface.
+        _remove_job(job_id)
+        raise
 
     return jsonify({
         "job_id": job_id,
@@ -1171,11 +1222,27 @@ def api_regenerate():
 def server_status():
     return "OK", 200
 
+# Active polls tick at 1 Hz per job and only consume the dynamic fields; the
+# large static request echo (asset, prompt, prompt_sections) is skipped until
+# the job is terminal, when the full record — files, metadata_files, kit,
+# partial_errors, and everything else — is returned unchanged.
+ACTIVE_STATUS_POLL_FIELDS = (
+    "status", "progress", "error", "elapsed", "track_num", "queue_position",
+)
+
+
 @app.route("/api/status/<job_id>")
 def api_status(job_id):
     with jobs_lock:
         job = jobs.get(job_id)
-        response = dict(job) if job is not None else None
+        if job is None:
+            response = None
+        elif job.get("status") in {"queued", "generating"}:
+            response = {
+                field: job.get(field) for field in ACTIVE_STATUS_POLL_FIELDS
+            }
+        else:
+            response = dict(job)
     if response is None:
         return jsonify({"error": "Unknown job"}), 404
     queue_state = generation_queue.snapshot()

@@ -226,7 +226,13 @@ def test_full_sidecar_ships_beat_and_transient_slicer_points(tmp_path):
     assert "chordSource" not in cache["musical"]
     assert "chordsVerified" not in cache["musical"]
     assert "sha256" not in cache["audio"]
-    assert cache["generation"]["prompt"] == persisted["generation"]["prompt"]
+    # Chord-bearing prompt section fields are redacted from cKUP even for
+    # non-progressor assets; everything else in the prompt survives.
+    assert cache["generation"]["prompt"] == {
+        "composed": "smoke rise synth in C minor",
+        "negative": "clipping",
+        "sections": {"instrument": "synth lead"},
+    }
 
     # Retagging is idempotent: no duplicate standardized chunks are appended.
     acidize_wav_file(wav_path, 120, 8.0, True, metadata_document=document)

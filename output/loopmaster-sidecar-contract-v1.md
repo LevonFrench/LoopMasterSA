@@ -690,12 +690,14 @@ generation inputs, and provenance. Its compact payload starts with:
 
 The structured chord timeline is sidecar-only. `cKUP` always omits
 `musical.chords`, `musical.chordSource`, `musical.chordsVerified`, and
-`generation.progression`. For a progressor asset it also redacts the
+`generation.progression`, and always redacts the `harmony`, `progressionKey`,
+`progressionId`, `progression`, and `chordTrack` prompt section fields —
+regardless of whether the asset used the chord progressor or a manually
+supplied chord map. For a progressor asset it additionally redacts the
 chord-bearing prompt projections `prompt.composed`, `prompt.conditioned`, and
-`prompt.enhanced`, plus the `harmony`, `progressionKey`, `progressionId`,
-`progression`, and `chordTrack` section fields. It preserves
-`prompt.negative`, `prompt.userNegative`, every non-harmony prompt section, and
-all other non-chord generation and provenance fields.
+`prompt.enhanced`. It preserves `prompt.negative`, `prompt.userNegative`,
+every non-harmony prompt section, and all other non-chord generation and
+provenance fields.
 
 This redaction removes parseable progressions and chord-bearing prompt text
 without throwing away portable metadata that remains useful when the WAV is
@@ -878,7 +880,10 @@ A conforming importer rejects an asset when any required check fails:
   and `audio.frames` remain implicit.
 - Embedded cue and `smpl` positions agree with the sidecar.
 - `cKUP` contains the non-chord portable projection but no structured chord
-  timeline, progression object, or progressor chord-bearing prompt fields.
+  timeline, progression object, chord-bearing prompt section fields
+  (`harmony`, `progressionKey`, `progressionId`, `progression`, `chordTrack`
+  — for any asset, progressor or manual), or progressor chord-bearing prompt
+  projections.
 - License and creation provenance are nonempty.
 
 Do not downgrade contract failures to warnings during pack creation. Failing

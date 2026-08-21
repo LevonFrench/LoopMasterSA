@@ -1,3 +1,4 @@
+import hashlib
 import os
 from copy import deepcopy
 import json
@@ -138,30 +139,39 @@ def create_ckup_chunk(metadata_document):
     generation = deepcopy(metadata_document.get("generation") or {})
     progression_asset = generation.get("progression") is not None
     generation.pop("progression", None)
-    if progression_asset:
-        # Progressor prompts contain exact symbols and Roman formulas in their
-        # composed/conditioned/enhanced forms.  Preserve portable non-harmony
-        # prompt metadata while keeping all chord-bearing fields sidecar-only.
-        prompt = generation.get("prompt")
-        if isinstance(prompt, dict):
-            raw_sections = prompt.get("sections")
-            sections = deepcopy(raw_sections) if isinstance(raw_sections, dict) else {}
-            for field in (
-                "harmony",
-                "progressionKey",
-                "progressionId",
-                "progression",
-                "chordTrack",
-            ):
-                sections.pop(field, None)
+    prompt = generation.get("prompt")
+    if isinstance(prompt, dict):
+        # Chords are sidecar-only, period: manually supplied chord maps must
+        # not survive in the portable cache any more than progressor output.
+        raw_sections = prompt.get("sections")
+        sections = deepcopy(raw_sections) if isinstance(raw_sections, dict) else {}
+        for field in (
+            "harmony",
+            "progressionKey",
+            "progressionId",
+            "progression",
+            "chordTrack",
+        ):
+            sections.pop(field, None)
+        if progression_asset:
+            # Progressor prompts contain exact symbols and Roman formulas in
+            # their composed/conditioned/enhanced forms.  Preserve portable
+            # non-harmony prompt metadata while keeping all chord-bearing
+            # fields sidecar-only.
             generation["prompt"] = {
                 field: deepcopy(prompt[field])
                 for field in ("negative", "userNegative")
                 if field in prompt
             }
-            generation["prompt"]["sections"] = sections
         else:
-            generation.pop("prompt", None)
+            generation["prompt"] = {
+                field: deepcopy(value)
+                for field, value in prompt.items()
+                if field != "sections"
+            }
+        generation["prompt"]["sections"] = sections
+    elif progression_asset:
+        generation.pop("prompt", None)
     payload = {
         "v": 1,
         "schema": "com.loopmaster.loop-cache",
@@ -389,6 +399,10 @@ def acidize_wav_file(
         "frames": frame_count,
         "beats": beat_count if loop else 0,
         "cues": len(cue_specs),
+        # The final bytes are already in memory: report their digest/size so
+        # sidecar finalization does not have to re-read the file from disk.
+        "sha256": hashlib.sha256(new_content).hexdigest(),
+        "bytes": len(new_content),
     }
 
 def enhance_prompt(prompt, bpm, duration, loop=True, engine="sa3"):
