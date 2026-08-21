@@ -108,6 +108,20 @@ CORRUPTS the WAV header. Untested claim from reading `src/tag-editor.js` only: c
 whether the UI restricts tagging to MP3s before pointing it at the loop pack, or teach it
 the `id3 ` chunk route for WAVs.
 
+## Filename convention (the human layer + the fallback layer)
+
+Canonical: `{pack}_{descriptor}_{bpm}bpm_{key}_{bars}bar_{var}.wav`
+(e.g. `cookout_smokerise_140bpm_fmin_8bar_a1.wav`; one-shots put `oneshot` where the
+tempo token would be: `cookout_stabhit_oneshot_gbmin_a1.wav`).
+
+Rules: all lowercase `a-z0-9_` only (survives rbxasset://, URLs, slug sanitizers, and
+kills the path case-sensitivity trap); BPM always glued as `140bpm` (a bare `808` in a
+descriptor must never sniff as tempo — parsers PREFER the `\d{2,3}bpm` token over any
+bare number); keys spelled with flats (`gbmin`, never `f#min` — `#` breaks URLs/shells);
+length in BARS (humans think bars; exact beats live in the acid chunk); variation token
+last so takes sort adjacent. Precedence law unchanged: in-file metadata is machine truth,
+the filename is the fallback; when both exist they must agree.
+
 ## Validation gate (any producer, any consumer)
 
 1. `abs(duration x bpm / 60 - round(same)) <= 0.03` beats — the grid law; reject, don't warn.
