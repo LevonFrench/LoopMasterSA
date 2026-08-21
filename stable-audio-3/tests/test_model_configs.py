@@ -57,6 +57,64 @@ def test_model_config_resolves_split_local_repositories(monkeypatch, tmp_path):
     assert resolved == (str(config), str(checkpoint))
 
 
+def test_model_config_resolves_bf16_layout_fully_locally(monkeypatch, tmp_path):
+    """A config sitting next to the bf16 checkpoint (models/<checkpoint-repo>/) must
+    resolve without touching the HF cache or the network, even though the config
+    nominally belongs to a different config_repo_id."""
+    models_root = tmp_path / "models"
+    config = _write_model_file(
+        models_root, "optimized/checkpoint-repo", "model_config.json"
+    )
+    checkpoint = _write_model_file(
+        models_root, "optimized/checkpoint-repo", "model-bf16.safetensors"
+    )
+    monkeypatch.setenv("SA3_MODELS_DIR", str(models_root))
+    monkeypatch.setattr(model_configs, "try_to_load_from_cache", _reject_remote)
+    monkeypatch.setattr(model_configs, "hf_hub_download", _reject_remote)
+
+    resolved = model_configs.ModelConfig(
+        "optimized/checkpoint-repo",
+        "model_config.json",
+        "model-bf16.safetensors",
+        config_repo_id="official/config-repo",
+    ).resolve()
+
+    assert resolved == (str(config), str(checkpoint))
+
+
+def test_autoencoder_fallback_resolves_bf16_layout_fully_locally(
+    monkeypatch, tmp_path
+):
+    models_root = tmp_path / "models"
+    config = _write_model_file(
+        models_root, "optimized/checkpoint-repo", "model_config.json"
+    )
+    checkpoint = _write_model_file(
+        models_root, "optimized/checkpoint-repo", "model-bf16.safetensors"
+    )
+    monkeypatch.setenv("SA3_MODELS_DIR", str(models_root))
+    monkeypatch.setattr(
+        model_configs, "try_to_load_from_cache", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(model_configs, "hf_hub_download", _reject_remote)
+
+    resolved = model_configs.AutoencoderModelConfig(
+        ae_repo_id="stabilityai/SAME-L",
+        ae_config_path="model_config.json",
+        ae_ckpt_path="model.safetensors",
+        stable_audio_3=(
+            model_configs.ModelConfig(
+                "optimized/checkpoint-repo",
+                "model_config.json",
+                "model-bf16.safetensors",
+                config_repo_id="official/config-repo",
+            ),
+        ),
+    ).resolve()
+
+    assert resolved == (str(config), str(checkpoint))
+
+
 def test_model_config_uses_huggingface_cache_before_remote(monkeypatch, tmp_path):
     config = tmp_path / "cache" / "config.json"
     checkpoint = tmp_path / "cache" / "model.safetensors"

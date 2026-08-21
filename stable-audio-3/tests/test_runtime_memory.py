@@ -3,7 +3,10 @@ from pathlib import Path
 
 import torch
 
-from stable_audio_3.inference.sampling import _decode_variants_sequentially
+from stable_audio_3.inference.sampling import (
+    _decode_chunk_size,
+    _decode_variants_sequentially,
+)
 from stable_audio_3.model import (
     StableAudioModel,
     _freeze_conditioning_tensors,
@@ -18,10 +21,12 @@ class _TrackingDecoder:
         self.downsampling_ratio = downsampling_ratio
         self._decoded_refs = []
         self.live_outputs_before_decode = []
+        self.chunk_sizes = []
 
     def decode(self, latents, **_kwargs):
         live_outputs = sum(ref() is not None for ref in self._decoded_refs)
         self.live_outputs_before_decode.append(live_outputs)
+        self.chunk_sizes.append(_kwargs.get("chunk_size"))
         decoded = latents.repeat_interleave(self.downsampling_ratio, dim=-1)
         self._decoded_refs.append(weakref.ref(decoded))
         return decoded
@@ -77,6 +82,41 @@ def test_variant_decode_streams_into_preallocated_batch():
     torch.testing.assert_close(decoded, latents)
     assert progress == [(1, 4), (2, 4), (3, 4), (4, 4)]
     assert max(decoder.live_outputs_before_decode) <= 1
+    # The accumulated batch must live on CPU, not the decode device.
+    assert decoded.device.type == "cpu"
+    # Without CUDA free-memory info the guaranteed-safe chunk floor is used.
+    assert decoder.chunk_sizes == [64, 64, 64, 64]
+
+
+def test_decode_chunk_size_uses_floor_without_headroom():
+    one_gib = 1024 ** 3
+    assert _decode_chunk_size(None) == 64
+    assert _decode_chunk_size(one_gib - 1) == 64
+    assert _decode_chunk_size(one_gib) == 128
+    assert _decode_chunk_size(4 * one_gib) == 128
+
+
+def test_variant_decode_applies_padding_mask_per_variant():
+    decoder = _TrackingDecoder(downsampling_ratio=2)
+    latents = torch.ones(2, 1, 4)
+    # Variant 0 keeps 3 of 4 latent positions, variant 1 keeps all 4.
+    padding_mask = torch.tensor([
+        [True, True, True, False],
+        [True, True, True, True],
+    ])
+
+    decoded = _decode_variants_sequentially(
+        decoder,
+        latents,
+        chunked_decode=True,
+        padding_mask=padding_mask,
+        downsampling_ratio=2,
+    )
+
+    expected = latents.repeat_interleave(2, dim=-1)
+    expected[0, :, 6:] = 0.0
+    torch.testing.assert_close(decoded, expected)
+    assert decoded.device.type == "cpu"
 
 
 def test_conditioning_cache_is_cpu_backed_and_restores_isolated_values():

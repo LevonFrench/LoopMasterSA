@@ -36,6 +36,23 @@ def _find_local_file(repo_id: str, filename: str) -> str | None:
     return None
 
 
+def _find_local_config(cfg_repo: str, ckpt_repo: str, filename: str) -> str | None:
+    """Find a config locally, probing both repo folders before any HF cache."""
+    repos = dict.fromkeys((cfg_repo, ckpt_repo))
+    for repo_id in repos:
+        repo_name = repo_id.rsplit("/", 1)[-1]
+        for root in _model_roots():
+            candidate = root / repo_name / filename
+            if candidate.is_file():
+                return str(candidate)
+
+    for repo_id in repos:
+        cached = try_to_load_from_cache(repo_id=repo_id, filename=filename)
+        if isinstance(cached, str) and os.path.isfile(cached):
+            return cached
+    return None
+
+
 @dataclass(frozen=True)
 class ModelConfig:
     repo_id: str
@@ -46,7 +63,7 @@ class ModelConfig:
     def resolve(self):
         """Resolve each file locally before downloading only what is missing."""
         cfg_repo = self.config_repo_id if self.config_repo_id else self.repo_id
-        config = _find_local_file(cfg_repo, self.config_path)
+        config = _find_local_config(cfg_repo, self.repo_id, self.config_path)
         checkpoint = _find_local_file(self.repo_id, self.ckpt_path)
 
         if config is not None:
@@ -87,7 +104,9 @@ class AutoencoderModelConfig:
 
         for fallback in self.stable_audio_3:
             config_repo = fallback.config_repo_id or fallback.repo_id
-            fallback_config = _find_local_file(config_repo, fallback.config_path)
+            fallback_config = _find_local_config(
+                config_repo, fallback.repo_id, fallback.config_path
+            )
             fallback_ckpt = _find_local_file(fallback.repo_id, fallback.ckpt_path)
             if fallback_config is not None and fallback_ckpt is not None:
                 print(f"[Local Model] Using fallback config: {fallback_config}")
