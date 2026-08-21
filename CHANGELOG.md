@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-21 — Modular workstation skins
+
+- Added a versioned, CSS-only skin runtime with a same-origin registry, atomic latest-choice-wins switching, local preference persistence, query-string previewing, load-failure rollback, change/error events, and a script-independent boot fail-open.
+- Added stable `data-lm-region`, `data-lm-part`, and prompt-section hooks so skins can reinterpret the full workspace without cloning controls, reparenting stateful DOM, or touching audio/generation behavior.
+- Added an accessible Appearance picker with keyboard focus trapping, focus return, live status, four visual previews, reduced-motion support, forced-colors support, and coarse-pointer target guarantees.
+- Preserved the Original / Midnight Grid visual language while repairing its unreachable below-fold transport/tracks, narrow composer breakpoint, tertiary contrast, and native toggle focusability.
+- Added CUTLINE / Sampler Bench: a pale industrial hardware workstation with a readable scrolling generator rail, persistent Generate action, dark media wells, and a track-first performance bank.
+- Added SESSION SHEET / Studio Score from the critique synthesis: a light editorial tracking sheet with persistent transport, ruled prompt lanes, a four-bar red margin/playhead motif, and a take-register workspace.
+- Added PADMODE / Live Deck from the critique synthesis: a dark touch-first console with a persistent build action, wrapped transport/master controls, prominent four-take pads, and selected-track/FX emphasis.
+- Expanded frontend QA to switch every registered skin without losing input node identity/value/focus, reject unregistered stylesheets, test the loader race and failure paths, check every skin for responsive overflow and track reachability, exercise picker focus behavior, and capture a four-skin viewport matrix.
+- Added the complete skin-authoring/API/state contract at `output/loopmaster-skin-system.md` and JavaScript regression coverage for catalog integrity, CSS isolation, runtime persistence, bootstrap resilience, and application state selectors.
+
 ## 2026-08-21 — Unified prompt composer and chord progressor
 
 - Unified prompt writing in the top composer, with unrestricted free text alongside structured choices, and removed the redundant Final Prompt box.

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-lm-skin="original" data-lm-skin-loading>
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-src 'none'; manifest-src 'self'">
@@ -7,23 +7,32 @@
     <title>LoopMaster Loop Generator (Stable Audio 3)</title>
     <meta name="description" content="Multi-track audio variant generator with synchronized grid playback.">
     <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="/static/skin-core.css">
+    <script src="/static/skins/skin_core.js"></script>
+    <script src="/static/skins/skin_catalog.js"></script>
+    <script src="/static/skins/skin_system.js"></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to Main Content</a>
     <main class="app-container" id="main-content" tabindex="-1">
 
         <!-- Header -->
-        <header class="app-header">
+        <header class="app-header" data-lm-region="header">
             <div class="app-logo" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false"><path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z"/></svg>
             </div>
             <h1 class="app-title">LoopMaster Loop Generator <span>(Stable Audio 3)</span></h1>
+            <div class="app-header-tools">
+                <button class="btn-skins" id="btn-skins" type="button" aria-controls="skin-picker-modal" aria-expanded="false">
+                    Skins <span class="skin-current-label" id="skin-current-label">Original</span>
+                </button>
+            </div>
         </header>
 
         <!-- Controls -->
-        <section class="controls-panel" id="controls-panel" aria-label="Generation Controls">
+        <section class="controls-panel" id="controls-panel" aria-label="Generation Controls" data-lm-region="generator">
             <div class="controls-row">
-                <div class="control-group prompt-group">
+                <div class="control-group prompt-group" data-lm-part="prompt-builder">
                     <div class="control-group-header">
                         <span class="control-label">Prompt Builder</span>
                         <div class="prompt-inline-btns">
@@ -45,7 +54,7 @@
                     <div class="prompt-builder-grid" id="prompt-builder-sections" aria-live="polite">
                         <span class="prompt-builder-loading">Loading prompt options…</span>
                     </div>
-                    <section class="chord-progressor" id="chord-progressor" aria-labelledby="chord-progressor-title">
+                    <section class="chord-progressor" id="chord-progressor" aria-labelledby="chord-progressor-title" data-lm-part="progressor">
                         <div class="chord-progressor-header">
                             <div>
                                 <span class="chip-label" id="chord-progressor-title">4-Chord Progressor</span>
@@ -121,13 +130,13 @@
                     </select>
                 </div>
 
-                <div class="control-group">
+                <div class="control-group" data-lm-part="generate-action">
                     <div class="control-group-header"></div>
                     <button class="btn-generate" id="btn-generate" type="button">Generate</button>
                     <button class="btn-cancel-generation is-hidden" id="btn-cancel-generation" type="button" hidden>Cancel generation</button>
                 </div>
 
-                <div class="control-group">
+                <div class="control-group" data-lm-part="kit-action">
                     <div class="control-group-header"></div>
                     <button class="btn-kit-toggle" id="btn-kit-toggle" type="button" title="Open the Kit Builder: one-shot drum kits, hit sheets, and slicer feed" aria-expanded="false" aria-controls="kit-builder-panel">Kit Builder</button>
                 </div>
@@ -240,7 +249,7 @@
 
 
         <!-- Transport Panel -->
-        <section class="transport-panel" aria-label="Playback and Project Controls">
+        <section class="transport-panel" aria-label="Playback and Project Controls" data-lm-region="transport">
             <div class="transport-bar" id="transport-bar">
                 <button class="btn-transport" id="btn-play-pause" type="button" disabled aria-label="Play">
                     <svg class="ic ic-play" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 2.5l9 5.5-9 5.5z"/></svg>
@@ -334,7 +343,7 @@
         </section>
 
         <!-- Song Arranger Panel -->
-        <section class="arranger-panel is-initially-hidden" id="arranger-panel" aria-labelledby="arranger-heading">
+        <section class="arranger-panel is-initially-hidden" id="arranger-panel" aria-labelledby="arranger-heading" data-lm-region="arranger">
             <div class="arranger-header">
                 <h2 id="arranger-heading">Song Arranger</h2>
                 <div class="arranger-controls">
@@ -354,7 +363,7 @@
         </section>
 
         <!-- Record Log Drawer -->
-        <section class="arranger-panel record-log-drawer is-initially-hidden" id="record-log-drawer" aria-labelledby="record-log-heading">
+        <section class="arranger-panel record-log-drawer is-initially-hidden" id="record-log-drawer" aria-labelledby="record-log-heading" data-lm-region="record-log">
             <div class="arranger-header">
                 <h2 id="record-log-heading">Recorded Parameter Changes</h2>
                 <div class="arranger-controls">
@@ -367,7 +376,7 @@
         </section>
 
         <!-- Track Rows -->
-        <section class="tracks-container empty" id="tracks-container" aria-label="Generated Tracks">
+        <section class="tracks-container empty" id="tracks-container" aria-label="Generated Tracks" data-lm-region="tracks">
             <div class="grid-empty-state">
                 <div class="empty-state-welcome">
                     <svg viewBox="0 0 24 24" class="welcome-logo-icon" aria-hidden="true" focusable="false"><path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z"/></svg>
@@ -421,7 +430,7 @@
             </div>
         </section>
 
-        <section class="track-wrapper modulators-panel" id="modulators-panel" aria-labelledby="modulators-heading">
+        <section class="track-wrapper modulators-panel" id="modulators-panel" aria-labelledby="modulators-heading" data-lm-region="modulators">
             <div class="arranger-header">
                 <h2 id="modulators-heading">Global Modulators</h2>
             </div>
@@ -1008,7 +1017,7 @@
     </main>
 
     <!-- Bottom Header & Keyboard Shortcuts Graphic -->
-    <footer class="app-footer" id="app-footer" aria-labelledby="shortcuts-heading">
+    <footer class="app-footer" id="app-footer" aria-labelledby="shortcuts-heading" data-lm-region="help">
         <div class="footer-header">
             <h2 id="shortcuts-heading">LoopMaster SA3 — Quick Start & Keyboard Shortcuts</h2>
             <button class="footer-toggle-btn" id="btn-toggle-footer" type="button" title="Toggle Shortcuts Panel" aria-label="Toggle Quick Start and Keyboard Shortcuts" aria-controls="footer-body">
@@ -1062,7 +1071,19 @@
     </footer>
 
     <!-- Export Settings Modal -->
-    <div id="export-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="export-modal-title">
+    <div id="skin-picker-modal" class="modal-overlay skin-picker-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="skin-picker-title" hidden data-lm-part="modal">
+        <div class="modal-content skin-picker-content">
+            <h2 class="modal-title" id="skin-picker-title">Reinterpret LoopMaster</h2>
+            <p class="skin-picker-intro">Skins can reshape the entire workstation while every prompt, track, control, and shortcut stays intact.</p>
+            <div class="skin-picker-grid" id="skin-picker-grid"></div>
+            <p class="skin-picker-status" id="skin-picker-status" role="status" aria-live="polite"></p>
+            <div class="modal-buttons">
+                <button class="btn-generate modal-primary-action" id="btn-skin-picker-done" type="button">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="export-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="export-modal-title" data-lm-part="modal">
         <div class="modal-content">
             <h2 class="modal-title" id="export-modal-title">Export Settings</h2>
             
@@ -1095,7 +1116,7 @@
         </div>
     </div>
 
-    <div id="file-naming-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="file-naming-modal-title">
+    <div id="file-naming-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="file-naming-modal-title" data-lm-part="modal">
         <div class="modal-content file-naming-modal-content">
             <h2 class="modal-title" id="file-naming-modal-title">Loop Pack File Naming</h2>
             <p class="file-naming-help">These fields control exported filenames and sidecars; they do not change the musical prompt.</p>

@@ -1,0 +1,2041 @@
+/*
+ * LoopMaster — Session Sheet v1
+ * A light editorial studio score: the generator is the session brief,
+ * generated tracks are the take register, and the red rule is both a
+ * manuscript margin and the visual playhead.
+ *
+ * Contract: presentation only. Every selector is scoped to this skin.
+ */
+
+html[data-lm-skin="session-sheet"] {
+    color-scheme: light;
+    font-size: 16px;
+
+    --sheet-canvas: #d7d2c7;
+    --sheet-paper: #f7f4eb;
+    --sheet-paper-deep: #ece7db;
+    --sheet-ink: #182321;
+    --sheet-graphite: #4f5c58;
+    --sheet-faint: #6d7772;
+    --sheet-rule: #aaa99f;
+    --sheet-rule-dark: #777d78;
+    --sheet-margin: #bd3f36;
+    --sheet-margin-dark: #8e2e29;
+    --sheet-cue: #176b73;
+    --sheet-cue-soft: #dbe9e7;
+    --sheet-success: #367052;
+    --sheet-warning: #8d5b12;
+
+    --bg-base: var(--sheet-canvas);
+    --bg-surface: var(--sheet-paper);
+    --bg-card: rgba(247, 244, 235, 0.94);
+    --bg-card-hover: #fffdf7;
+    --bg-card-active: #e8e2d5;
+    --bg-card-selected: #dbe9e7;
+    --bg-input: #fffdf7;
+    --bg-mixer: #e8e3d7;
+    --border-subtle: rgba(24, 35, 33, 0.16);
+    --border-card: rgba(24, 35, 33, 0.34);
+    --border-input: rgba(24, 35, 33, 0.48);
+    --border-focus: var(--sheet-cue);
+    --border-selected: var(--sheet-cue);
+    --text-primary: var(--sheet-ink);
+    --text-secondary: var(--sheet-graphite);
+    --text-tertiary: var(--sheet-faint);
+    --text-accent: var(--sheet-margin-dark);
+    --accent: var(--sheet-cue);
+    --accent-glow: rgba(23, 107, 115, 0.22);
+    --accent-soft: rgba(23, 107, 115, 0.10);
+    --prompt-signal: var(--sheet-cue);
+    --prompt-signal-soft: rgba(23, 107, 115, 0.08);
+    --success: var(--sheet-success);
+    --warning: var(--sheet-warning);
+    --error: #a9332d;
+    --solo-color: #ad7a13;
+    --mute-color: var(--sheet-margin);
+    --waveform-fill: rgba(23, 107, 115, 0.18);
+    --waveform-fill-selected: rgba(23, 107, 115, 0.48);
+    --playhead-color: var(--sheet-margin);
+    --lfo1-color: #367052;
+    --lfo2-color: #176b73;
+    --lfo3-color: #a26a17;
+    --lfo4-color: #9b475e;
+    --radius-sm: 2px;
+    --radius-md: 3px;
+    --radius-lg: 4px;
+    --shadow-card: 0 2px 0 rgba(24, 35, 33, 0.22);
+    --shadow-glow: 0 0 0 3px rgba(23, 107, 115, 0.16);
+    --shadow-btn: 0 2px 0 rgba(24, 35, 33, 0.26);
+    --transition-fast: 100ms ease-out;
+    --transition-med: 160ms ease-out;
+    --font-sans: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+    --font-mono: "Cascadia Mono", Consolas, monospace;
+    --sheet-display: Georgia, "Times New Roman", serif;
+}
+
+/* Hold every utilitarian label at a legible floor. Larger display text is
+   restored by the component rules below. */
+html[data-lm-skin="session-sheet"] body,
+html[data-lm-skin="session-sheet"] body *,
+html[data-lm-skin="session-sheet"] body *::before,
+html[data-lm-skin="session-sheet"] body *::after {
+    font-size: max(12px, 0.75rem);
+}
+
+html[data-lm-skin="session-sheet"] body {
+    height: auto;
+    min-height: 100dvh;
+    overflow: auto;
+    background:
+        linear-gradient(90deg, transparent 0 47px, rgba(189, 63, 54, 0.16) 47px 48px, transparent 48px),
+        repeating-linear-gradient(0deg, transparent 0 23px, rgba(24, 35, 33, 0.055) 23px 24px),
+        var(--sheet-canvas);
+    color: var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.2), transparent 18%, transparent 82%, rgba(24, 35, 33, 0.05)),
+        radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.38), transparent 38%);
+}
+
+html[data-lm-skin="session-sheet"] body::after {
+    content: '';
+    position: fixed;
+    inset: 0 auto 0 47px;
+    z-index: 60;
+    width: 2px;
+    pointer-events: none;
+    background: rgba(189, 63, 54, 0.78);
+    box-shadow: 1px 0 0 rgba(247, 244, 235, 0.55);
+}
+
+html[data-lm-skin="session-sheet"] ::selection {
+    background: rgba(189, 63, 54, 0.22);
+    color: var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] .app-container {
+    width: 100%;
+    max-width: none;
+    min-height: 100dvh;
+    height: auto;
+    margin: 0;
+    padding: 8px 12px 28px 60px;
+    display: grid;
+    grid-template-columns: minmax(410px, 480px) minmax(0, 1fr);
+    grid-template-areas:
+        "header header"
+        "transport transport"
+        "generator tracks"
+        "generator arranger"
+        "generator recordlog"
+        "generator modulators";
+    grid-template-rows: auto auto minmax(600px, auto) auto auto auto;
+    align-items: start;
+    gap: 10px;
+    overflow: visible;
+}
+
+html[data-lm-skin="session-sheet"] .app-header {
+    grid-area: header;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    min-height: 52px;
+    padding: 8px 12px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-left: 5px solid var(--sheet-margin);
+    background: rgba(247, 244, 235, 0.97);
+    box-shadow: 0 2px 0 rgba(24, 35, 33, 0.22);
+    backdrop-filter: blur(10px);
+}
+
+html[data-lm-skin="session-sheet"] .app-logo {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--sheet-ink);
+    border-radius: 50%;
+    background: var(--sheet-margin);
+    color: var(--sheet-paper);
+    box-shadow: inset 0 0 0 4px var(--sheet-paper), inset 0 0 0 5px var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] .app-logo svg {
+    width: 17px;
+    height: 17px;
+    fill: currentColor;
+}
+
+html[data-lm-skin="session-sheet"] .app-title {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: clamp(20px, 1.7vw, 28px);
+    font-weight: 600;
+    font-style: italic;
+    letter-spacing: -0.025em;
+    -webkit-text-fill-color: currentColor;
+    background: none;
+}
+
+html[data-lm-skin="session-sheet"] .app-title span {
+    margin-left: 6px;
+    color: var(--sheet-graphite);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    opacity: 1;
+}
+
+html[data-lm-skin="session-sheet"] .app-header-tools {
+    gap: 8px;
+}
+
+html[data-lm-skin="session-sheet"] .btn-skins {
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--sheet-ink);
+    border-radius: 2px;
+    background: var(--sheet-paper-deep);
+    color: var(--sheet-ink);
+    box-shadow: 0 2px 0 var(--sheet-rule-dark);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+}
+
+html[data-lm-skin="session-sheet"] .btn-skins::before {
+    border-color: var(--sheet-ink);
+    border-radius: 0;
+    background: linear-gradient(90deg, var(--sheet-margin) 0 35%, var(--sheet-paper) 35% 68%, var(--sheet-cue) 68%);
+}
+
+html[data-lm-skin="session-sheet"] .controls-panel {
+    grid-area: generator;
+    position: sticky;
+    top: 126px;
+    align-self: start;
+    max-height: calc(100dvh - 138px);
+    padding: 14px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--sheet-rule-dark);
+    border-top: 6px solid var(--sheet-ink);
+    border-radius: 2px;
+    background:
+        linear-gradient(90deg, transparent 0 25px, rgba(189, 63, 54, 0.16) 25px 26px, transparent 26px),
+        var(--sheet-paper);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: none;
+    scrollbar-color: var(--sheet-rule-dark) var(--sheet-paper-deep);
+}
+
+html[data-lm-skin="session-sheet"] .controls-panel::before {
+    content: 'SESSION BRIEF  /  GENERATION SCORE';
+    display: block;
+    margin: -14px -14px 14px;
+    padding: 9px 12px 8px 34px;
+    border-bottom: 1px solid var(--sheet-rule-dark);
+    background: var(--sheet-paper-deep);
+    color: var(--sheet-ink);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+html[data-lm-skin="session-sheet"] .controls-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: end;
+    gap: 10px;
+}
+
+html[data-lm-skin="session-sheet"] .controls-row > .control-group {
+    min-width: 0;
+    gap: 6px;
+}
+
+html[data-lm-skin="session-sheet"] .controls-row > .control-group.prompt-group {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-width: 0;
+}
+
+html[data-lm-skin="session-sheet"] .controls-row > .control-group:has(#btn-kit-toggle) {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+html[data-lm-skin="session-sheet"] .controls-row > .control-group:has(#btn-generate) {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+html[data-lm-skin="session-sheet"] .control-group-header {
+    min-height: 24px;
+    height: auto;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-group > .control-group-header {
+    align-items: center;
+    min-height: 44px;
+    padding: 0 0 7px;
+    border-bottom: 2px solid var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] .control-label,
+html[data-lm-skin="session-sheet"] .chip-label,
+html[data-lm-skin="session-sheet"] .kit-piece-name,
+html[data-lm-skin="session-sheet"] .mixer-label,
+html[data-lm-skin="session-sheet"] .master-meter-label,
+html[data-lm-skin="session-sheet"] .fx-knob-label,
+html[data-lm-skin="session-sheet"] .remix-param-label {
+    color: var(--sheet-graphite);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.055em;
+    line-height: 1.25;
+    text-transform: uppercase;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-group > .control-group-header > .control-label {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 18px;
+    font-style: italic;
+    letter-spacing: -0.01em;
+    text-transform: none;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-inline-btns {
+    gap: 6px;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-pill-btn,
+html[data-lm-skin="session-sheet"] .history-action,
+html[data-lm-skin="session-sheet"] .history-load-more {
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: var(--sheet-paper-deep);
+    color: var(--sheet-ink);
+    box-shadow: 0 1px 0 rgba(24, 35, 33, 0.18);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-pill-btn:hover,
+html[data-lm-skin="session-sheet"] .history-action:hover,
+html[data-lm-skin="session-sheet"] .history-load-more:hover {
+    border-color: var(--sheet-cue);
+    background: var(--sheet-cue-soft);
+    color: var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] #btn-randomize-all {
+    border-color: var(--sheet-margin-dark);
+    background: var(--sheet-margin);
+    color: #fffdf7;
+}
+
+html[data-lm-skin="session-sheet"] #btn-randomize-all:hover {
+    background: var(--sheet-margin-dark);
+    color: #fff;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-freeform-row {
+    gap: 6px;
+    margin: 10px 0 12px;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-composer-bar {
+    display: grid;
+    grid-template-columns: 1fr;
+    overflow: hidden;
+    border: 1px solid var(--sheet-ink);
+    border-radius: 2px;
+    background: var(--bg-input);
+    box-shadow: inset 5px 0 0 rgba(189, 63, 54, 0.22);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-composer-bar:focus-within {
+    border-color: var(--sheet-cue);
+    box-shadow: inset 5px 0 0 var(--sheet-margin), var(--shadow-glow);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-freeform {
+    min-height: 88px;
+    max-height: 220px;
+    padding: 12px 14px 12px 18px;
+    border: 0;
+    border-radius: 0;
+    background:
+        repeating-linear-gradient(0deg, transparent 0 23px, rgba(24, 35, 33, 0.07) 23px 24px),
+        #fffdf7;
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 15px;
+    line-height: 24px;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-freeform::placeholder {
+    color: var(--sheet-faint);
+    opacity: 1;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-preview {
+    min-height: 72px;
+    padding: 30px 14px 12px 18px;
+    border: 0;
+    border-top: 1px solid var(--sheet-rule);
+    background: var(--sheet-paper-deep);
+    color: var(--sheet-graphite);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-preview::before {
+    content: 'COMPILED SCORE';
+    top: 9px;
+    left: 18px;
+    color: var(--sheet-margin-dark);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: 0.07em;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin: 0 0 12px;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-loading {
+    padding: 22px;
+    border: 1px dashed var(--sheet-rule-dark);
+    background: var(--sheet-paper-deep);
+    color: var(--sheet-graphite);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-column {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    gap: 7px;
+    min-width: 0;
+    padding: 9px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: rgba(236, 231, 219, 0.72);
+    box-shadow: none;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-column-heading {
+    display: grid;
+    grid-template-columns: 30px minmax(0, auto) minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 2px 7px;
+    border-bottom: 1px solid var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-column-number {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    border: 1px solid var(--sheet-margin-dark);
+    border-radius: 50%;
+    background: var(--sheet-paper);
+    color: var(--sheet-margin-dark);
+    font-family: var(--sheet-display);
+    font-size: 14px;
+    font-style: italic;
+    line-height: 26px;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-column-title {
+    overflow: visible;
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 16px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    text-transform: none;
+    text-overflow: clip;
+    white-space: normal;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-column-hint {
+    max-width: none;
+    margin-left: 0;
+    overflow: visible;
+    color: var(--sheet-faint);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.25;
+    text-align: right;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-section {
+    min-height: 82px;
+    padding: 9px 10px 10px 13px;
+    overflow: visible;
+    border: 1px solid var(--sheet-rule);
+    border-radius: 2px;
+    background: rgba(255, 253, 247, 0.86);
+    box-shadow: inset 3px 0 0 var(--sheet-rule);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-section::before {
+    inset: 11px 10px auto auto;
+    width: 8px;
+    height: 8px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 50%;
+    background: var(--sheet-paper);
+    box-shadow: none;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-section.is-group-active:not(.is-random-muted) {
+    border-color: rgba(23, 107, 115, 0.56);
+    background: #eef5f2;
+    box-shadow: inset 4px 0 0 var(--sheet-cue);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-section.is-group-active:not(.is-random-muted)::before {
+    border-color: var(--sheet-cue);
+    background: var(--sheet-cue);
+    box-shadow: 0 0 0 3px rgba(23, 107, 115, 0.12);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-section.is-group-dormant:not(.is-random-muted) {
+    border-color: var(--sheet-rule);
+    background: rgba(247, 244, 235, 0.58);
+    opacity: 0.72;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-section.is-group-dormant:hover,
+html[data-lm-skin="session-sheet"] .prompt-builder-section.is-group-dormant:focus-within {
+    opacity: 1;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-section.is-random-muted {
+    border-style: dashed;
+    border-color: rgba(141, 91, 18, 0.68);
+    background: #eee5d4;
+    box-shadow: inset 4px 0 0 var(--sheet-warning);
+    opacity: 0.9;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-section.is-random-muted::before {
+    border-color: var(--sheet-warning);
+    background: var(--sheet-warning);
+    box-shadow: none;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-section > .chip-label {
+    padding-right: 22px;
+    color: var(--sheet-graphite);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-control-row {
+    min-height: 44px;
+    margin-top: 7px;
+    overflow: hidden;
+    border: 1px solid var(--sheet-ink);
+    border-radius: 2px;
+    background: var(--bg-input);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-builder-control-row:focus-within {
+    border-color: var(--sheet-cue);
+    box-shadow: var(--shadow-glow);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-section-select,
+html[data-lm-skin="session-sheet"] .prompt-custom-input,
+html[data-lm-skin="session-sheet"] .control-input,
+html[data-lm-skin="session-sheet"] .render-format-select,
+html[data-lm-skin="session-sheet"] .master-filter-select,
+html[data-lm-skin="session-sheet"] .arranger-length-select,
+html[data-lm-skin="session-sheet"] .lfo-select,
+html[data-lm-skin="session-sheet"] .mod-matrix-slot-row select {
+    min-width: 0;
+    min-height: 44px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: #fffdf7;
+    color: var(--sheet-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-section-select {
+    width: 100%;
+    height: 44px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 0;
+    text-overflow: ellipsis;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-section-select option {
+    background: #fffdf7;
+    color: var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-section-select option[data-muted="true"] {
+    color: var(--sheet-warning);
+}
+
+html[data-lm-skin="session-sheet"] .prompt-custom-input {
+    width: 100%;
+    margin-top: 7px;
+    padding: 8px 10px;
+}
+
+html[data-lm-skin="session-sheet"] .prompt-section-pin {
+    margin-left: 5px;
+    padding: 2px 6px;
+    border: 1px solid rgba(141, 91, 18, 0.52);
+    border-radius: 2px;
+    background: #f2e7d0;
+    color: #71450d;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .chip-mute,
+html[data-lm-skin="session-sheet"] .chip-dice {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    border-left: 1px solid var(--sheet-rule-dark);
+    border-radius: 0;
+    background: var(--sheet-paper-deep);
+    color: var(--sheet-ink);
+    font-size: 17px;
+}
+
+html[data-lm-skin="session-sheet"] .chip-mute:hover:not(:disabled),
+html[data-lm-skin="session-sheet"] .chip-dice:hover:not(:disabled) {
+    background: var(--sheet-cue-soft);
+    color: var(--sheet-cue);
+}
+
+html[data-lm-skin="session-sheet"] .chip-mute.is-muted {
+    background: var(--sheet-warning);
+    color: #fffdf7;
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor {
+    gap: 10px;
+    margin: 0 0 12px;
+    padding: 12px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-left: 5px solid var(--sheet-margin);
+    border-radius: 2px;
+    background:
+        repeating-linear-gradient(0deg, transparent 0 23px, rgba(24, 35, 33, 0.045) 23px 24px),
+        var(--sheet-paper-deep);
+    box-shadow: none;
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor.is-active {
+    border-color: var(--sheet-cue);
+    border-left-color: var(--sheet-margin);
+    background: #edf4f0;
+    box-shadow: inset 0 0 0 1px rgba(23, 107, 115, 0.12);
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor:has(.chord-progressor-mute.is-muted) {
+    border-color: var(--sheet-warning);
+    border-left-color: var(--sheet-warning);
+    background: #f1e7d4;
+    box-shadow: none;
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor-header {
+    gap: 12px;
+}
+
+html[data-lm-skin="session-sheet"] #chord-progressor-title {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 17px;
+    font-style: italic;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor-hint,
+html[data-lm-skin="session-sheet"] .chord-progressor-status {
+    color: var(--sheet-graphite);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor-actions {
+    gap: 6px;
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor-actions .chip-mute,
+html[data-lm-skin="session-sheet"] .chord-progressor-actions .chip-dice {
+    width: 44px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: var(--sheet-paper);
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor-controls {
+    grid-template-columns: minmax(130px, 0.65fr) minmax(0, 1.35fr);
+    gap: 8px;
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor-field {
+    gap: 5px;
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor-field .prompt-section-select {
+    height: 44px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 5px;
+}
+
+html[data-lm-skin="session-sheet"] .chord-progressor-card {
+    min-height: 96px;
+    padding: 9px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-top: 4px solid var(--sheet-margin);
+    border-radius: 1px;
+    background: #fffdf7;
+    box-shadow: none;
+}
+
+html[data-lm-skin="session-sheet"] .chord-card-bar,
+html[data-lm-skin="session-sheet"] .chord-card-roman {
+    color: var(--sheet-faint);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+}
+
+html[data-lm-skin="session-sheet"] .chord-card-symbol {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 20px;
+    font-weight: 700;
+}
+
+html[data-lm-skin="session-sheet"] .generation-history-panel {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 2px solid var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] .generation-history-header {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 16px;
+}
+
+html[data-lm-skin="session-sheet"] .generation-history-viewport {
+    max-height: 360px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: var(--sheet-paper-deep);
+}
+
+html[data-lm-skin="session-sheet"] .generation-history-items {
+    gap: 0;
+}
+
+html[data-lm-skin="session-sheet"] .generation-history-entry {
+    grid-template-columns: minmax(110px, auto) 1fr auto;
+    min-height: 76px;
+    gap: 10px;
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--sheet-rule);
+    border-left: 3px solid transparent;
+    background: #fffdf7;
+}
+
+html[data-lm-skin="session-sheet"] .generation-history-entry:hover,
+html[data-lm-skin="session-sheet"] .generation-history-entry:focus-within {
+    border-left-color: var(--sheet-margin);
+    background: var(--sheet-cue-soft);
+}
+
+html[data-lm-skin="session-sheet"] .history-status,
+html[data-lm-skin="session-sheet"] .history-time,
+html[data-lm-skin="session-sheet"] .generation-history-prompt {
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .history-status {
+    border-radius: 2px;
+    font-family: var(--font-mono);
+}
+
+html[data-lm-skin="session-sheet"] .history-action,
+html[data-lm-skin="session-sheet"] .history-load-more {
+    min-height: 36px;
+}
+
+html[data-lm-skin="session-sheet"] .control-input {
+    width: 100%;
+    padding: 8px 10px;
+}
+
+html[data-lm-skin="session-sheet"] .control-input-sm,
+html[data-lm-skin="session-sheet"] .control-input[type="number"] {
+    width: 100%;
+}
+
+html[data-lm-skin="session-sheet"] .btn-generate,
+html[data-lm-skin="session-sheet"] .btn-kit-toggle,
+html[data-lm-skin="session-sheet"] .btn-cancel-generation,
+html[data-lm-skin="session-sheet"] .modal-primary-action,
+html[data-lm-skin="session-sheet"] .btn-modal-cancel {
+    width: 100%;
+    min-height: 44px;
+    padding: 9px 13px;
+    border: 1px solid var(--sheet-ink);
+    border-radius: 2px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 750;
+    letter-spacing: 0.025em;
+}
+
+html[data-lm-skin="session-sheet"] .btn-generate,
+html[data-lm-skin="session-sheet"] .modal-primary-action {
+    background: var(--sheet-cue);
+    color: #fff;
+    box-shadow: 0 3px 0 #0d4d53;
+}
+
+html[data-lm-skin="session-sheet"] .btn-generate:hover:not(:disabled),
+html[data-lm-skin="session-sheet"] .modal-primary-action:hover:not(:disabled) {
+    background: #0f5960;
+    box-shadow: 0 2px 0 #0d4146;
+    transform: none;
+}
+
+html[data-lm-skin="session-sheet"] .btn-kit-toggle {
+    background: var(--sheet-paper-deep);
+    color: var(--sheet-ink);
+    box-shadow: 0 3px 0 var(--sheet-rule-dark);
+}
+
+html[data-lm-skin="session-sheet"] .btn-kit-toggle:hover,
+html[data-lm-skin="session-sheet"] .btn-kit-toggle.is-open {
+    border-color: var(--sheet-margin-dark);
+    background: #f1ddd7;
+    color: var(--sheet-margin-dark);
+}
+
+html[data-lm-skin="session-sheet"] .btn-cancel-generation,
+html[data-lm-skin="session-sheet"] .btn-modal-cancel {
+    margin-top: 6px;
+    background: transparent;
+    color: var(--sheet-margin-dark);
+}
+
+html[data-lm-skin="session-sheet"] .status-bar {
+    margin-top: 12px;
+    padding: 10px 12px 10px 35px;
+    border: 1px solid var(--sheet-cue);
+    border-left: 5px solid var(--sheet-cue);
+    border-radius: 2px;
+    background: var(--sheet-cue-soft);
+    color: var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] .status-text {
+    color: var(--sheet-ink);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .status-spinner {
+    border-color: rgba(23, 107, 115, 0.2);
+    border-top-color: var(--sheet-cue);
+}
+
+html[data-lm-skin="session-sheet"] .init-audio-badge,
+html[data-lm-skin="session-sheet"] .kit-builder-panel {
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: var(--sheet-paper-deep);
+    box-shadow: none;
+}
+
+html[data-lm-skin="session-sheet"] .init-audio-header,
+html[data-lm-skin="session-sheet"] .kit-builder-header {
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--sheet-rule-dark);
+}
+
+html[data-lm-skin="session-sheet"] .init-audio-label,
+html[data-lm-skin="session-sheet"] .kit-builder-title {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 16px;
+}
+
+html[data-lm-skin="session-sheet"] .kit-builder-subtitle {
+    color: var(--sheet-faint);
+    font-family: var(--font-sans);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .btn-clear-init,
+html[data-lm-skin="session-sheet"] .remix-mode-btn,
+html[data-lm-skin="session-sheet"] .kit-hit-btn,
+html[data-lm-skin="session-sheet"] .fx-toggle-btn,
+html[data-lm-skin="session-sheet"] .fx-map-btn,
+html[data-lm-skin="session-sheet"] .arranger-btn {
+    min-width: 44px;
+    min-height: 44px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: var(--sheet-paper);
+    color: var(--sheet-ink);
+    box-shadow: none;
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .remix-mode-btn.active,
+html[data-lm-skin="session-sheet"] .fx-toggle-btn:not(.is-off),
+html[data-lm-skin="session-sheet"] .arranger-btn.active {
+    border-color: var(--sheet-cue);
+    background: var(--sheet-cue);
+    color: #fff;
+}
+
+html[data-lm-skin="session-sheet"] .remix-mode-selector,
+html[data-lm-skin="session-sheet"] .kit-row,
+html[data-lm-skin="session-sheet"] .kit-pieces,
+html[data-lm-skin="session-sheet"] .kit-velocities,
+html[data-lm-skin="session-sheet"] .kit-slicer-feed {
+    gap: 8px;
+}
+
+html[data-lm-skin="session-sheet"] .kit-check {
+    min-height: 44px;
+    padding: 8px 10px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: var(--sheet-paper);
+    color: var(--sheet-ink);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .kit-check:has(input:checked) {
+    border-color: var(--sheet-cue);
+    background: var(--sheet-cue-soft);
+}
+
+html[data-lm-skin="session-sheet"] .kit-piece-group,
+html[data-lm-skin="session-sheet"] .kit-results {
+    border-color: var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: #fffdf7;
+}
+
+/* Transport is the fixed session ruler shared by generator and takes. */
+html[data-lm-skin="session-sheet"] .transport-panel {
+    grid-area: transport;
+    position: sticky;
+    top: 62px;
+    z-index: 45;
+    overflow: hidden;
+    border: 1px solid var(--sheet-ink);
+    border-left: 5px solid var(--sheet-margin);
+    border-radius: 2px;
+    background: rgba(247, 244, 235, 0.98);
+    box-shadow: 0 3px 0 rgba(24, 35, 33, 0.24);
+    backdrop-filter: blur(12px);
+}
+
+html[data-lm-skin="session-sheet"] .transport-panel::before {
+    content: 'SESSION TRANSPORT  ·  TAKE CLOCK';
+    display: block;
+    padding: 6px 10px 5px 12px;
+    border-bottom: 1px solid var(--sheet-rule-dark);
+    background: var(--sheet-ink);
+    color: var(--sheet-paper);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}
+
+html[data-lm-skin="session-sheet"] .transport-bar {
+    min-height: 56px;
+    padding: 7px 9px;
+    gap: 6px;
+    flex-wrap: wrap;
+    background: var(--sheet-paper-deep);
+}
+
+html[data-lm-skin="session-sheet"] .btn-transport {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 1px solid var(--sheet-ink);
+    border-radius: 2px;
+    background: #fffdf7;
+    color: var(--sheet-ink);
+    box-shadow: 0 2px 0 var(--sheet-rule-dark);
+}
+
+html[data-lm-skin="session-sheet"] .btn-transport:hover:not(:disabled) {
+    border-color: var(--sheet-cue);
+    background: var(--sheet-cue-soft);
+    color: var(--sheet-cue);
+    transform: none;
+}
+
+html[data-lm-skin="session-sheet"] .btn-transport:active:not(:disabled) {
+    translate: 0 2px;
+    box-shadow: none;
+}
+
+html[data-lm-skin="session-sheet"] .btn-record {
+    color: var(--sheet-margin);
+}
+
+html[data-lm-skin="session-sheet"] .btn-record.is-recording {
+    background: var(--sheet-margin);
+    color: #fff;
+}
+
+html[data-lm-skin="session-sheet"] .transport-time,
+html[data-lm-skin="session-sheet"] .master-volume-readout {
+    min-height: 44px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--sheet-ink);
+    border-radius: 2px;
+    background: var(--sheet-ink);
+    color: #f7f4eb;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+html[data-lm-skin="session-sheet"] .master-meter-section {
+    min-height: 44px;
+    padding: 4px 7px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: #fffdf7;
+}
+
+html[data-lm-skin="session-sheet"] .master-filter-select {
+    min-height: 34px;
+    height: 34px;
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .level-knob,
+html[data-lm-skin="session-sheet"] .pan-knob,
+html[data-lm-skin="session-sheet"] .fx-knob,
+html[data-lm-skin="session-sheet"] .fx-mini-knob,
+html[data-lm-skin="session-sheet"] .fx-macro-knob {
+    border-color: var(--sheet-rule-dark);
+    background: radial-gradient(circle at 38% 32%, #fffdf7 0 18%, #c9c7bd 55%, #777d78 100%);
+    box-shadow: 0 1px 0 rgba(24, 35, 33, 0.28), inset 0 1px 0 #fff;
+}
+
+html[data-lm-skin="session-sheet"] :is(.level-knob, .pan-knob, .fx-knob, .fx-mini-knob, .fx-macro-knob) :is(.knob-indicator, .pan-knob-indicator, .mini-knob-indicator, .macro-knob-indicator) {
+    background: var(--sheet-margin);
+}
+
+html[data-lm-skin="session-sheet"] .master-meter-container {
+    border: 1px solid var(--sheet-rule-dark);
+    background: var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] .toggle-switch {
+    min-height: 44px;
+    padding: 7px 8px;
+    gap: 7px;
+    border: 1px solid transparent;
+    color: var(--sheet-graphite);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .toggle-switch:hover {
+    border-color: var(--sheet-rule-dark);
+    background: #fffdf7;
+}
+
+html[data-lm-skin="session-sheet"] .toggle-track {
+    width: 36px;
+    height: 20px;
+    border: 1px solid var(--sheet-rule-dark);
+    background: var(--sheet-rule);
+}
+
+html[data-lm-skin="session-sheet"] .toggle-track::after {
+    width: 14px;
+    height: 14px;
+    background: #fffdf7;
+    box-shadow: 0 1px 1px rgba(24, 35, 33, 0.3);
+}
+
+html[data-lm-skin="session-sheet"] .toggle-switch input:checked + .toggle-track {
+    background: var(--sheet-cue);
+}
+
+html[data-lm-skin="session-sheet"] .visualizer-tray {
+    position: relative;
+    min-height: 54px;
+    padding: 5px 8px 7px;
+    gap: 6px;
+    border-top: 1px solid var(--sheet-ink);
+    background: var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] .visualizer-tray::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent 24.8%, rgba(189, 63, 54, 0.38) 25% 25.2%, transparent 25.4% 49.8%, rgba(189, 63, 54, 0.38) 50% 50.2%, transparent 50.4% 74.8%, rgba(189, 63, 54, 0.38) 75% 75.2%, transparent 75.4%);
+}
+
+html[data-lm-skin="session-sheet"] .viz-canvas {
+    border: 1px solid #5f6a66;
+    border-radius: 0;
+    background: #101917;
+}
+
+/* Generated takes occupy the main reading column. */
+html[data-lm-skin="session-sheet"] .tracks-container {
+    grid-area: tracks;
+    min-height: 600px;
+    max-height: calc(100dvh - 142px);
+    padding: 10px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--sheet-rule-dark);
+    border-top: 6px solid var(--sheet-ink);
+    border-radius: 2px;
+    background:
+        linear-gradient(90deg, transparent 0 33px, rgba(189, 63, 54, 0.15) 33px 34px, transparent 34px),
+        repeating-linear-gradient(0deg, transparent 0 23px, rgba(24, 35, 33, 0.045) 23px 24px),
+        var(--sheet-paper);
+    box-shadow: var(--shadow-card);
+    scrollbar-color: var(--sheet-rule-dark) var(--sheet-paper-deep);
+}
+
+html[data-lm-skin="session-sheet"] .tracks-container::before {
+    content: 'TAKE REGISTER  /  GENERATED LOOPS';
+    position: sticky;
+    top: -10px;
+    z-index: 12;
+    display: block;
+    margin: -10px -10px 10px;
+    padding: 9px 12px 8px 42px;
+    border-bottom: 1px solid var(--sheet-rule-dark);
+    background: rgba(236, 231, 219, 0.98);
+    color: var(--sheet-ink);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    backdrop-filter: blur(8px);
+}
+
+html[data-lm-skin="session-sheet"] .tracks-container.empty {
+    display: block;
+}
+
+html[data-lm-skin="session-sheet"] .grid-empty-state {
+    min-height: 520px;
+    padding: 28px 34px;
+    border: 1px dashed var(--sheet-rule-dark);
+    border-left: 4px solid var(--sheet-margin);
+    border-radius: 0;
+    background: rgba(255, 253, 247, 0.72);
+}
+
+html[data-lm-skin="session-sheet"] .empty-state-welcome h2 {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: clamp(24px, 2.5vw, 38px);
+    font-weight: 600;
+    font-style: italic;
+    letter-spacing: -0.03em;
+}
+
+html[data-lm-skin="session-sheet"] .empty-state-welcome p,
+html[data-lm-skin="session-sheet"] .qs-content p,
+html[data-lm-skin="session-sheet"] .shortcut-item-compact span {
+    color: var(--sheet-graphite);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+html[data-lm-skin="session-sheet"] .footer-body {
+    gap: 20px;
+}
+
+html[data-lm-skin="session-sheet"] .footer-left {
+    border-right-color: var(--sheet-rule);
+}
+
+html[data-lm-skin="session-sheet"] .quick-start-steps,
+html[data-lm-skin="session-sheet"] .shortcuts-compact-grid {
+    gap: 7px;
+}
+
+html[data-lm-skin="session-sheet"] .qs-step,
+html[data-lm-skin="session-sheet"] .shortcut-item-compact {
+    min-height: 44px;
+    padding: 8px;
+    border: 1px solid var(--sheet-rule);
+    border-radius: 2px;
+    background: rgba(247, 244, 235, 0.74);
+}
+
+html[data-lm-skin="session-sheet"] .qs-num {
+    border-color: var(--sheet-margin);
+    background: var(--sheet-margin);
+    color: #fff;
+    font-family: var(--sheet-display);
+    font-size: 14px;
+}
+
+html[data-lm-skin="session-sheet"] kbd {
+    min-width: 28px;
+    padding: 4px 6px;
+    border: 1px solid var(--sheet-ink);
+    border-bottom-width: 3px;
+    border-radius: 2px;
+    background: #fffdf7;
+    color: var(--sheet-ink);
+    box-shadow: none;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .track-wrapper {
+    margin-bottom: 10px;
+    overflow: hidden;
+    border: 1px solid var(--sheet-rule-dark);
+    border-left: 5px solid var(--sheet-margin);
+    border-radius: 2px;
+    background: #fffdf7;
+    box-shadow: 0 2px 0 rgba(24, 35, 33, 0.18);
+}
+
+html[data-lm-skin="session-sheet"] .track-wrapper.track-locked {
+    border-left-color: var(--sheet-warning);
+}
+
+html[data-lm-skin="session-sheet"] .track-row {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    backdrop-filter: none;
+}
+
+html[data-lm-skin="session-sheet"] .track-row.is-muted {
+    opacity: 0.56;
+    filter: grayscale(0.45);
+}
+
+html[data-lm-skin="session-sheet"] .track-row.is-solo {
+    box-shadow: inset 0 0 0 2px var(--solo-color);
+}
+
+html[data-lm-skin="session-sheet"] .mixer-strip {
+    width: 180px;
+    min-width: 180px;
+    padding: 10px;
+    gap: 8px;
+    border-right: 1px solid var(--sheet-rule-dark);
+    background: var(--sheet-paper-deep);
+}
+
+html[data-lm-skin="session-sheet"] .mixer-label {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 14px;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+html[data-lm-skin="session-sheet"] .mixer-buttons {
+    gap: 5px;
+}
+
+html[data-lm-skin="session-sheet"] .mixer-btn,
+html[data-lm-skin="session-sheet"] .card-controls-row button {
+    min-width: 34px;
+    min-height: 36px;
+    height: 36px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: #fffdf7;
+    color: var(--sheet-graphite);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .mixer-btn:hover,
+html[data-lm-skin="session-sheet"] .card-controls-row button:hover {
+    border-color: var(--sheet-cue);
+    background: var(--sheet-cue-soft);
+    color: var(--sheet-cue);
+}
+
+html[data-lm-skin="session-sheet"] .mixer-btn.solo-btn.is-on {
+    background: var(--solo-color);
+    color: #fff;
+}
+
+html[data-lm-skin="session-sheet"] .mixer-btn.mute-btn.is-on {
+    background: var(--sheet-margin);
+    color: #fff;
+}
+
+html[data-lm-skin="session-sheet"] .mixer-btn.mod-btn.is-on {
+    background: var(--sheet-success);
+    color: #fff;
+    box-shadow: none;
+}
+
+html[data-lm-skin="session-sheet"] .level-value,
+html[data-lm-skin="session-sheet"] .pan-value,
+html[data-lm-skin="session-sheet"] .fx-knob-value,
+html[data-lm-skin="session-sheet"] .mod-depth-val,
+html[data-lm-skin="session-sheet"] .lfo-depth-val,
+html[data-lm-skin="session-sheet"] .lfo-rate-value {
+    color: var(--sheet-graphite);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .variants-container {
+    grid-template-columns: repeat(4, minmax(118px, 1fr));
+    gap: 7px;
+    padding: 9px;
+    background: #f7f4eb;
+}
+
+html[data-lm-skin="session-sheet"] .audio-card {
+    min-height: 148px;
+    overflow: hidden;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: #fffdf7;
+    box-shadow: none;
+}
+
+html[data-lm-skin="session-sheet"] .audio-card:hover {
+    border-color: var(--sheet-cue);
+    background: #fff;
+    box-shadow: 0 2px 0 rgba(24, 35, 33, 0.2);
+    transform: none;
+}
+
+html[data-lm-skin="session-sheet"] .audio-card.is-selected {
+    border-color: var(--sheet-cue);
+    background: var(--sheet-cue-soft);
+    box-shadow: inset 0 0 0 2px rgba(23, 107, 115, 0.24);
+}
+
+html[data-lm-skin="session-sheet"] .audio-card.is-queued {
+    border-color: var(--sheet-warning);
+    background: #f4ead6;
+}
+
+html[data-lm-skin="session-sheet"] .audio-card.card-is-locked {
+    border-color: var(--sheet-warning);
+}
+
+html[data-lm-skin="session-sheet"] .audio-card::before,
+html[data-lm-skin="session-sheet"] .audio-card::after {
+    background: rgba(189, 63, 54, 0.06);
+}
+
+html[data-lm-skin="session-sheet"] .card-header {
+    min-height: 40px;
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--sheet-rule);
+}
+
+html[data-lm-skin="session-sheet"] .card-title {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 14px;
+    font-weight: 650;
+}
+
+html[data-lm-skin="session-sheet"] .card-variant-num {
+    color: var(--sheet-margin-dark);
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .card-waveform,
+html[data-lm-skin="session-sheet"] .card-seek-bar {
+    background-color: var(--sheet-paper-deep);
+}
+
+html[data-lm-skin="session-sheet"] .card-playhead,
+html[data-lm-skin="session-sheet"] .arranger-playhead {
+    width: 2px;
+    background: var(--sheet-margin);
+    box-shadow: 0 0 0 1px rgba(255, 253, 247, 0.65);
+}
+
+html[data-lm-skin="session-sheet"] .card-split-line {
+    background: var(--sheet-margin);
+    opacity: 0.55;
+}
+
+html[data-lm-skin="session-sheet"] .fx-drawer {
+    gap: 8px;
+    padding: 10px;
+    border-top: 1px solid var(--sheet-rule-dark);
+    background: var(--sheet-paper-deep);
+    scrollbar-color: var(--sheet-rule-dark) transparent;
+}
+
+html[data-lm-skin="session-sheet"] .fx-section {
+    flex-basis: 210px;
+    min-width: 190px;
+    padding: 10px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: #fffdf7;
+}
+
+html[data-lm-skin="session-sheet"] .fx-section-title {
+    min-height: 36px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--sheet-ink);
+    color: var(--sheet-margin-dark);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.05em;
+}
+
+html[data-lm-skin="session-sheet"] .fx-control-row label,
+html[data-lm-skin="session-sheet"] .fx-control-row span,
+html[data-lm-skin="session-sheet"] .fx-section span,
+html[data-lm-skin="session-sheet"] .mod-matrix-slot-row {
+    color: var(--sheet-graphite);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] input[type="range"] {
+    accent-color: var(--sheet-cue);
+}
+
+html[data-lm-skin="session-sheet"] .arranger-panel {
+    grid-area: arranger;
+    overflow: hidden;
+    border: 1px solid var(--sheet-rule-dark);
+    border-left: 5px solid var(--sheet-margin);
+    border-radius: 2px;
+    background: var(--sheet-paper);
+    box-shadow: var(--shadow-card);
+}
+
+html[data-lm-skin="session-sheet"] .record-log-drawer {
+    grid-area: recordlog;
+}
+
+html[data-lm-skin="session-sheet"] .arranger-header {
+    min-height: 50px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--sheet-rule-dark);
+    background: var(--sheet-paper-deep);
+}
+
+html[data-lm-skin="session-sheet"] .arranger-header :is(h2, h3),
+html[data-lm-skin="session-sheet"] .footer-header :is(h2, h3) {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 17px;
+    font-style: italic;
+    letter-spacing: -0.01em;
+    text-transform: none;
+}
+
+html[data-lm-skin="session-sheet"] .arranger-timeline-container,
+html[data-lm-skin="session-sheet"] .record-log-list {
+    background:
+        repeating-linear-gradient(0deg, transparent 0 23px, rgba(24, 35, 33, 0.05) 23px 24px),
+        #fffdf7;
+}
+
+html[data-lm-skin="session-sheet"] .arranger-header-row,
+html[data-lm-skin="session-sheet"] .arranger-track-label,
+html[data-lm-skin="session-sheet"] .arranger-cell,
+html[data-lm-skin="session-sheet"] .record-log-entry {
+    border-color: var(--sheet-rule);
+    background: rgba(247, 244, 235, 0.8);
+    color: var(--sheet-graphite);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .arranger-cell {
+    min-height: 44px;
+}
+
+html[data-lm-skin="session-sheet"] .arranger-cell:hover,
+html[data-lm-skin="session-sheet"] .arranger-cell.active {
+    border-color: var(--sheet-cue);
+    background: var(--sheet-cue-soft);
+}
+
+html[data-lm-skin="session-sheet"] .arranger-cell.loop-playing {
+    box-shadow: inset 0 -4px 0 var(--sheet-margin);
+}
+
+html[data-lm-skin="session-sheet"] .modulators-panel {
+    grid-area: modulators;
+    border: 1px solid var(--sheet-rule-dark);
+    border-left: 5px solid var(--sheet-margin);
+    border-radius: 2px;
+    background: var(--sheet-paper);
+    box-shadow: var(--shadow-card);
+}
+
+html[data-lm-skin="session-sheet"] .modulators-panel .fx-drawer {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(210px, 1fr));
+    overflow-x: auto;
+}
+
+html[data-lm-skin="session-sheet"] .mod-matrix-slot {
+    border: 1px solid var(--sheet-rule);
+    border-radius: 2px;
+    background: var(--sheet-paper-deep);
+}
+
+html[data-lm-skin="session-sheet"] .lfo-visualizer-container,
+html[data-lm-skin="session-sheet"] .lfo-mini-canvas {
+    border-color: var(--sheet-rule-dark);
+    border-radius: 1px;
+    background: var(--sheet-ink);
+}
+
+html[data-lm-skin="session-sheet"] .lfo-timing-light {
+    border-color: var(--sheet-ink);
+}
+
+/* Dialogs are clipped session forms rather than floating glass cards. */
+html[data-lm-skin="session-sheet"] .modal-overlay {
+    padding: 16px;
+    background: rgba(24, 35, 33, 0.68);
+    backdrop-filter: blur(4px);
+}
+
+html[data-lm-skin="session-sheet"] .modal-content,
+html[data-lm-skin="session-sheet"] .skin-picker-content,
+html[data-lm-skin="session-sheet"] .file-naming-modal-content {
+    max-width: calc(100vw - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow: auto;
+    padding: 22px;
+    border: 1px solid var(--sheet-ink);
+    border-top: 7px solid var(--sheet-margin);
+    border-radius: 2px;
+    background:
+        repeating-linear-gradient(0deg, transparent 0 23px, rgba(24, 35, 33, 0.045) 23px 24px),
+        var(--sheet-paper);
+    color: var(--sheet-ink);
+    box-shadow: 8px 8px 0 rgba(24, 35, 33, 0.36);
+}
+
+html[data-lm-skin="session-sheet"] .modal-title {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 22px;
+    font-style: italic;
+    letter-spacing: -0.02em;
+    text-transform: none;
+}
+
+html[data-lm-skin="session-sheet"] .skin-picker-intro,
+html[data-lm-skin="session-sheet"] .skin-option-description,
+html[data-lm-skin="session-sheet"] .skin-picker-status {
+    color: var(--sheet-graphite);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] .skin-picker-grid {
+    gap: 10px;
+}
+
+html[data-lm-skin="session-sheet"] .skin-option {
+    min-height: 144px;
+    padding: 10px;
+    border: 1px solid var(--sheet-rule-dark);
+    border-radius: 2px;
+    background: #fffdf7;
+    color: var(--sheet-ink);
+    box-shadow: 0 2px 0 rgba(24, 35, 33, 0.18);
+}
+
+html[data-lm-skin="session-sheet"] .skin-option:hover,
+html[data-lm-skin="session-sheet"] .skin-option.is-active {
+    border-color: var(--sheet-cue);
+    background: var(--sheet-cue-soft);
+    transform: none;
+}
+
+html[data-lm-skin="session-sheet"] .skin-option-preview {
+    border: 1px solid var(--sheet-ink);
+    border-radius: 1px;
+}
+
+html[data-lm-skin="session-sheet"] .skin-option-copy strong {
+    color: var(--sheet-ink);
+    font-family: var(--sheet-display);
+    font-size: 17px;
+}
+
+html[data-lm-skin="session-sheet"] .skin-option-subtitle {
+    color: var(--sheet-margin-dark);
+    font-size: 12px;
+}
+
+html[data-lm-skin="session-sheet"] :focus-visible {
+    outline: 3px solid var(--sheet-cue);
+    outline-offset: 3px;
+}
+
+html[data-lm-skin="session-sheet"] :is(button, input, select, textarea):disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
+html[data-lm-skin="session-sheet"] :is(.controls-panel, .tracks-container, .generation-history-viewport, .fx-drawer, .modal-content)::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+html[data-lm-skin="session-sheet"] :is(.controls-panel, .tracks-container, .generation-history-viewport, .fx-drawer, .modal-content)::-webkit-scrollbar-track {
+    background: var(--sheet-paper-deep);
+}
+
+html[data-lm-skin="session-sheet"] :is(.controls-panel, .tracks-container, .generation-history-viewport, .fx-drawer, .modal-content)::-webkit-scrollbar-thumb {
+    border: 2px solid var(--sheet-paper-deep);
+    background: var(--sheet-rule-dark);
+}
+
+/* Narrow workstations retain the split session, while tracks simplify to
+   two-up cards and a horizontal mixer ledger. */
+@media (max-width: 1100px) {
+    html[data-lm-skin="session-sheet"] .app-container {
+        grid-template-columns: minmax(350px, 41vw) minmax(0, 1fr);
+        padding-left: 54px;
+    }
+
+    html[data-lm-skin="session-sheet"] .controls-panel {
+        padding: 12px;
+    }
+
+    html[data-lm-skin="session-sheet"] .controls-panel::before {
+        margin: -12px -12px 12px;
+    }
+
+    html[data-lm-skin="session-sheet"] .prompt-inline-btns {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    html[data-lm-skin="session-sheet"] .prompt-inline-btns #btn-randomize-all {
+        grid-column: 1 / -1;
+    }
+
+    html[data-lm-skin="session-sheet"] .prompt-group > .control-group-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    html[data-lm-skin="session-sheet"] .chord-progressor-controls,
+    html[data-lm-skin="session-sheet"] .chord-progressor-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    html[data-lm-skin="session-sheet"] .track-row {
+        flex-direction: column;
+    }
+
+    html[data-lm-skin="session-sheet"] .mixer-strip {
+        width: 100%;
+        min-width: 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        border-right: 0;
+        border-bottom: 1px solid var(--sheet-rule-dark);
+    }
+
+    html[data-lm-skin="session-sheet"] .mixer-label {
+        flex: 1 1 150px;
+    }
+
+    html[data-lm-skin="session-sheet"] .mixer-buttons {
+        min-width: 180px;
+    }
+
+    html[data-lm-skin="session-sheet"] .variants-container {
+        grid-template-columns: repeat(2, minmax(118px, 1fr));
+    }
+
+    html[data-lm-skin="session-sheet"] .master-filter-controls,
+    html[data-lm-skin="session-sheet"] .master-meter-label {
+        display: none;
+    }
+}
+
+/* Mobile becomes a score stack. The three broad prompt groups form a
+   horizontal, snap-aligned folio so the generator does not become a 3,000px
+   wall of selects. */
+@media (max-width: 760px) {
+    html[data-lm-skin="session-sheet"] body {
+        background:
+            linear-gradient(90deg, transparent 0 23px, rgba(189, 63, 54, 0.16) 23px 24px, transparent 24px),
+            repeating-linear-gradient(0deg, transparent 0 23px, rgba(24, 35, 33, 0.055) 23px 24px),
+            var(--sheet-canvas);
+    }
+
+    html[data-lm-skin="session-sheet"] body::after {
+        left: 23px;
+    }
+
+    html[data-lm-skin="session-sheet"] .app-container {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "header"
+            "transport"
+            "generator"
+            "tracks"
+            "arranger"
+            "recordlog"
+            "modulators";
+        grid-template-rows: auto auto auto auto auto auto auto;
+        gap: 7px;
+        padding: 5px 6px 24px 30px;
+    }
+
+    html[data-lm-skin="session-sheet"] .app-header {
+        min-height: 48px;
+        padding: 5px 7px;
+    }
+
+    html[data-lm-skin="session-sheet"] .app-logo {
+        width: 32px;
+        height: 32px;
+    }
+
+    html[data-lm-skin="session-sheet"] .app-title {
+        min-width: 0;
+        overflow: hidden;
+        font-size: 16px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    html[data-lm-skin="session-sheet"] .app-title span,
+    html[data-lm-skin="session-sheet"] .skin-current-label {
+        display: none;
+    }
+
+    html[data-lm-skin="session-sheet"] .btn-skins {
+        min-width: 44px;
+        padding: 6px 8px;
+    }
+
+    html[data-lm-skin="session-sheet"] .transport-panel {
+        top: 55px;
+    }
+
+    html[data-lm-skin="session-sheet"] .transport-panel::before {
+        padding-block: 5px;
+    }
+
+    html[data-lm-skin="session-sheet"] .transport-bar {
+        display: flex;
+        flex-wrap: wrap;
+        min-height: 0;
+        padding: 6px;
+    }
+
+    html[data-lm-skin="session-sheet"] .transport-time {
+        flex: 1 1 118px;
+        justify-content: center;
+    }
+
+    html[data-lm-skin="session-sheet"] .master-meter-section {
+        flex: 1 1 132px;
+    }
+
+    html[data-lm-skin="session-sheet"] .transport-spacer {
+        display: none;
+    }
+
+    html[data-lm-skin="session-sheet"] .visualizer-tray {
+        min-height: 44px;
+        height: 44px;
+    }
+
+    html[data-lm-skin="session-sheet"] .controls-panel,
+    html[data-lm-skin="session-sheet"] .tracks-container {
+        position: static;
+        max-height: none;
+    }
+
+    html[data-lm-skin="session-sheet"] .controls-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    html[data-lm-skin="session-sheet"] .prompt-group > .control-group-header {
+        min-height: 0;
+    }
+
+    html[data-lm-skin="session-sheet"] .prompt-builder-grid {
+        display: flex;
+        width: calc(100% + 12px);
+        margin-right: -12px;
+        padding: 0 12px 10px 0;
+        gap: 8px;
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        scroll-snap-type: inline mandatory;
+        scrollbar-color: var(--sheet-rule-dark) var(--sheet-paper-deep);
+    }
+
+    html[data-lm-skin="session-sheet"] .prompt-builder-column {
+        flex: 0 0 calc(100% - 18px);
+        scroll-snap-align: start;
+    }
+
+    html[data-lm-skin="session-sheet"] .prompt-column-heading {
+        grid-template-columns: 30px minmax(0, 1fr);
+    }
+
+    html[data-lm-skin="session-sheet"] .prompt-column-hint {
+        grid-column: 1 / -1;
+        text-align: left;
+    }
+
+    html[data-lm-skin="session-sheet"] .chord-progressor-controls,
+    html[data-lm-skin="session-sheet"] .chord-progressor-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    html[data-lm-skin="session-sheet"] .controls-row > .control-group:has(#btn-generate) {
+        position: sticky;
+        bottom: 8px;
+        z-index: 30;
+        padding: 4px;
+        border: 1px solid var(--sheet-ink);
+        background: rgba(247, 244, 235, 0.96);
+        box-shadow: 0 -3px 12px rgba(24, 35, 33, 0.14);
+    }
+
+    html[data-lm-skin="session-sheet"] .tracks-container {
+        min-height: 520px;
+    }
+
+    html[data-lm-skin="session-sheet"] .grid-empty-state {
+        min-height: 460px;
+        padding: 22px 18px;
+    }
+
+    html[data-lm-skin="session-sheet"] .footer-body {
+        flex-direction: column;
+    }
+
+    html[data-lm-skin="session-sheet"] .footer-left {
+        padding-right: 0;
+        padding-bottom: 14px;
+        border-right: 0;
+        border-bottom: 1px solid var(--sheet-rule-dark);
+    }
+
+    html[data-lm-skin="session-sheet"] .generation-history-entry {
+        grid-template-columns: 1fr;
+    }
+
+    html[data-lm-skin="session-sheet"] .generation-history-actions {
+        justify-content: flex-start;
+    }
+
+    html[data-lm-skin="session-sheet"] .modulators-panel .fx-drawer {
+        grid-template-columns: repeat(2, minmax(210px, 1fr));
+    }
+
+    html[data-lm-skin="session-sheet"] .skin-picker-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 420px) {
+    html[data-lm-skin="session-sheet"] .app-container {
+        padding-left: 28px;
+    }
+
+    html[data-lm-skin="session-sheet"] .app-header {
+        gap: 7px;
+    }
+
+    html[data-lm-skin="session-sheet"] .app-title {
+        font-size: 15px;
+    }
+
+    html[data-lm-skin="session-sheet"] .controls-panel {
+        padding: 10px;
+    }
+
+    html[data-lm-skin="session-sheet"] .controls-panel::before {
+        margin: -10px -10px 10px;
+        padding-left: 30px;
+    }
+
+    html[data-lm-skin="session-sheet"] .prompt-inline-btns {
+        grid-template-columns: 1fr;
+    }
+
+    html[data-lm-skin="session-sheet"] .prompt-inline-btns #btn-randomize-all {
+        grid-column: auto;
+    }
+
+    html[data-lm-skin="session-sheet"] .chord-progressor-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    html[data-lm-skin="session-sheet"] .chord-progressor-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    html[data-lm-skin="session-sheet"] .chord-progressor-actions .chip-mute,
+    html[data-lm-skin="session-sheet"] .chord-progressor-actions .chip-dice {
+        width: 100%;
+    }
+
+    html[data-lm-skin="session-sheet"] .chord-progressor-controls,
+    html[data-lm-skin="session-sheet"] .chord-progressor-cards {
+        grid-template-columns: 1fr;
+    }
+
+    html[data-lm-skin="session-sheet"] .variants-container,
+    html[data-lm-skin="session-sheet"] .modulators-panel .fx-drawer {
+        grid-template-columns: 1fr;
+    }
+
+    html[data-lm-skin="session-sheet"] .mixer-strip {
+        align-items: stretch;
+    }
+
+    html[data-lm-skin="session-sheet"] .mixer-buttons {
+        width: 100%;
+        min-width: 0;
+    }
+
+    html[data-lm-skin="session-sheet"] .modal-content,
+    html[data-lm-skin="session-sheet"] .skin-picker-content,
+    html[data-lm-skin="session-sheet"] .file-naming-modal-content {
+        padding: 16px;
+    }
+
+    html[data-lm-skin="session-sheet"] .skin-option {
+        grid-template-columns: 82px minmax(0, 1fr);
+    }
+}
+
+@media (pointer: coarse) {
+    html[data-lm-skin="session-sheet"] :is(button, input, select, textarea, .toggle-switch, .arranger-cell, .kit-check) {
+        min-height: 44px;
+    }
+
+    html[data-lm-skin="session-sheet"] .mixer-btn,
+    html[data-lm-skin="session-sheet"] .card-controls-row button,
+    html[data-lm-skin="session-sheet"] .history-action,
+    html[data-lm-skin="session-sheet"] .history-load-more {
+        min-width: 44px;
+        min-height: 44px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html[data-lm-skin="session-sheet"] *,
+    html[data-lm-skin="session-sheet"] *::before,
+    html[data-lm-skin="session-sheet"] *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}
+
+@media (forced-colors: active) {
+    html[data-lm-skin="session-sheet"] .app-header,
+    html[data-lm-skin="session-sheet"] .controls-panel,
+    html[data-lm-skin="session-sheet"] .transport-panel,
+    html[data-lm-skin="session-sheet"] .tracks-container,
+    html[data-lm-skin="session-sheet"] .track-wrapper,
+    html[data-lm-skin="session-sheet"] .prompt-builder-section,
+    html[data-lm-skin="session-sheet"] .chord-progressor,
+    html[data-lm-skin="session-sheet"] .chord-progressor-card,
+    html[data-lm-skin="session-sheet"] .modal-content {
+        border-color: CanvasText;
+        box-shadow: none;
+    }
+
+    html[data-lm-skin="session-sheet"] :focus-visible {
+        outline-color: Highlight;
+    }
+
+    html[data-lm-skin="session-sheet"] body::after {
+        background: Highlight;
+    }
+}

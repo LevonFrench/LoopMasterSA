@@ -3217,13 +3217,16 @@ function updateTrackLockState(track) {
         // 6. Build wrapper container
         const wrapperEl = document.createElement('div');
         wrapperEl.className = 'track-wrapper';
+        wrapperEl.dataset.lmPart = 'track';
 
         // 7. Build track-row DOM
         const rowEl = document.createElement('div');
         rowEl.className = 'track-row';
+        rowEl.dataset.lmPart = 'track-row';
 
         const mixerEl = document.createElement('div');
         mixerEl.className = 'mixer-strip';
+        mixerEl.dataset.lmPart = 'mixer';
         mixerEl.innerHTML = `
             <div class="mixer-label"></div>
             <div class="mixer-buttons">
@@ -3284,6 +3287,7 @@ function updateTrackLockState(track) {
         // 8. Build FX Drawer DOM
         const fxDrawerEl = document.createElement('div');
         fxDrawerEl.className = 'fx-drawer is-collapsed';
+        fxDrawerEl.dataset.lmPart = 'fx-drawer';
         fxDrawerEl.innerHTML = `
             <!-- Row 1 -->
             <!-- 1. Macro Controls A -->
@@ -6038,6 +6042,7 @@ function updateTrackLockState(track) {
         // 11. Build variants card selection UI
         const variantsEl = document.createElement('div');
         variantsEl.className = 'variants-container';
+        variantsEl.dataset.lmPart = 'variants';
 
         batchFiles.forEach((filePath, i) => {
             const name = filePath.split('/').pop() || `v${i + 1}`;

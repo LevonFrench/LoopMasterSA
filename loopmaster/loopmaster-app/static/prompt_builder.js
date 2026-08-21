@@ -355,6 +355,8 @@
 
         function renderSection(section) {
             const wrapper = el('div', 'prompt-builder-section');
+            wrapper.dataset.lmPart = 'prompt-section';
+            wrapper.dataset.lmSection = section.key;
             const label = el('label', 'chip-label', section.label);
             label.htmlFor = `prompt-select-${section.key}`;
             if (section.randomizeAll === false) {
@@ -630,6 +632,7 @@
             return columns.map((column, columnIndex) => {
                 const wrapper = el('section', 'prompt-builder-column');
                 wrapper.dataset.column = column.key;
+                wrapper.dataset.lmPart = 'prompt-column';
                 const heading = el('div', 'prompt-column-heading');
                 heading.append(
                     el('span', 'prompt-column-number', String(columnIndex + 1).padStart(2, '0')),

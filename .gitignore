@@ -79,6 +79,8 @@ ui-ux-pro-max-skill/
 
 # User Captured Screenshots
 screenshots/
+loopmaster-desktop/output/skin-previews/
+.electron-profile/
 
 
 # Locally downloaded AI models

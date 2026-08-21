@@ -9,6 +9,8 @@ const APP_ROOT = path.resolve(__dirname, '..', '..', 'loopmaster', 'loopmaster-a
 const HOST = '127.0.0.1';
 const VIEWPORTS = [375, 768, 1280];
 const TIMEOUT_MS = 45_000;
+const CAPTURE_SKINS = process.argv.includes('--capture-skins');
+const SKIN_PREVIEW_DIR = path.resolve(__dirname, '..', '..', 'output', 'skin-previews');
 
 app.commandLine.appendSwitch('disable-gpu');
 
@@ -35,6 +37,7 @@ const evidence = {
     resourceFailures: [],
     requests: [],
     fatal: null,
+    skinPreviews: [],
 };
 
 let server;
@@ -150,27 +153,156 @@ async function waitForRendererReady() {
     throw new Error('Renderer did not expose window._dev within five seconds');
 }
 
+async function testSkinRuntime() {
+    const result = await windowUnderTest.webContents.executeJavaScript(`(async () => {
+        const api = window.LoopMasterSkins;
+        if (!api) return { exercised: false, reason: 'Skin API is missing' };
+        await api.ready;
+        const skins = api.list();
+        const prompt = document.getElementById('prompt-freeform');
+        if (!prompt) return { exercised: false, reason: 'Prompt input is missing' };
+        const originalNode = prompt;
+        const originalValue = prompt.value;
+        const checks = [];
+        for (const skin of skins) {
+            prompt.focus();
+            const selected = await api.apply(skin.id, { persist: true });
+            const sheet = document.querySelector('link[data-lm-skin-sheet="' + skin.id + '"]');
+            checks.push({
+                id: skin.id,
+                selected: selected.id === skin.id,
+                root: document.documentElement.dataset.lmSkin === skin.id,
+                sheet: Boolean(sheet && sheet.href.endsWith(skin.cssHref)),
+                preservedNode: document.getElementById('prompt-freeform') === originalNode,
+                preservedValue: prompt.value === originalValue,
+                preservedFocus: document.activeElement === prompt,
+                persisted: localStorage.getItem('loopmaster.ui.skin.v1') === skin.id,
+            });
+        }
+        let invalidRejected = false;
+        try {
+            await api.apply('https://example.com/evil.css');
+        } catch (_error) {
+            invalidRejected = true;
+        }
+        const firstAlternate = skins.find(skin => skin.id !== 'original');
+        if (firstAlternate) {
+            await Promise.allSettled([
+                api.apply(firstAlternate.id, { persist: false }),
+                api.apply('original', { persist: false })
+            ]);
+        }
+        const latestWins = api.current()?.id === 'original';
+        await api.apply('original', { persist: true });
+        return {
+            exercised: true,
+            skinCount: skins.length,
+            checks,
+            invalidRejected,
+            latestWins,
+            noInlineStyles: document.querySelectorAll('[style]').length === 0
+        };
+    })()`);
+    assert(result.exercised, result.reason || 'Skin runtime test was not exercised');
+    assert(result.skinCount >= 2, 'Expected at least Original and one alternate skin');
+    for (const checkResult of result.checks) {
+        for (const key of ['selected', 'root', 'sheet', 'preservedNode', 'preservedValue', 'preservedFocus', 'persisted']) {
+            assert(checkResult[key], `Skin ${checkResult.id} failed ${key}`);
+        }
+    }
+    assert(result.invalidRejected, 'Skin runtime accepted an unregistered external URL');
+    assert(result.latestWins, 'Concurrent skin changes did not preserve the latest request');
+    assert(result.noInlineStyles, 'Skin runtime created inline style attributes');
+    return result;
+}
+
+async function captureSkinPreviews() {
+    if (!CAPTURE_SKINS) return [];
+    fs.mkdirSync(SKIN_PREVIEW_DIR, { recursive: true });
+    const skins = await windowUnderTest.webContents.executeJavaScript(
+        'window.LoopMasterSkins.list().map(skin => skin.id)'
+    );
+    const viewports = [
+        { width: 1440, height: 900 },
+        { width: 900, height: 900 },
+        { width: 375, height: 812 },
+    ];
+    const captures = [];
+    for (const skin of skins) {
+        await windowUnderTest.webContents.executeJavaScript(
+            `window.LoopMasterSkins.apply(${JSON.stringify(skin)}, { persist: false })`
+        );
+        for (const viewport of viewports) {
+            windowUnderTest.setContentSize(viewport.width, viewport.height, false);
+            await new Promise(resolve => setTimeout(resolve, 100));
+            await windowUnderTest.webContents.executeJavaScript('window.scrollTo(0, 0)');
+            const image = await windowUnderTest.webContents.capturePage();
+            const filePath = path.join(SKIN_PREVIEW_DIR, `${skin}-${viewport.width}x${viewport.height}.png`);
+            fs.writeFileSync(filePath, image.toPNG());
+            captures.push(filePath);
+        }
+    }
+    await windowUnderTest.webContents.executeJavaScript(
+        "window.LoopMasterSkins.apply('original', { persist: false })"
+    );
+    evidence.skinPreviews = captures;
+    return captures;
+}
+
 async function testResponsiveOverflow() {
     const layouts = [];
-    for (const width of VIEWPORTS) {
-        // Windows can coalesce rapid hidden-window resize requests. Retry until
-        // Chromium has observed the target content width so a stale viewport
-        // cannot make either a false pass or a false failure.
-        let observedWidth = 0;
-        for (let attempt = 0; attempt < 20; attempt += 1) {
-            windowUnderTest.setContentSize(width, 900, false);
-            await new Promise(resolve => setTimeout(resolve, 50));
-            observedWidth = await windowUnderTest.webContents.executeJavaScript('window.innerWidth');
-            if (Math.abs(observedWidth - width) <= 1) break;
-        }
-        // Windows frame metrics can round a hidden BrowserWindow's requested
-        // content width by one physical pixel at fractional display scaling.
+    const skinIds = await windowUnderTest.webContents.executeJavaScript(
+        'window.LoopMasterSkins.list().map(skin => skin.id)'
+    );
+    const chromeDebugger = windowUnderTest.webContents.debugger;
+    const attachedHere = !chromeDebugger.isAttached();
+    if (attachedHere) chromeDebugger.attach('1.3');
+
+    try {
+    for (const skinId of skinIds) {
+        await windowUnderTest.webContents.executeJavaScript(
+            `window.LoopMasterSkins.apply(${JSON.stringify(skinId)}, { persist: false })`
+        );
+        for (const width of VIEWPORTS) {
+        // DevTools viewport emulation is deterministic for hidden Windows.
+        // Native BrowserWindow resize requests can be coalesced while hidden,
+        // leaving media queries at a stale width and producing false results.
+        await chromeDebugger.sendCommand('Emulation.setDeviceMetricsOverride', {
+            width,
+            height: 900,
+            deviceScaleFactor: 1,
+            mobile: false,
+            screenWidth: width,
+            screenHeight: 900,
+        });
+        await new Promise(resolve => setTimeout(resolve, 50));
+        const observedWidth = await windowUnderTest.webContents.executeJavaScript('window.innerWidth');
         assert(Math.abs(observedWidth - width) <= 1,
             `Expected approximately ${width}px viewport, got ${observedWidth}px`);
         const layout = await windowUnderTest.webContents.executeJavaScript(`(() => {
             const root = document.documentElement;
             const body = document.body;
             const viewportWidth = window.innerWidth;
+            const tracks = document.querySelector('[data-lm-region="tracks"]');
+            const tracksRect = tracks?.getBoundingClientRect();
+            const maxScrollY = Math.max(0, root.scrollHeight - window.innerHeight);
+            const visiblePromptSelects = Array.from(document.querySelectorAll('.prompt-section-select'))
+                .filter(el => {
+                    const style = getComputedStyle(el);
+                    return style.display !== 'none' && style.visibility !== 'hidden' && el.getClientRects().length > 0;
+                })
+                .map(el => ({
+                    width: el.getBoundingClientRect().width,
+                    id: el.id || null,
+                    section: el.closest('[data-lm-section]')?.dataset.lmSection || null,
+                    part: el.closest('[data-lm-part]')?.dataset.lmPart || null,
+                    sectionWidth: el.closest('.prompt-builder-section')?.getBoundingClientRect().width || null,
+                    gridWidth: el.closest('.prompt-builder-grid')?.getBoundingClientRect().width || null,
+                    gridColumns: el.closest('.prompt-builder-grid')
+                        ? getComputedStyle(el.closest('.prompt-builder-grid')).gridTemplateColumns
+                        : null,
+                }));
+            const visiblePromptWidths = visiblePromptSelects.map(item => item.width);
             const offenders = Array.from(document.querySelectorAll('body *'))
                 .filter(el => {
                     const style = getComputedStyle(el);
@@ -190,16 +322,39 @@ async function testResponsiveOverflow() {
                     };
                 });
             return {
+                skinId: ${JSON.stringify(skinId)},
                 requestedWidth: ${width},
                 viewportWidth,
                 documentScrollWidth: root.scrollWidth,
                 bodyScrollWidth: body.scrollWidth,
                 horizontalOverflow: Math.max(root.scrollWidth, body.scrollWidth) - viewportWidth,
+                tracksReachable: !tracksRect || tracksRect.top <= window.innerHeight + maxScrollY + 1,
+                minimumPromptSelectWidth: visiblePromptWidths.length ? Math.min(...visiblePromptWidths) : null,
+                minimumPromptSelect: visiblePromptSelects.length
+                    ? visiblePromptSelects.reduce((smallest, item) => item.width < smallest.width ? item : smallest)
+                    : null,
                 offenders,
             };
         })()`);
         layouts.push(layout);
-        assert(layout.horizontalOverflow <= 1, `${width}px viewport has ${layout.horizontalOverflow}px global horizontal overflow`);
+        assert(layout.horizontalOverflow <= 1,
+            `${skinId} at ${width}px has ${layout.horizontalOverflow}px global horizontal overflow; `
+            + `offenders=${JSON.stringify(layout.offenders)}`);
+        assert(layout.tracksReachable, `${skinId} at ${width}px makes generated tracks unreachable`);
+        const selectFloor = width <= 375 ? 160 : 110;
+        if (layout.minimumPromptSelectWidth !== null) {
+            assert(layout.minimumPromptSelectWidth >= selectFloor,
+                `${skinId} at ${width}px collapses a prompt select to ${layout.minimumPromptSelectWidth}px; `
+                + `select=${JSON.stringify(layout.minimumPromptSelect)}`);
+        }
+        }
+    }
+    } finally {
+        await chromeDebugger.sendCommand('Emulation.clearDeviceMetricsOverride').catch(() => {});
+        if (attachedHere && chromeDebugger.isAttached()) chromeDebugger.detach();
+        await windowUnderTest.webContents.executeJavaScript(
+            "window.LoopMasterSkins.apply('original', { persist: false })"
+        );
     }
     return layouts;
 }
@@ -299,6 +454,39 @@ async function testModalFocus() {
     assert(result.exercised, result.reason || 'Modal test was not exercised');
     for (const key of ['opened', 'initialFocus', 'forwardWrapped', 'backwardWrapped', 'closed', 'focusReturned']) {
         assert(result[key], `Modal contract failed: ${key}`);
+    }
+    return result;
+}
+
+async function testSkinPickerFocus() {
+    const result = await windowUnderTest.webContents.executeJavaScript(`(() => {
+        const trigger = document.getElementById('btn-skins');
+        const modal = document.getElementById('skin-picker-modal');
+        const done = document.getElementById('btn-skin-picker-done');
+        if (!trigger || !modal || !done) {
+            return { exercised: false, reason: 'Skin picker controls are missing' };
+        }
+        trigger.focus();
+        trigger.click();
+        const first = modal.querySelector('.skin-option');
+        if (!first) return { exercised: false, reason: 'Skin catalog did not render' };
+        const opened = !modal.hidden && modal.classList.contains('is-visible');
+        const initialFocus = document.activeElement === first;
+
+        done.focus();
+        done.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+        const forwardWrapped = document.activeElement === first;
+        first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+        const backwardWrapped = document.activeElement === done;
+
+        modal.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        const closed = modal.hidden && !modal.classList.contains('is-visible');
+        const focusReturned = document.activeElement === trigger;
+        return { exercised: true, opened, initialFocus, forwardWrapped, backwardWrapped, closed, focusReturned };
+    })()`);
+    assert(result.exercised, result.reason || 'Skin picker focus test was not exercised');
+    for (const key of ['opened', 'initialFocus', 'forwardWrapped', 'backwardWrapped', 'closed', 'focusReturned']) {
+        assert(result[key], `Skin picker contract failed: ${key}`);
     }
     return result;
 }
@@ -721,11 +909,13 @@ async function run() {
     await windowUnderTest.loadURL(target);
     await waitForRendererReady();
 
+    await check('skin runtime switches atomically and preserves UI state', testSkinRuntime);
     await check('responsive overflow at 375/768/1280', testResponsiveOverflow);
     windowUnderTest.setContentSize(1280, 900, false);
     await check('visible controls have accessible names', testAccessibleNames);
     await check('aria-pressed toggle state changes and restores', testAriaPressed);
     await check('modal focus trap, escape, and focus return', testModalFocus);
+    await check('skin picker focus trap, escape, and focus return', testSkinPickerFocus);
     await check('file naming popup focus trap, escape, and focus return', testFileNamingModalFocus);
     await check('CSP-safe typed attributes and zero inline styles', testTypedAttributesAndInlineStyles);
     await check('free text, split instrument pools, one-per-column rolls, and locked harmony', testPromptRandomizerSeparationAndFreeform);
@@ -751,6 +941,9 @@ async function run() {
     }
     await check('shared Web Audio effect graph renders finite audio', testWebAudioContract, {
         skipWhen: details => details?.skipped,
+    });
+    await check('optional skin preview capture', captureSkinPreviews, {
+        skipWhen: () => !CAPTURE_SKINS,
     });
 
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -827,6 +1020,7 @@ async function finish(exitCode) {
         consoleErrors: evidence.console.filter(entry => String(entry.level).toLowerCase() === 'error'),
         resourceFailures: evidence.resourceFailures,
         escapedRequests: evidence.tests.find(test => test.name === 'no backend or generation requests escaped the fetch stub')?.details || [],
+        skinPreviews: evidence.skinPreviews,
     };
     await new Promise((resolve, reject) => {
         process.stdout.write(`QA_EVIDENCE ${JSON.stringify(compactEvidence)}\n`, error => {
